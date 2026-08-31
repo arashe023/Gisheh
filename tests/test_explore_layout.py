@@ -40,5 +40,17 @@ class ExploreLayoutTests(unittest.TestCase):
         self.assertGreaterEqual(len(kinds), 2)
 
 
+class ProfileFormattingTests(unittest.TestCase):
+    def test_runtime_minutes_handles_catalog_durations(self) -> None:
+        self.assertEqual(cineshelf.runtime_minutes("2h 04m"), 124)
+        self.assertEqual(cineshelf.runtime_minutes("45m"), 45)
+        self.assertEqual(cineshelf.runtime_minutes("3 seasons"), 0)
+
+    def test_watch_time_and_dates_are_stable(self) -> None:
+        self.assertEqual(cineshelf.format_watch_time(6502), "4d 12h 22m")
+        parsed = cineshelf.parse_watched_date("Aug 8, 2026 at 2:49 AM")
+        self.assertEqual(parsed.isoformat() if parsed else None, "2026-08-08")
+
+
 if __name__ == "__main__":
     unittest.main()

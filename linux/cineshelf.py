@@ -7,11 +7,14 @@ import json
 import math
 import os
 import random
+import re
 import sys
 import threading
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import date, datetime, timedelta
+from getpass import getuser
 from pathlib import Path
 from typing import Any
 
@@ -111,6 +114,37 @@ def user_state_file() -> Path:
     state_home = os.environ.get("XDG_STATE_HOME")
     base = Path(state_home).expanduser() if state_home else Path.home() / ".local" / "state"
     return base / APP_ID / "state.json"
+
+
+def runtime_minutes(value: str) -> int:
+    """Convert the catalog's compact duration strings to minutes."""
+    hours = re.search(r"(\d+)\s*h", value)
+    minutes = re.search(r"(\d+)\s*m", value)
+    if hours or minutes:
+        return (int(hours.group(1)) * 60 if hours else 0) + (
+            int(minutes.group(1)) if minutes else 0
+        )
+    return 0
+
+
+def parse_watched_date(value: str) -> date | None:
+    try:
+        return datetime.strptime(value, "%b %d, %Y at %I:%M %p").date()
+    except ValueError:
+        return None
+
+
+def format_watch_time(minutes: int) -> str:
+    days, remainder = divmod(max(0, minutes), 24 * 60)
+    hours, minutes = divmod(remainder, 60)
+    parts = []
+    if days:
+        parts.append(f"{days}d")
+    if hours:
+        parts.append(f"{hours}h")
+    if minutes or not parts:
+        parts.append(f"{minutes}m")
+    return " ".join(parts)
 
 
 @dataclass(frozen=True, slots=True)
@@ -724,7 +758,7 @@ class SidebarRow(Gtk.ListBoxRow):
         key: str,
         label: str,
         icon_name: str,
-        count: int,
+        count: int | None,
     ) -> None:
         super().__init__()
         self.key = key
@@ -738,9 +772,10 @@ class SidebarRow(Gtk.ListBoxRow):
         icon = Gtk.Image.new_from_icon_name(icon_name)
         title = Gtk.Label(label=label, xalign=0)
         title.set_hexpand(True)
-        self.count_label = Gtk.Label(label=str(count))
+        self.count_label = Gtk.Label(label="" if count is None else str(count))
         self.count_label.add_css_class("caption")
         self.count_label.add_css_class("numeric")
+        self.count_label.set_visible(count is not None)
 
         content.append(icon)
         content.append(title)
@@ -749,6 +784,7 @@ class SidebarRow(Gtk.ListBoxRow):
 
     def set_count(self, count: int) -> None:
         self.count_label.set_label(str(count))
+        self.count_label.set_visible(True)
 
 
 class CineShelfWindow:
@@ -803,6 +839,7 @@ class CineShelfWindow:
         self.status_overrides: dict[str, str] = {}
         self.episode_status_overrides: dict[str, bool] = {}
         self.episode_watched_at: dict[str, str] = {}
+        self.title_watched_at: dict[str, str] = {}
         self.tmdb_token = tmdb_client.read_token()
         self._tmdb_details_loading: set[str] = set()
         self._tmdb_details_loaded: set[str] = set()
@@ -831,6 +868,7 @@ class CineShelfWindow:
         self._build_sidebar()
         self._build_result_views()
         self._build_explore_view()
+        self._build_profile_view()
         self._build_detail_sections()
         self._connect_signals(application)
         self._update_genre_model()
@@ -1022,6 +1060,11 @@ class CineShelfWindow:
             if isinstance(value, str)
             and is_valid_id(str(key).split("/", 1)[0])
         }
+        self.title_watched_at = {
+            str(key): str(value)
+            for key, value in payload.get("titleWatchedAt", {}).items()
+            if isinstance(value, str) and is_valid_id(str(key))
+        }
 
         for record_id, status in self.status_overrides.items():
             if status == "Watched":
@@ -1040,6 +1083,7 @@ class CineShelfWindow:
                 sorted(self.episode_status_overrides.items())
             ),
             "episodeWatchedAt": dict(sorted(self.episode_watched_at.items())),
+            "titleWatchedAt": dict(sorted(self.title_watched_at.items())),
         }
         temporary = self.state_file.with_name(f".{self.state_file.name}.tmp")
         try:
@@ -1131,8 +1175,15 @@ class CineShelfWindow:
             "find-location-symbolic",
             self._explore_total(self.active_media),
         )
+        self.profile_row = SidebarRow(
+            "profile",
+            "Profile",
+            "avatar-default-symbolic",
+            None,
+        )
         self.destination_list.append(self.library_row)
         self.destination_list.append(self.explore_row)
+        self.destination_list.append(self.profile_row)
 
         for status in STATUSES:
             row = SidebarRow(
@@ -1206,6 +1257,539 @@ class CineShelfWindow:
         self.explore_grid.add_css_class("explore-grid")
 
         self._update_explore_genre_model()
+
+    def _build_profile_view(self) -> None:
+        self.profile_pane = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.profile_pane.add_css_class("main-content-pane")
+
+        self.profile_scroller = Gtk.ScrolledWindow()
+        self.profile_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.profile_scroller.set_vexpand(True)
+        self.profile_pane.append(self.profile_scroller)
+
+        clamp = Adw.Clamp(maximum_size=1040, tightening_threshold=760)
+        clamp.set_margin_top(24)
+        clamp.set_margin_bottom(40)
+        clamp.set_margin_start(24)
+        clamp.set_margin_end(24)
+        self.profile_scroller.set_child(clamp)
+
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
+        clamp.set_child(content)
+
+        hero = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        hero.add_css_class("profile-hero")
+        avatar = Adw.Avatar(size=72, text=getuser(), show_initials=True)
+        avatar.add_css_class("profile-avatar")
+        hero.append(avatar)
+
+        identity = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        identity.set_hexpand(True)
+        identity.set_valign(Gtk.Align.CENTER)
+        name = Gtk.Label(label=getuser(), xalign=0)
+        name.add_css_class("title-1")
+        identity.append(name)
+        subtitle = Gtk.Label(label="Your private CineShelf profile", xalign=0)
+        subtitle.add_css_class("dim-label")
+        identity.append(subtitle)
+        hero.append(identity)
+
+        settings = Gtk.Button.new_from_icon_name("emblem-system-symbolic")
+        settings.set_tooltip_text("Profile settings")
+        settings.add_css_class("flat")
+        settings.add_css_class("circular")
+        settings.set_valign(Gtk.Align.CENTER)
+        settings.connect("clicked", self._on_preferences_clicked)
+        hero.append(settings)
+        content.append(hero)
+
+        self.profile_tabs = Adw.ToggleGroup()
+        for key, label in (
+            ("statistics", "Statistics"),
+            ("history", "Watch History"),
+            ("watched", "Watched"),
+        ):
+            self.profile_tabs.add(Adw.Toggle(name=key, label=label))
+        self.profile_tabs.set_active_name("statistics")
+        self.profile_tabs.set_halign(Gtk.Align.START)
+        content.append(self.profile_tabs)
+
+        self.profile_stack = Gtk.Stack()
+        self.profile_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+        self.profile_stack.set_transition_duration(180)
+        self.profile_stack.set_vhomogeneous(False)
+        self.profile_statistics_host = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=20,
+        )
+        self.profile_history_host = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=14,
+        )
+        self.profile_watched_host = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=14,
+        )
+        self.profile_stack.add_named(self.profile_statistics_host, "statistics")
+        self.profile_stack.add_named(self.profile_history_host, "history")
+        self.profile_stack.add_named(self.profile_watched_host, "watched")
+        content.append(self.profile_stack)
+        self.profile_tabs.connect("notify::active-name", self._on_profile_tab_changed)
+
+        self.browser_stack.add_named(self.profile_pane, "profile")
+        self._refresh_profile()
+
+    @staticmethod
+    def _profile_card() -> Gtk.Box:
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        card.add_css_class("profile-card")
+        return card
+
+    @staticmethod
+    def _profile_heading(title: str, subtitle: str | None = None) -> Gtk.Box:
+        heading = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        title_label = Gtk.Label(label=title, xalign=0)
+        title_label.add_css_class("title-3")
+        heading.append(title_label)
+        if subtitle:
+            subtitle_label = Gtk.Label(label=subtitle, xalign=0)
+            subtitle_label.add_css_class("dim-label")
+            subtitle_label.add_css_class("caption")
+            heading.append(subtitle_label)
+        return heading
+
+    @staticmethod
+    def _profile_metric(icon: str, value: str, label: str) -> Gtk.Box:
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        card.add_css_class("profile-metric-card")
+        icon_widget = Gtk.Image.new_from_icon_name(icon)
+        icon_widget.set_halign(Gtk.Align.START)
+        icon_widget.add_css_class("accent")
+        card.append(icon_widget)
+        value_label = Gtk.Label(label=value, xalign=0)
+        value_label.add_css_class("title-2")
+        card.append(value_label)
+        label_widget = Gtk.Label(label=label, xalign=0)
+        label_widget.add_css_class("dim-label")
+        card.append(label_widget)
+        return card
+
+    def _profile_stats(self) -> dict[str, Any]:
+        watched_records = tuple(
+            record for record in self.records if record.id in self.completed
+        )
+        watched_movies = tuple(
+            record for record in watched_records if record.media_type == "Movies"
+        )
+        movie_minutes = sum(runtime_minutes(record.runtime) for record in watched_movies)
+
+        episode_count = 0
+        television_minutes = 0
+        for record in self.records:
+            if record.media_type == "Movies":
+                continue
+            watched_for_record = 0
+            for season_index, season in enumerate(self._series_seasons(record)):
+                watched_for_record += self._season_watched_count(
+                    record,
+                    season_index,
+                )
+            episode_count += watched_for_record
+            per_episode = runtime_minutes(record.runtime)
+            if per_episode == 0:
+                per_episode = 24 if record.media_type == "Anime" else 45
+            television_minutes += watched_for_record * per_episode
+
+        activity: Counter[date] = Counter()
+        for watched_at in self.episode_watched_at.values():
+            watched_date = parse_watched_date(watched_at)
+            if watched_date is not None:
+                activity[watched_date] += 1
+        for watched_at in self.title_watched_at.values():
+            watched_date = parse_watched_date(watched_at)
+            if watched_date is not None:
+                activity[watched_date] += 1
+
+        today = date.today()
+        current_streak = 0
+        cursor = today
+        while activity.get(cursor, 0):
+            current_streak += 1
+            cursor -= timedelta(days=1)
+        longest_streak = 0
+        running = 0
+        previous: date | None = None
+        for active_day in sorted(activity):
+            running = running + 1 if previous == active_day - timedelta(days=1) else 1
+            longest_streak = max(longest_streak, running)
+            previous = active_day
+
+        month_activity = {
+            active_day: count
+            for active_day, count in activity.items()
+            if active_day.year == today.year and active_day.month == today.month
+        }
+        month_episode_count = sum(
+            1
+            for value in self.episode_watched_at.values()
+            if (watched_date := parse_watched_date(value)) is not None
+            and watched_date.year == today.year
+            and watched_date.month == today.month
+        )
+        month_movie_count = sum(
+            1
+            for value in self.title_watched_at.values()
+            if (watched_date := parse_watched_date(value)) is not None
+            and watched_date.year == today.year
+            and watched_date.month == today.month
+        )
+        rating_histogram = Counter(self.ratings.values())
+        genres = Counter(
+            genre
+            for record in watched_records
+            for genre in record.genres
+        )
+        return {
+            "watched_records": watched_records,
+            "movie_count": len(watched_movies),
+            "episode_count": episode_count,
+            "movie_minutes": movie_minutes,
+            "television_minutes": television_minutes,
+            "total_minutes": movie_minutes + television_minutes,
+            "rating_histogram": rating_histogram,
+            "rating_count": len(self.ratings),
+            "genres": genres,
+            "activity": activity,
+            "month_activity": month_activity,
+            "month_episode_count": month_episode_count,
+            "month_movie_count": month_movie_count,
+            "current_streak": current_streak,
+            "longest_streak": longest_streak,
+            "active_days_year": sum(
+                1 for active_day in activity if active_day.year == today.year
+            ),
+        }
+
+    def _build_month_review(self, stats: dict[str, Any]) -> Gtk.Box:
+        now = date.today()
+        card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
+        card.add_css_class("profile-review-card")
+        icon = Gtk.Image.new_from_icon_name("x-office-calendar-symbolic")
+        icon.set_pixel_size(32)
+        card.append(icon)
+        copy = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        copy.set_hexpand(True)
+        title = Gtk.Label(label="Month in Review", xalign=0)
+        title.add_css_class("heading")
+        copy.append(title)
+        summary = Gtk.Label(
+            label=(
+                f"{stats['month_episode_count']} episodes · "
+                f"{stats['month_movie_count']} movies"
+            ),
+            xalign=0,
+        )
+        summary.add_css_class("dim-label")
+        copy.append(summary)
+        card.append(copy)
+        month = Gtk.Label(label=now.strftime("%B %Y"))
+        month.add_css_class("heading")
+        card.append(month)
+        return card
+
+    def _build_activity_card(self, stats: dict[str, Any]) -> Gtk.Box:
+        today = date.today()
+        card = self._profile_card()
+        card.append(self._profile_heading("Daily streak activity", today.strftime("%B %Y")))
+
+        grid = Gtk.Grid(column_spacing=7, row_spacing=7)
+        weekdays = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+        for column, weekday in enumerate(weekdays):
+            label = Gtk.Label(label=weekday)
+            label.add_css_class("caption")
+            label.add_css_class("dim-label")
+            grid.attach(label, column, 0, 1, 1)
+
+        first = date(today.year, today.month, 1)
+        next_month = (
+            date(today.year + 1, 1, 1)
+            if today.month == 12
+            else date(today.year, today.month + 1, 1)
+        )
+        days_in_month = (next_month - first).days
+        maximum = max(stats["month_activity"].values(), default=1)
+        for day_number in range(1, days_in_month + 1):
+            current = date(today.year, today.month, day_number)
+            position = first.weekday() + day_number - 1
+            count = stats["month_activity"].get(current, 0)
+            level = 0 if count == 0 else max(1, math.ceil(count / maximum * 4))
+            cell = Gtk.Box()
+            cell.set_size_request(30, 30)
+            cell.add_css_class("activity-cell")
+            cell.add_css_class(f"activity-level-{level}")
+            if current == today:
+                cell.add_css_class("today")
+            cell.set_tooltip_text(f"{current.strftime('%B %d')}: {count} watched")
+            grid.attach(cell, position % 7, position // 7 + 1, 1, 1)
+        card.append(grid)
+
+        footer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, homogeneous=True)
+        for value, label in (
+            (stats["current_streak"], "Current streak"),
+            (stats["longest_streak"], "Longest streak"),
+            (stats["active_days_year"], "Active days"),
+        ):
+            item = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            value_label = Gtk.Label(label=str(value))
+            value_label.add_css_class("title-3")
+            value_label.add_css_class("accent")
+            item.append(value_label)
+            caption = Gtk.Label(label=label)
+            caption.add_css_class("caption")
+            caption.add_css_class("dim-label")
+            item.append(caption)
+            footer.append(item)
+        card.append(footer)
+        return card
+
+    def _build_habits_card(self, stats: dict[str, Any]) -> Gtk.Box:
+        card = self._profile_card()
+        card.append(self._profile_heading("Watching habits", "All-time library totals"))
+        for label, value in (
+            ("All time", format_watch_time(stats["total_minutes"])),
+            ("Movie time", format_watch_time(stats["movie_minutes"])),
+            ("TV & anime time", format_watch_time(stats["television_minutes"])),
+            ("Movies", str(stats["movie_count"])),
+            ("Episodes", f"{stats['episode_count']:,}"),
+        ):
+            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+            name = Gtk.Label(label=label, xalign=0)
+            name.set_hexpand(True)
+            name.add_css_class("dim-label")
+            row.append(name)
+            result = Gtk.Label(label=value)
+            result.add_css_class("heading")
+            row.append(result)
+            card.append(row)
+        return card
+
+    def _build_ratings_card(self, stats: dict[str, Any]) -> Gtk.Box:
+        card = self._profile_card()
+        card.append(
+            self._profile_heading(
+                "Ratings",
+                f"{stats['rating_count']} ratings across your library",
+            )
+        )
+        chart = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10, homogeneous=True)
+        maximum = max(stats["rating_histogram"].values(), default=1)
+        for score in range(1, 11):
+            column = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+            column.set_valign(Gtk.Align.END)
+            bar_host = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            bar_host.set_vexpand(True)
+            bar_host.set_valign(Gtk.Align.END)
+            bar = Gtk.Box()
+            count = stats["rating_histogram"].get(score, 0)
+            bar.set_size_request(-1, max(4, round(count / maximum * 96)))
+            bar.add_css_class("profile-rating-bar")
+            bar.set_tooltip_text(f"{score}/10: {count} ratings")
+            bar_host.append(bar)
+            column.append(bar_host)
+            label = Gtk.Label(label=str(score))
+            label.add_css_class("caption")
+            column.append(label)
+            chart.append(column)
+        card.append(chart)
+        return card
+
+    def _build_genres_card(self, stats: dict[str, Any]) -> Gtk.Box:
+        card = self._profile_card()
+        card.append(self._profile_heading("Favorite genres", "Based on watched titles"))
+        top_genres = stats["genres"].most_common(6)
+        maximum = top_genres[0][1] if top_genres else 1
+        for genre, count in top_genres:
+            labels = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+            title = Gtk.Label(label=genre, xalign=0)
+            title.set_hexpand(True)
+            labels.append(title)
+            value = Gtk.Label(label=str(count))
+            value.add_css_class("dim-label")
+            labels.append(value)
+            card.append(labels)
+            progress = Gtk.ProgressBar(fraction=count / maximum)
+            progress.update_property(
+                [Gtk.AccessibleProperty.LABEL],
+                [f"{genre}: {count} watched titles"],
+            )
+            card.append(progress)
+        return card
+
+    def _build_recently_watched(self, stats: dict[str, Any]) -> Gtk.Box:
+        section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        records = sorted(
+            stats["watched_records"],
+            key=lambda record: (self.title_watched_at.get(record.id, ""), record.order),
+            reverse=True,
+        )[:10]
+        for record in records:
+            content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+            content.append(PosterWidget(record, 96, 144))
+            title = Gtk.Label(label=record.title, xalign=0)
+            title.set_ellipsize(Pango.EllipsizeMode.END)
+            title.set_max_width_chars(14)
+            title.add_css_class("caption")
+            title.add_css_class("heading")
+            content.append(title)
+            button = Gtk.Button(child=content)
+            button.add_css_class("flat")
+            button.add_css_class("profile-poster-card")
+            button.connect(
+                "clicked",
+                lambda _button, record_id=record.id: self._on_profile_record_clicked(
+                    record_id
+                ),
+            )
+            row.append(button)
+        scroller = self._horizontal_scroller(row, 188)
+        self.profile_recent_scroller = scroller
+        header = Gtk.CenterBox()
+        header.set_start_widget(self._profile_heading("Recently watched"))
+        header.set_end_widget(self._carousel_controls(scroller, "Recently watched"))
+        section.append(header)
+        section.append(scroller)
+        return section
+
+    def _refresh_profile(self) -> None:
+        stats = self._profile_stats()
+        self._clear_container(self.profile_statistics_host)
+        self.profile_statistics_host.append(self._build_month_review(stats))
+
+        metrics = Gtk.FlowBox()
+        metrics.set_selection_mode(Gtk.SelectionMode.NONE)
+        metrics.set_min_children_per_line(2)
+        metrics.set_max_children_per_line(4)
+        metrics.set_column_spacing(12)
+        metrics.set_row_spacing(12)
+        for metric in (
+            self._profile_metric(
+                "document-open-recent-symbolic",
+                format_watch_time(stats["total_minutes"]),
+                "Total watch time",
+            ),
+            self._profile_metric(
+                "emblem-ok-symbolic",
+                str(len(stats["watched_records"])),
+                "Completed titles",
+            ),
+            self._profile_metric(
+                "media-playback-start-symbolic",
+                f"{stats['episode_count']:,}",
+                "Episodes watched",
+            ),
+            self._profile_metric(
+                "starred-symbolic",
+                str(stats["rating_count"]),
+                "Ratings given",
+            ),
+        ):
+            metrics.append(metric)
+        self.profile_statistics_host.append(metrics)
+
+        paired = Gtk.FlowBox()
+        paired.set_selection_mode(Gtk.SelectionMode.NONE)
+        paired.set_min_children_per_line(1)
+        paired.set_max_children_per_line(2)
+        paired.set_column_spacing(14)
+        paired.set_row_spacing(14)
+        paired.append(self._build_activity_card(stats))
+        paired.append(self._build_habits_card(stats))
+        self.profile_statistics_host.append(paired)
+        self.profile_statistics_host.append(self._build_ratings_card(stats))
+        self.profile_statistics_host.append(self._build_genres_card(stats))
+        self.profile_statistics_host.append(self._build_recently_watched(stats))
+        self._refresh_profile_history()
+        self._refresh_profile_watched(stats)
+
+    def _refresh_profile_history(self) -> None:
+        self._clear_container(self.profile_history_host)
+        self.profile_history_host.append(
+            self._profile_heading("Watch history", "Your locally stored activity")
+        )
+        history = Gtk.ListBox()
+        history.set_selection_mode(Gtk.SelectionMode.NONE)
+        history.add_css_class("boxed-list")
+        events: list[tuple[str, str, str]] = []
+        for record_id, watched_at in self.title_watched_at.items():
+            record = self.records_by_id.get(record_id)
+            if record is not None:
+                events.append((watched_at, record.title, "Movie or title completed"))
+        for key, watched_at in self.episode_watched_at.items():
+            record = self.records_by_id.get(key.split("/", 1)[0])
+            if record is not None:
+                episode = key.rsplit("/", 1)[-1].upper()
+                events.append((watched_at, record.title, f"Episode {episode} watched"))
+        for watched_at, title, detail in reversed(events[-40:]):
+            row = Adw.ActionRow(title=title, subtitle=f"{detail} · {watched_at}")
+            row.add_prefix(Gtk.Image.new_from_icon_name("emblem-ok-symbolic"))
+            history.append(row)
+        if not events:
+            history.append(
+                Adw.ActionRow(
+                    title="No activity yet",
+                    subtitle="Watched movies and episodes will appear here.",
+                )
+            )
+        self.profile_history_host.append(history)
+
+    def _refresh_profile_watched(self, stats: dict[str, Any]) -> None:
+        self._clear_container(self.profile_watched_host)
+        self.profile_watched_host.append(
+            self._profile_heading(
+                "Watched titles",
+                f"{len(stats['watched_records'])} completed",
+            )
+        )
+        grid = Gtk.FlowBox()
+        grid.set_selection_mode(Gtk.SelectionMode.NONE)
+        grid.set_min_children_per_line(2)
+        grid.set_max_children_per_line(8)
+        grid.set_column_spacing(12)
+        grid.set_row_spacing(14)
+        for record in stats["watched_records"]:
+            content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+            content.append(PosterWidget(record, 96, 144))
+            label = Gtk.Label(label=record.title)
+            label.set_ellipsize(Pango.EllipsizeMode.END)
+            label.set_max_width_chars(14)
+            label.add_css_class("caption")
+            content.append(label)
+            button = Gtk.Button(child=content)
+            button.add_css_class("flat")
+            button.add_css_class("profile-poster-card")
+            button.connect(
+                "clicked",
+                lambda _button, record_id=record.id: self._on_profile_record_clicked(
+                    record_id
+                ),
+            )
+            grid.append(button)
+        self.profile_watched_host.append(grid)
+
+    def _on_profile_tab_changed(self, group: Adw.ToggleGroup, _parameter: Any) -> None:
+        active = group.get_active_name()
+        if active in ("statistics", "history", "watched"):
+            self.profile_stack.set_visible_child_name(active)
+
+    def _on_profile_record_clicked(self, record_id: str) -> None:
+        record = self.records_by_id.get(record_id)
+        if record is None:
+            return
+        self.selected_id = record_id
+        self._update_details()
+        self._set_details_open(True)
+        self._load_tmdb_details_async(record)
 
     def _build_detail_sections(self) -> None:
         self.image_mode = "backdrops"
@@ -3396,6 +3980,8 @@ class CineShelfWindow:
         media_type = active.title()
         if media_type not in MEDIA_TYPES:
             return
+        if self.active_destination == "profile":
+            return
         self._set_details_open(False)
         self.active_media = media_type
         self._update_sidebar_counts()
@@ -3421,8 +4007,10 @@ class CineShelfWindow:
         if row.key == "library":
             if self.active_destination == "library":
                 return
-            self.explore_selected_id = self.selected_id
+            if self.active_destination == "explore":
+                self.explore_selected_id = self.selected_id
             self.active_destination = "library"
+            self.media_switcher.set_visible(True)
             self.browser_stack.set_visible_child_name("library")
             self.selected_id = self.library_selected_id
             self._updating = True
@@ -3430,11 +4018,25 @@ class CineShelfWindow:
             self._updating = False
             self._refresh_results()
             return
+        if row.key == "profile":
+            if self.active_destination == "library":
+                self.library_selected_id = self.selected_id
+            elif self.active_destination == "explore":
+                self.explore_selected_id = self.selected_id
+            self.active_destination = "profile"
+            self.media_switcher.set_visible(False)
+            self._updating = True
+            self.status_list.unselect_all()
+            self._updating = False
+            self.browser_stack.set_visible_child_name("profile")
+            self._refresh_profile()
+            return
         if row.key != "explore":
             return
         if self.active_destination == "library":
             self.library_selected_id = self.selected_id
         self.active_destination = "explore"
+        self.media_switcher.set_visible(True)
         self._updating = True
         self.status_list.unselect_all()
         self._updating = False
@@ -3472,11 +4074,13 @@ class CineShelfWindow:
         if self._updating or row is None:
             return
         self._set_details_open(False)
-        returning_to_library = self.active_destination == "explore"
+        returning_to_library = self.active_destination != "library"
         previous_status = self.active_status
-        if self.active_destination == "explore":
-            self.explore_selected_id = self.selected_id
+        if returning_to_library:
+            if self.active_destination == "explore":
+                self.explore_selected_id = self.selected_id
             self.active_destination = "library"
+            self.media_switcher.set_visible(True)
             self._updating = True
             self.destination_list.select_row(self.library_row)
             self._updating = False
@@ -3503,7 +4107,7 @@ class CineShelfWindow:
             self._refresh_results()
 
     def _on_search_requested(self, *_args: Any) -> None:
-        if self.active_destination == "explore":
+        if self.active_destination != "library":
             self.status_list.select_row(self.status_rows[self.active_status])
         self.search_entry.grab_focus()
 
@@ -3683,6 +4287,8 @@ class CineShelfWindow:
         self._save_user_state()
         self._populate_series(record)
         self._populate_season_page(record, self.current_season_index)
+        if self.active_destination == "profile":
+            self._refresh_profile()
         self._toast(
             "Season marked as watched"
             if new_status
@@ -3722,6 +4328,8 @@ class CineShelfWindow:
             self.current_season_index,
             episode,
         )
+        if self.active_destination == "profile":
+            self._refresh_profile()
         self._toast(
             "Episode marked as watched"
             if new_status
@@ -3886,10 +4494,12 @@ class CineShelfWindow:
         if self.selected_id in self.completed:
             self.completed.remove(self.selected_id)
             self.status_overrides[self.selected_id] = "Watchlist"
+            self.title_watched_at.pop(self.selected_id, None)
             message = "Marked as unwatched"
         else:
             self.completed.add(self.selected_id)
             self.status_overrides[self.selected_id] = "Watched"
+            self.title_watched_at[self.selected_id] = self._watched_timestamp()
             message = "Marked as watched"
         if self.status_overrides[self.selected_id] == record.status:
             self.status_overrides.pop(self.selected_id)
@@ -3897,6 +4507,8 @@ class CineShelfWindow:
         self._update_sidebar_counts()
         if self.active_destination == "explore":
             self._refresh_explore(reset_scroll=False)
+        elif self.active_destination == "profile":
+            self._refresh_profile()
         else:
             self._refresh_results()
         self._toast(message)
@@ -3949,6 +4561,8 @@ class CineShelfWindow:
         self._save_user_state()
         if self.active_destination == "explore":
             self._refresh_explore(reset_scroll=False)
+        elif self.active_destination == "profile":
+            self._refresh_profile()
         else:
             self._refresh_results()
         self._toast(f"Your rating is now {score}/10")

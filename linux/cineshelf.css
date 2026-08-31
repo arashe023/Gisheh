@@ -238,3 +238,94 @@ progressbar trough {
 progressbar progress {
   min-height: 8px;
 }
+
+.profile-hero,
+.profile-card,
+.profile-metric-card,
+.profile-review-card {
+  border-radius: 16px;
+  background-color: @card_bg_color;
+  box-shadow: 0 1px 3px alpha(@shade_color, 0.24);
+}
+
+.profile-hero {
+  padding: 18px 20px;
+}
+
+.profile-avatar {
+  border-radius: 999px;
+}
+
+.profile-review-card {
+  padding: 18px 20px;
+  color: @accent_fg_color;
+  background-image: linear-gradient(110deg,
+                                    shade(@accent_bg_color, 0.72),
+                                    shade(@accent_bg_color, 0.48));
+}
+
+.profile-card {
+  min-width: 340px;
+  padding: 18px;
+}
+
+.profile-metric-card {
+  min-width: 170px;
+  padding: 16px;
+}
+
+.activity-cell {
+  border-radius: 8px;
+  background-color: alpha(@window_fg_color, 0.08);
+}
+
+.activity-level-1 {
+  background-color: alpha(@accent_bg_color, 0.28);
+}
+
+.activity-level-2 {
+  background-color: alpha(@accent_bg_color, 0.48);
+}
+
+.activity-level-3 {
+  background-color: alpha(@accent_bg_color, 0.70);
+}
+
+.activity-level-4 {
+  background-color: @accent_bg_color;
+}
+
+.activity-cell.today {
+  box-shadow: inset 0 0 0 2px @window_fg_color;
+}
+
+.profile-rating-bar {
+  min-width: 12px;
+  border-radius: 7px 7px 3px 3px;
+  background-color: @accent_bg_color;
+}
+
+.profile-poster-card {
+  min-width: 104px;
+  padding: 4px;
+  border-radius: 14px;
+}
+
+.profile-poster-card:hover {
+  background-color: alpha(@window_fg_color, 0.08);
+}
+
+.profile-card progressbar trough {
+  min-height: 7px;
+  border-radius: 999px;
+}
+
+.profile-card progressbar progress {
+  min-height: 7px;
+  border-radius: 999px;
+}
+
+.main-content-pane flowboxchild {
+  padding: 0;
+  background-color: transparent;
+}
