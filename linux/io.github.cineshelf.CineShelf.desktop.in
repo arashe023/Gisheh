@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=CineShelf
+Comment=Browse and track movies, shows and anime
+Exec="@EXECUTABLE@"
+Icon=io.github.cineshelf.CineShelf
+Terminal=false
+Type=Application
+Categories=AudioVideo;Video;
+Keywords=Movies;Shows;Anime;Watchlist;
+StartupNotify=true
+StartupWMClass=io.github.cineshelf.CineShelf
