@@ -44,3 +44,20 @@ python-gobject python-cairo gtk4 libadwaita
 
 اجرای برنامه به فرایند build جداگانه یا سرویس شبکه وابسته نیست.
 تغییرات کاربر در `${XDG_STATE_HOME:-~/.local/state}/io.github.cineshelf.CineShelf/state.json` ذخیره می‌شوند و با حذف یا ارتقای فایل‌های اجرایی از بین نمی‌روند.
+
+## داده‌های زندهٔ TMDB
+
+برای دریافت عنوان‌ها، جزئیات و تصاویر واقعی، Read Access Token حساب TMDB را در متغیر محیطی زیر قرار دهید:
+
+```bash
+export TMDB_READ_TOKEN='YOUR_READ_ACCESS_TOKEN'
+./linux/run-linux.sh
+```
+
+برای اجرای نصب‌شده از منوی برنامه‌ها، توکن را بدون کوتیشن و در یک خط داخل این فایل قرار دهید و دسترسی آن را روی `600` بگذارید:
+
+```text
+~/.config/io.github.cineshelf.CineShelf/tmdb-read-token
+```
+
+در صورت نبود توکن یا قطع شبکه، برنامه بدون توقف از کاتالوگ نمونهٔ محلی استفاده می‌کند. داده‌ها و تصاویر زنده توسط TMDB ارائه می‌شوند؛ CineShelf مورد تأیید یا تضمین TMDB نیست.

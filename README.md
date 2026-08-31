@@ -29,11 +29,13 @@
 
 - `linux/cineshelf.ui`: ساختار پنجره در قالب XML با `AdwNavigationSplitView`، دو HeaderBar و صفحهٔ Explore مستقل
 - `linux/cineshelf.py`: بارگذاری رابط با `Gtk.Builder`، مدیریت داده‌ها و اتصال رویدادها
+- `linux/tmdb_client.py`: دریافت امن داده‌ها، جزئیات و تصاویر زنده از TMDB با fallback محلی
 - `linux/cineshelf.css`: استایل‌های محدود و تکمیلی روی رنگ‌ها و حالت‌های استاندارد تم
 - `linux/library.json`: داده‌های محلی کتابخانه و کاتالوگ نمونهٔ Explore
 
 تم، رنگ accent و حالت high contrast مستقیماً توسط GTK و libadwaita اعمال می‌شوند و به پل یا لایهٔ نمایش جداگانه‌ای نیاز ندارند.
 وضعیت Favorite، Bookmark، Watched و امتیازها نیز در مسیر استاندارد state کاربر ذخیره می‌شود.
+Explore در صورت تنظیم `TMDB_READ_TOKEN` از داده‌ها و تصاویر زندهٔ TMDB استفاده می‌کند و در نبود شبکه یا توکن به دادهٔ نمونهٔ داخلی برمی‌گردد. روش تنظیم امن توکن در `linux/README.md` آمده است.
 
 اندازهٔ پیش‌فرض پنجره `1360×820` و حداقل اندازهٔ دسکتاپ `1120×640` است.
 

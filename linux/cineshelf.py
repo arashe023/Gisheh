@@ -7,7 +7,8 @@ import json
 import math
 import os
 import sys
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,9 @@ gi.require_version("Adw", "1")
 gi.require_version("PangoCairo", "1.0")
 
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk, Pango, PangoCairo  # noqa: E402
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import tmdb_client  # noqa: E402
 
 
 APP_ID = "io.github.cineshelf.CineShelf"
@@ -66,6 +70,35 @@ LANGUAGE_BY_COUNTRY = {
     "Japan": "JA",
     "United Kingdom": "EN",
     "United States": "EN",
+}
+
+TMDB_GENRES = {
+    12: "Adventure",
+    14: "Fantasy",
+    16: "Animation",
+    18: "Drama",
+    27: "Horror",
+    28: "Action",
+    35: "Comedy",
+    36: "History",
+    37: "Western",
+    53: "Thriller",
+    80: "Crime",
+    99: "Documentary",
+    878: "Science Fiction",
+    9648: "Mystery",
+    10402: "Music",
+    10749: "Romance",
+    10751: "Family",
+    10752: "War",
+    10759: "Action & Adventure",
+    10762: "Kids",
+    10763: "News",
+    10764: "Reality",
+    10765: "Sci-Fi & Fantasy",
+    10766: "Soap",
+    10767: "Talk",
+    10768: "War & Politics",
 }
 
 
@@ -136,6 +169,9 @@ class TitleRecord:
     popularity: int
     release_rank: int
     discover_layout: str
+    tmdb_id: int | None = None
+    tmdb_media_type: str | None = None
+    artwork_file: str | None = None
 
     @classmethod
     def from_mapping(cls, raw: dict[str, Any]) -> "TitleRecord":
@@ -240,6 +276,17 @@ class TitleRecord:
             popularity=int(raw.get("popularity", order)),
             release_rank=int(raw.get("releaseRank", period_rank * 1000 - order)),
             discover_layout=str(raw.get("layout", "poster")),
+            tmdb_id=(int(raw["tmdbId"]) if raw.get("tmdbId") is not None else None),
+            tmdb_media_type=(
+                str(raw["tmdbMediaType"])
+                if raw.get("tmdbMediaType") is not None
+                else None
+            ),
+            artwork_file=(
+                str(raw["artworkFile"])
+                if raw.get("artworkFile") is not None
+                else None
+            ),
         )
 
 
@@ -260,6 +307,74 @@ def load_catalog() -> tuple[
         for media, values in payload["totals"].items()
     }
     return records, explore_records, totals
+
+
+def _tmdb_palette(tmdb_id: int) -> tuple[str, str, str]:
+    red = 36 + tmdb_id * 37 % 92
+    green = 42 + tmdb_id * 53 % 90
+    blue = 54 + tmdb_id * 71 % 110
+    return (
+        f"#{red // 2:02x}{green // 2:02x}{blue // 2:02x}",
+        f"#{red:02x}{green:02x}{blue:02x}",
+        f"#{min(255, red + 74):02x}{min(255, green + 74):02x}{min(255, blue + 74):02x}",
+    )
+
+
+def title_record_from_tmdb(
+    raw: dict[str, Any],
+    media_type: str,
+    position: int,
+    artwork_file: str | None,
+) -> TitleRecord:
+    tmdb_id = int(raw["id"])
+    tmdb_namespace = "movie" if media_type == "Movies" else "tv"
+    title = str(raw.get("title") or raw.get("name") or "Untitled")
+    release_date = str(raw.get("release_date") or raw.get("first_air_date") or "")
+    year = int(release_date[:4]) if release_date[:4].isdigit() else datetime.now().year
+    genres = tuple(
+        TMDB_GENRES[genre_id]
+        for genre_id in raw.get("genre_ids", ())
+        if genre_id in TMDB_GENRES
+    ) or ("Uncategorized",)
+    origin = raw.get("origin_country") or ()
+    country = str(origin[0]) if origin else "—"
+    rating = round(float(raw.get("vote_average") or 0), 1)
+    layout = "hero" if position == 1 else "landscape" if position % 6 == 0 else "poster"
+
+    return TitleRecord(
+        id=f"tmdb-{tmdb_namespace}-{tmdb_id}",
+        title=title,
+        media_type=media_type,
+        status="Watchlist",
+        date=release_date or "Release date unavailable",
+        year=year,
+        runtime="Runtime unavailable",
+        rating=rating,
+        user_rating=None,
+        genres=genres,
+        country=country,
+        creator="TMDB",
+        description=str(raw.get("overview") or "No overview is available yet."),
+        poster_palette=_tmdb_palette(tmdb_id),
+        poster_variant=tmdb_id % 6 + 1,
+        order=max(1, 1000 - position),
+        certification="NR",
+        language=str(raw.get("original_language") or "—").upper(),
+        availability="Released" if media_type == "Movies" else "Airing",
+        network="TMDB",
+        external_ratings=(("TMDB", f"{rating:.1f}"),),
+        cast=(),
+        seasons=(),
+        recommendations=(),
+        discover_period="This month",
+        featured=position == 1,
+        popularity=round(float(raw.get("popularity") or 0)),
+        release_rank=position,
+        discover_layout=layout,
+        tmdb_id=tmdb_id,
+        tmdb_media_type=tmdb_namespace,
+        artwork_file=artwork_file,
+    )
 
 
 def _hex_to_rgb(value: str) -> tuple[float, float, float]:
@@ -284,7 +399,7 @@ def _rounded_rectangle(
     context.close_path()
 
 
-class PosterWidget(Gtk.DrawingArea):
+class GeneratedPosterWidget(Gtk.DrawingArea):
     """Tiny native poster renderer; no image decoder or browser is required."""
 
     def __init__(
@@ -477,6 +592,49 @@ class PosterWidget(Gtk.DrawingArea):
             context.fill()
 
 
+class PosterWidget(Gtk.Overlay):
+    """Display cached TMDB artwork, falling back to the local poster renderer."""
+
+    def __init__(
+        self,
+        record: TitleRecord,
+        width: int,
+        height: int,
+        *,
+        variant_offset: int = 0,
+        show_text: bool = True,
+    ) -> None:
+        super().__init__()
+        self.set_size_request(width, height)
+        self.set_overflow(Gtk.Overflow.HIDDEN)
+        self.set_tooltip_text(f"{record.title}, {record.year}")
+        self.set_accessible_role(Gtk.AccessibleRole.IMG)
+        self.update_property(
+            [Gtk.AccessibleProperty.LABEL],
+            [f"Artwork for {record.title}"],
+        )
+
+        artwork_path = Path(record.artwork_file) if record.artwork_file else None
+        if artwork_path is not None and artwork_path.is_file():
+            picture = Gtk.Picture.new_for_filename(str(artwork_path))
+            picture.set_content_fit(Gtk.ContentFit.COVER)
+            picture.set_can_shrink(True)
+            picture.set_hexpand(True)
+            picture.set_vexpand(True)
+            self.set_child(picture)
+        else:
+            generated = GeneratedPosterWidget(
+                record,
+                width,
+                height,
+                variant_offset=variant_offset,
+                show_text=show_text,
+            )
+            generated.set_hexpand(True)
+            generated.set_vexpand(True)
+            self.set_child(generated)
+
+
 class SidebarRow(Gtk.ListBoxRow):
     def __init__(
         self,
@@ -559,6 +717,9 @@ class CineShelfWindow:
         self.status_overrides: dict[str, str] = {}
         self.episode_status_overrides: dict[str, bool] = {}
         self.episode_watched_at: dict[str, str] = {}
+        self.tmdb_token = tmdb_client.read_token()
+        self._tmdb_details_loading: set[str] = set()
+        self._tmdb_details_loaded: set[str] = set()
         self.state_file = user_state_file()
         self._load_user_state()
 
@@ -589,6 +750,8 @@ class CineShelfWindow:
         self._connect_signals(application)
         self._update_genre_model()
         self._refresh_results()
+        if self.tmdb_token:
+            self._load_tmdb_explore_async()
 
     def _object(self, name: str) -> Any:
         obj = self.builder.get_object(name)
@@ -716,40 +879,43 @@ class CineShelfWindow:
             return
 
         valid_ids = set(self.records_by_id)
+        is_valid_id = lambda value: value in valid_ids or str(value).startswith("tmdb-")
         self.bookmarks = {
             value
             for value in payload.get("bookmarks", self.bookmarks)
-            if value in valid_ids
+            if is_valid_id(value)
         }
         self.favorites = {
             value
             for value in payload.get("favorites", self.favorites)
-            if value in valid_ids
+            if is_valid_id(value)
         }
         self.completed = {
             value
             for value in payload.get("completed", self.completed)
-            if value in valid_ids
+            if is_valid_id(value)
         }
         self.ratings = {
             record_id: int(score)
             for record_id, score in payload.get("ratings", self.ratings).items()
-            if record_id in valid_ids and isinstance(score, int) and 1 <= score <= 10
+            if is_valid_id(record_id) and isinstance(score, int) and 1 <= score <= 10
         }
         self.status_overrides = {
             record_id: status
             for record_id, status in payload.get("statusOverrides", {}).items()
-            if record_id in valid_ids and status in STATUSES
+            if is_valid_id(record_id) and status in STATUSES
         }
         self.episode_status_overrides = {
             str(key): value
             for key, value in payload.get("episodeStatusOverrides", {}).items()
-            if isinstance(value, bool) and str(key).split("/", 1)[0] in valid_ids
+            if isinstance(value, bool)
+            and is_valid_id(str(key).split("/", 1)[0])
         }
         self.episode_watched_at = {
             str(key): str(value)
             for key, value in payload.get("episodeWatchedAt", {}).items()
-            if isinstance(value, str) and str(key).split("/", 1)[0] in valid_ids
+            if isinstance(value, str)
+            and is_valid_id(str(key).split("/", 1)[0])
         }
 
         for record_id, status in self.status_overrides.items():
@@ -1463,6 +1629,184 @@ class CineShelfWindow:
         self.explore_genre = selected_genre
         self._updating = False
 
+    def _load_tmdb_explore_async(self) -> None:
+        token = self.tmdb_token
+        if not token:
+            return
+        threading.Thread(
+            target=self._load_tmdb_explore_worker,
+            args=(token,),
+            name="cineshelf-tmdb-explore",
+            daemon=True,
+        ).start()
+
+    def _load_tmdb_explore_worker(self, token: str) -> None:
+        try:
+            collections = tmdb_client.fetch_explore(token)
+            records: list[TitleRecord] = []
+            for media_type in MEDIA_TYPES:
+                for position, raw in enumerate(
+                    collections.get(media_type, ())[:18],
+                    start=1,
+                ):
+                    image_path = raw.get("poster_path")
+                    if position == 1 or position % 6 == 0:
+                        image_path = raw.get("backdrop_path") or image_path
+                    artwork_file = tmdb_client.cache_image(
+                        str(image_path) if image_path else None,
+                        size="w780" if position == 1 or position % 6 == 0 else "w500",
+                    )
+                    records.append(
+                        title_record_from_tmdb(
+                            raw,
+                            media_type,
+                            position,
+                            artwork_file,
+                        )
+                    )
+            if not records:
+                raise tmdb_client.TmdbError("TMDB returned no titles.")
+        except tmdb_client.TmdbError as error:
+            GLib.idle_add(self._on_tmdb_explore_failed, str(error))
+            return
+        GLib.idle_add(self._apply_tmdb_explore, tuple(records))
+
+    def _apply_tmdb_explore(self, records: tuple[TitleRecord, ...]) -> bool:
+        self.explore_records = records
+        self.explore_ids = {record.id for record in records}
+        self.records_by_id = {
+            record.id: record for record in (*self.records, *self.explore_records)
+        }
+        self.explore_selected_id = None
+        self._update_sidebar_counts()
+        self._update_explore_genre_model(preserve=False)
+        if self.active_destination == "explore":
+            self._refresh_explore()
+        self._toast("Live TMDB data loaded")
+        return GLib.SOURCE_REMOVE
+
+    def _on_tmdb_explore_failed(self, message: str) -> bool:
+        print(f"CineShelf TMDB: {message}", file=sys.stderr)
+        self._toast("TMDB unavailable — showing local sample data")
+        return GLib.SOURCE_REMOVE
+
+    def _load_tmdb_details_async(self, record: TitleRecord) -> None:
+        if (
+            not self.tmdb_token
+            or record.tmdb_id is None
+            or record.tmdb_media_type is None
+            or record.id in self._tmdb_details_loading
+            or record.id in self._tmdb_details_loaded
+        ):
+            return
+        self._tmdb_details_loading.add(record.id)
+        threading.Thread(
+            target=self._load_tmdb_details_worker,
+            args=(record, self.tmdb_token),
+            name=f"cineshelf-tmdb-{record.tmdb_id}",
+            daemon=True,
+        ).start()
+
+    def _load_tmdb_details_worker(self, record: TitleRecord, token: str) -> None:
+        try:
+            payload = tmdb_client.fetch_details(
+                token,
+                record.tmdb_media_type or "movie",
+                record.tmdb_id or 0,
+            )
+            artwork_file = tmdb_client.cache_image(
+                str(payload.get("backdrop_path") or payload.get("poster_path") or ""),
+                size="w780",
+            )
+            genres = tuple(
+                str(item["name"])
+                for item in payload.get("genres", ())
+                if isinstance(item, dict) and item.get("name")
+            ) or record.genres
+            cast = tuple(
+                CastMember(str(item.get("name", "—")), str(item.get("character", "Cast")))
+                for item in payload.get("credits", {}).get("cast", ())[:8]
+                if isinstance(item, dict)
+            )
+            if record.tmdb_media_type == "movie":
+                runtime_minutes = int(payload.get("runtime") or 0)
+                directors = [
+                    str(item.get("name"))
+                    for item in payload.get("credits", {}).get("crew", ())
+                    if isinstance(item, dict) and item.get("job") == "Director"
+                ]
+                creator = ", ".join(directors[:2]) or record.creator
+                seasons: tuple[SeasonInfo, ...] = ()
+            else:
+                runtimes = payload.get("episode_run_time") or ()
+                runtime_minutes = int(runtimes[0]) if runtimes else 0
+                creators = [
+                    str(item.get("name"))
+                    for item in payload.get("created_by", ())
+                    if isinstance(item, dict) and item.get("name")
+                ]
+                creator = ", ".join(creators[:2]) or record.creator
+                seasons = tuple(
+                    SeasonInfo(
+                        id=f"s{int(item.get('season_number', position))}",
+                        number=int(item.get("season_number", position)),
+                        title=str(item.get("name") or f"Season {position}"),
+                        watched=0,
+                        episodes=int(item.get("episode_count") or 0),
+                    )
+                    for position, item in enumerate(payload.get("seasons", ()), start=1)
+                    if isinstance(item, dict)
+                )
+            runtime = (
+                f"{runtime_minutes // 60}h {runtime_minutes % 60:02d}m"
+                if runtime_minutes >= 60
+                else f"{runtime_minutes}m" if runtime_minutes else record.runtime
+            )
+            countries = [
+                str(item.get("name"))
+                for item in payload.get("production_countries", ())
+                if isinstance(item, dict) and item.get("name")
+            ]
+            networks = [
+                str(item.get("name"))
+                for item in payload.get("networks", ())
+                if isinstance(item, dict) and item.get("name")
+            ]
+            updated = replace(
+                record,
+                runtime=runtime,
+                genres=genres,
+                country=", ".join(countries[:2]) or record.country,
+                creator=creator,
+                description=str(payload.get("overview") or record.description),
+                availability=str(payload.get("status") or record.availability),
+                network=", ".join(networks[:2]) or record.network,
+                cast=cast or record.cast,
+                seasons=seasons or record.seasons,
+                artwork_file=artwork_file or record.artwork_file,
+            )
+        except tmdb_client.TmdbError as error:
+            GLib.idle_add(self._on_tmdb_details_failed, record.id, str(error))
+            return
+        GLib.idle_add(self._apply_tmdb_details, updated)
+
+    def _apply_tmdb_details(self, updated: TitleRecord) -> bool:
+        self._tmdb_details_loading.discard(updated.id)
+        self._tmdb_details_loaded.add(updated.id)
+        self.records_by_id[updated.id] = updated
+        self.explore_records = tuple(
+            updated if record.id == updated.id else record
+            for record in self.explore_records
+        )
+        if self.selected_id == updated.id:
+            self._update_details()
+        return GLib.SOURCE_REMOVE
+
+    def _on_tmdb_details_failed(self, record_id: str, message: str) -> bool:
+        self._tmdb_details_loading.discard(record_id)
+        print(f"CineShelf TMDB details: {message}", file=sys.stderr)
+        return GLib.SOURCE_REMOVE
+
     def _effective_status(self, record: TitleRecord) -> str:
         return self.status_overrides.get(record.id, record.status)
 
@@ -1711,6 +2055,13 @@ class CineShelfWindow:
                     column = 0
 
         self.explore_feed_box.append(self.explore_grid)
+        if any(record.tmdb_id is not None for record in self.explore_visible_records):
+            attribution = Gtk.Label(label="Data & images provided by TMDB")
+            attribution.set_halign(Gtk.Align.START)
+            attribution.set_margin_top(2)
+            attribution.add_css_class("caption")
+            attribution.add_css_class("dim-label")
+            self.explore_feed_box.append(attribution)
         self._sync_explore_selection_style()
 
     def _create_explore_card(
@@ -1747,8 +2098,6 @@ class CineShelfWindow:
         )
         artwork.set_hexpand(True)
         artwork.set_vexpand(True)
-        artwork.set_content_width(1)
-        artwork.set_content_height(1)
         artwork.set_size_request(-1, -1)
         overlay.set_child(artwork)
 
@@ -2018,7 +2367,7 @@ class CineShelfWindow:
         close_button.set_margin_end(8)
         close_button.set_tooltip_text("Close details")
         close_button.add_css_class("circular")
-        close_button.add_css_class("detail-hero-button")
+        close_button.add_css_class("osd")
         close_button.connect("clicked", self._on_details_close_clicked)
         overlay.add_overlay(close_button)
         self.detail_poster_host.append(overlay)
@@ -2907,6 +3256,7 @@ class CineShelfWindow:
         self._sync_explore_selection_style()
         self._update_details()
         self._set_details_open(True)
+        self._load_tmdb_details_async(self.records_by_id[record_id])
 
     def _on_view_changed(self, group: Adw.ToggleGroup, _parameter: Any) -> None:
         if self._updating:
@@ -3068,6 +3418,7 @@ class CineShelfWindow:
         self._updating = False
         self._update_details()
         self._set_details_open(True)
+        self._load_tmdb_details_async(self.records_by_id[self.selected_id])
 
     def _on_list_activated(
         self,
@@ -3078,6 +3429,7 @@ class CineShelfWindow:
         self.library_selected_id = self.selected_id
         self._update_details()
         self._set_details_open(True)
+        self._load_tmdb_details_async(self.records_by_id[self.selected_id])
 
     def _on_grid_selected(self, flow_box: Gtk.FlowBox) -> None:
         if self._updating:
@@ -3095,6 +3447,7 @@ class CineShelfWindow:
         self._updating = False
         self._update_details()
         self._set_details_open(True)
+        self._load_tmdb_details_async(self.records_by_id[self.selected_id])
 
     def _on_grid_activated(
         self,
@@ -3105,6 +3458,7 @@ class CineShelfWindow:
         self.library_selected_id = self.selected_id
         self._update_details()
         self._set_details_open(True)
+        self._load_tmdb_details_async(self.records_by_id[self.selected_id])
 
     def _set_details_open(self, open_details: bool) -> None:
         if self.details_open == open_details:
