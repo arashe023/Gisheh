@@ -81,7 +81,7 @@
 }
 
 .movie-grid {
-  padding: 6px 10px 20px 10px;
+  padding: 8px 12px 24px 12px;
 }
 
 .movie-grid flowboxchild {
@@ -99,8 +99,8 @@
 }
 
 .poster-grid-card {
-  min-width: 96px;
-  min-height: 185px;
+  min-width: 120px;
+  min-height: 218px;
   padding: 6px;
   border-radius: 12px;
 }

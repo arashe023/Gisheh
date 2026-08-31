@@ -57,7 +57,8 @@ class PrivateRotatingFileHandler(RotatingFileHandler):
         return stream
 
 MEDIA_TYPES = ("Movies", "Shows", "Anime")
-STATUSES = ("Watchlist", "Watched", "Calendar", "Dropped")
+STATUSES = ("Watching", "Watched", "On Hold", "Calendar", "Dropped")
+LIBRARY_FILTERS = (*STATUSES, "Watchlist")
 SORT_OPTIONS = (
     ("recent", "Last watched"),
     ("title", "Title"),
@@ -71,19 +72,22 @@ EXPLORE_SORT_OPTIONS = (
     ("upcoming", "Coming soon"),
 )
 EXPLORE_PERIODS = ("This month", "This year", "All releases")
+GRID_CARD_WIDTH = 132
+GRID_COLUMN_GAP = 12
+GRID_HORIZONTAL_PADDING = 24
+GRID_MAX_COLUMNS = 8
+GRID_ROW_HEIGHT = 246
 
 STATUS_ICONS = {
+    "Watching": "media-playback-start-symbolic",
     "Watchlist": "bookmark-new-symbolic",
     "Watched": "emblem-ok-symbolic",
+    "On Hold": "media-playback-pause-symbolic",
     "Calendar": "x-office-calendar-symbolic",
     "Dropped": "user-trash-symbolic",
 }
 
-COLLECTIONS = (
-    ("Favorites", "starred-symbolic", 12),
-    ("Weekend picks", "media-playback-start-symbolic", 8),
-    ("Modern classics", "non-starred-symbolic", 16),
-)
+LISTS = (("Watchlist", "bookmark-new-symbolic"),)
 
 LANGUAGE_BY_COUNTRY = {
     "Algeria": "AR",
@@ -226,6 +230,15 @@ def format_watch_time(minutes: int) -> str:
     if minutes or not parts:
         parts.append(f"{minutes}m")
     return " ".join(parts)
+
+
+def grid_columns_for_width(width: int) -> int:
+    """Return the FlowBox column count implied by the card's real minimum width."""
+    content_width = max(1, width - GRID_HORIZONTAL_PADDING)
+    columns = (content_width + GRID_COLUMN_GAP) // (
+        GRID_CARD_WIDTH + GRID_COLUMN_GAP
+    )
+    return max(1, min(GRID_MAX_COLUMNS, columns))
 
 
 @dataclass(frozen=True, slots=True)
@@ -626,8 +639,8 @@ def enrich_records_from_tmdb_cache(
 def title_records_from_simkl(payload: dict[str, Any]) -> tuple[TitleRecord, ...]:
     status_map = {
         "plantowatch": "Watchlist",
-        "watching": "Watchlist",
-        "hold": "Watchlist",
+        "watching": "Watching",
+        "hold": "On Hold",
         "completed": "Watched",
         "dropped": "Dropped",
     }
@@ -654,7 +667,10 @@ def title_records_from_simkl(payload: dict[str, Any]) -> tuple[TitleRecord, ...]
             except (TypeError, ValueError):
                 continue
             user_rating = entry.get("user_rating")
-            status = status_map.get(str(entry.get("status")), "Watchlist")
+            raw_status = str(entry.get("status") or "")
+            if raw_status not in status_map:
+                continue
+            status = status_map[raw_status]
             watched_count = int(entry.get("watched_episodes_count") or 0)
             total_count = int(entry.get("total_episodes_count") or 0)
             last_activity = str(
@@ -1428,7 +1444,7 @@ class CineShelfWindow:
         self.status_overrides = {
             record_id: status
             for record_id, status in payload.get("statusOverrides", {}).items()
-            if is_valid_id(record_id) and status in STATUSES
+            if is_valid_id(record_id) and status in LIBRARY_FILTERS
         }
         self.episode_status_overrides = {
             str(key): value
@@ -1583,10 +1599,17 @@ class CineShelfWindow:
         self.status_list.select_row(self.status_rows[self.active_status])
         self._updating = False
 
-        for label, icon_name, count in COLLECTIONS:
-            self.collections_list.append(
-                SidebarRow(label, label, icon_name, count)
+        self.list_rows: dict[str, SidebarRow] = {}
+        for label, icon_name in LISTS:
+            row = SidebarRow(
+                label,
+                label,
+                icon_name,
+                self._status_total(self.active_media, label),
             )
+            self.list_rows[label] = row
+            self.collections_list.append(row)
+        self.watchlist_row = self.list_rows["Watchlist"]
 
     def _build_result_views(self) -> None:
         self.list_box = Gtk.ListBox()
@@ -1598,11 +1621,13 @@ class CineShelfWindow:
         self.grid_box = Gtk.FlowBox()
         self.grid_box.set_selection_mode(Gtk.SelectionMode.SINGLE)
         self.grid_box.set_activate_on_single_click(True)
-        self.grid_box.set_homogeneous(False)
+        self.grid_box.set_homogeneous(True)
         self.grid_box.set_min_children_per_line(1)
-        self.grid_box.set_max_children_per_line(10)
-        self.grid_box.set_row_spacing(12)
-        self.grid_box.set_column_spacing(10)
+        self.grid_box.set_max_children_per_line(8)
+        self.grid_box.set_row_spacing(16)
+        self.grid_box.set_column_spacing(12)
+        self.grid_box.set_hexpand(True)
+        self.grid_box.set_halign(Gtk.Align.FILL)
         self.grid_box.set_valign(Gtk.Align.START)
         self.grid_box.add_css_class("movie-grid")
 
@@ -2888,8 +2913,8 @@ class CineShelfWindow:
         if page_size <= 1.0:
             page_size = 600.0
         if self.view_mode == "grid":
-            columns = max(4, self.results_scroller.get_width() // 108)
-            row_height = 197
+            columns = grid_columns_for_width(self.results_scroller.get_width())
+            row_height = GRID_ROW_HEIGHT
             start = int(scroll_value // row_height) * columns
             visible_count = max(columns, math.ceil(page_size / row_height) * columns)
         else:
@@ -3489,7 +3514,10 @@ class CineShelfWindow:
             self._on_destination_selected,
         )
         self.status_list.connect("row-selected", self._on_status_selected)
-        self.collections_list.connect("row-activated", self._on_collection_activated)
+        self.collections_list.connect(
+            "row-selected",
+            self._on_library_list_selected,
+        )
         self.list_box.connect("row-selected", self._on_list_selected)
         self.list_box.connect("row-activated", self._on_list_activated)
         self.grid_box.connect("selected-children-changed", self._on_grid_selected)
@@ -4538,7 +4566,10 @@ class CineShelfWindow:
         )
 
     def _library_total(self, media_type: str) -> int:
-        return sum(self._status_total(media_type, status) for status in STATUSES)
+        return sum(
+            self._status_total(media_type, status)
+            for status in LIBRARY_FILTERS
+        )
 
     def _filtered_explore_records(self) -> tuple[TitleRecord, ...]:
         records = []
@@ -4631,14 +4662,16 @@ class CineShelfWindow:
 
         list_rows: dict[str, Gtk.ListBoxRow] = {}
         grid_children: dict[str, Gtk.FlowBoxChild] = {}
-        for record in self.visible_records:
-            row = self._create_list_row(record)
-            list_rows[record.id] = row
-            self.list_box.append(row)
-
-            child = self._create_grid_child(record)
-            grid_children[record.id] = child
-            self.grid_box.append(child)
+        if self.view_mode == "grid":
+            for record in self.visible_records:
+                child = self._create_grid_child(record)
+                grid_children[record.id] = child
+                self.grid_box.append(child)
+        else:
+            for record in self.visible_records:
+                row = self._create_list_row(record)
+                list_rows[record.id] = row
+                self.list_box.append(row)
 
         self._list_rows = list_rows
         self._grid_children = grid_children
@@ -4903,23 +4936,25 @@ class CineShelfWindow:
     def _create_grid_child(self, record: TitleRecord) -> Gtk.FlowBoxChild:
         child = Gtk.FlowBoxChild()
         child.record = record
+        child.set_halign(Gtk.Align.FILL)
+        child.set_valign(Gtk.Align.START)
 
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=7)
-        card.set_size_request(108, 197)
+        card.set_size_request(132, 230)
         card.set_hexpand(False)
         card.set_halign(Gtk.Align.CENTER)
         card.set_valign(Gtk.Align.START)
         card.add_css_class("poster-grid-card")
-        card.append(self._create_poster_overlay(record, 96, 144))
+        card.append(self._create_poster_overlay(record, 120, 180))
 
         title = Gtk.Label(label=record.title, xalign=0)
         title.set_wrap(True)
         title.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
         title.set_lines(2)
         title.set_ellipsize(Pango.EllipsizeMode.END)
-        title.set_max_width_chars(12)
+        title.set_max_width_chars(15)
         title.set_hexpand(False)
-        title.set_size_request(96, 38)
+        title.set_size_request(120, 38)
         title.set_tooltip_text(record.title)
         title.add_css_class("poster-grid-title")
         card.append(title)
@@ -5747,8 +5782,21 @@ class CineShelfWindow:
     def _update_sidebar_counts(self) -> None:
         for status, row in self.status_rows.items():
             row.set_count(self._status_total(self.active_media, status))
+        for list_name, row in self.list_rows.items():
+            row.set_count(self._status_total(self.active_media, list_name))
         self.library_row.set_count(self._library_total(self.active_media))
         self.explore_row.set_count(self._explore_total(self.active_media))
+
+    def _sync_library_filter_selection(self) -> None:
+        was_updating = self._updating
+        self._updating = True
+        if self.active_status == "Watchlist":
+            self.status_list.unselect_all()
+            self.collections_list.select_row(self.watchlist_row)
+        else:
+            self.collections_list.unselect_all()
+            self.status_list.select_row(self.status_rows[self.active_status])
+        self._updating = was_updating
 
     def _update_sort_icon(self) -> None:
         base_reverse = self.sort_key != "title"
@@ -5805,9 +5853,7 @@ class CineShelfWindow:
             self.media_switcher.set_visible(True)
             self.browser_stack.set_visible_child_name("library")
             self.selected_id = self.library_selected_id
-            self._updating = True
-            self.status_list.select_row(self.status_rows[self.active_status])
-            self._updating = False
+            self._sync_library_filter_selection()
             self._refresh_results()
             return
         if row.key == "profile":
@@ -5819,6 +5865,7 @@ class CineShelfWindow:
             self.media_switcher.set_visible(False)
             self._updating = True
             self.status_list.unselect_all()
+            self.collections_list.unselect_all()
             self._updating = False
             self.browser_stack.set_visible_child_name("profile")
             self._refresh_profile()
@@ -5831,6 +5878,7 @@ class CineShelfWindow:
         self.media_switcher.set_visible(True)
         self._updating = True
         self.status_list.unselect_all()
+        self.collections_list.unselect_all()
         self._updating = False
         self.browser_stack.set_visible_child_name("explore")
         self._update_explore_genre_model()
@@ -5865,6 +5913,12 @@ class CineShelfWindow:
     ) -> None:
         if self._updating or row is None:
             return
+        self._updating = True
+        self.collections_list.unselect_all()
+        self._updating = False
+        self._activate_library_filter(row.key)
+
+    def _activate_library_filter(self, filter_name: str) -> None:
         self._set_details_open(False)
         returning_to_library = self.active_destination != "library"
         previous_status = self.active_status
@@ -5878,8 +5932,8 @@ class CineShelfWindow:
             self._updating = False
             self.browser_stack.set_visible_child_name("library")
             self.selected_id = self.library_selected_id
-        self.active_status = row.key
-        if not returning_to_library or row.key != previous_status:
+        self.active_status = filter_name
+        if not returning_to_library or filter_name != previous_status:
             self._updating = True
             self.search_entry.set_text("")
             self.genre_dropdown.set_selected(0)
@@ -5887,12 +5941,17 @@ class CineShelfWindow:
             self._updating = False
         self._refresh_results()
 
-    def _on_collection_activated(
+    def _on_library_list_selected(
         self,
         _list_box: Gtk.ListBox,
-        row: SidebarRow,
+        row: SidebarRow | None,
     ) -> None:
-        self._toast(f"{row.key} selected")
+        if self._updating or row is None:
+            return
+        self._updating = True
+        self.status_list.unselect_all()
+        self._updating = False
+        self._activate_library_filter(row.key)
 
     def _on_search_changed(self, _entry: Gtk.SearchEntry) -> None:
         if not self._updating:
@@ -5900,7 +5959,10 @@ class CineShelfWindow:
 
     def _on_search_requested(self, *_args: Any) -> None:
         if self.active_destination != "library":
-            self.status_list.select_row(self.status_rows[self.active_status])
+            if self.active_status == "Watchlist":
+                self.collections_list.select_row(self.watchlist_row)
+            else:
+                self.status_list.select_row(self.status_rows[self.active_status])
         self.search_entry.grab_focus()
 
     def _on_sort_changed(self, dropdown: Gtk.DropDown, _parameter: Any) -> None:
@@ -5995,8 +6057,24 @@ class CineShelfWindow:
         active = group.get_active_name()
         if active not in ("list", "grid"):
             return
+        if active == self.view_mode:
+            return
+        selected_index = next(
+            (
+                index
+                for index, record in enumerate(self.visible_records)
+                if record.id == self.selected_id
+            ),
+            0,
+        )
         self.view_mode = active
-        self._sync_results_child()
+        self._refresh_results()
+        if active == "grid":
+            columns = grid_columns_for_width(self.results_scroller.get_width())
+            scroll_position = (selected_index // columns) * GRID_ROW_HEIGHT
+        else:
+            scroll_position = selected_index * 126
+        self._scroll_to_value(self.results_scroller, scroll_position)
 
     def _on_image_mode_changed(
         self,
@@ -6456,16 +6534,23 @@ class CineShelfWindow:
         def apply_bookmark() -> None:
             if adding:
                 self.bookmarks.add(record.id)
+                if record.status != "Watchlist":
+                    self.status_overrides[record.id] = "Watchlist"
             else:
                 self.bookmarks.discard(record.id)
-                if record.id in self.explore_ids:
-                    self.status_overrides.pop(record.id, None)
-                    self.completed.discard(record.id)
+                self.status_overrides.pop(record.id, None)
+                self.completed.discard(record.id)
+                if record.id in self.library_ids and record.id not in self.explore_ids:
+                    self.records = tuple(
+                        item for item in self.records if item.id != record.id
+                    )
+                    self.library_ids.discard(record.id)
+                    self.records_by_id.pop(record.id, None)
             self._save_user_state()
             self._update_sidebar_counts()
             if self.active_destination == "explore":
                 self._refresh_explore(reset_scroll=False)
-            elif record.id in self.explore_ids:
+            else:
                 self._refresh_results()
 
         self._write_simkl_list_change(

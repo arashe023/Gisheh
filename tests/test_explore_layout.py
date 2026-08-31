@@ -19,6 +19,12 @@ SPEC.loader.exec_module(cineshelf)
 
 
 class ExploreLayoutTests(unittest.TestCase):
+    def test_library_grid_columns_follow_real_card_width(self) -> None:
+        self.assertEqual(cineshelf.grid_columns_for_width(120), 1)
+        self.assertEqual(cineshelf.grid_columns_for_width(320), 2)
+        self.assertEqual(cineshelf.grid_columns_for_width(620), 4)
+        self.assertEqual(cineshelf.grid_columns_for_width(2000), 8)
+
     def test_rows_fill_without_using_a_full_width_card(self) -> None:
         for columns in (2, 3, 4, 5):
             for count in range(1, 24):
@@ -89,6 +95,14 @@ class SimklMappingTests(unittest.TestCase):
                         "year": 2023,
                         "ids": {"simkl": 103},
                     },
+                },
+                {
+                    "status": "hold",
+                    "show": {
+                        "title": "Paused Anime",
+                        "year": 2022,
+                        "ids": {"simkl": 104, "tmdb": 204},
+                    },
                 }
             ],
         }
@@ -99,6 +113,7 @@ class SimklMappingTests(unittest.TestCase):
         movie = by_id["simkl-movies-101"]
         show = by_id["simkl-shows-102"]
         anime = by_id["simkl-anime-103"]
+        paused = by_id["simkl-anime-104"]
         self.assertTrue(all(record.title == "Loading from TMDB…" for record in records))
         self.assertTrue(all(record.year == 0 for record in records))
         self.assertEqual(movie.media_type, "Movies")
@@ -108,9 +123,52 @@ class SimklMappingTests(unittest.TestCase):
         self.assertIsNone(movie.poster_file)
         self.assertEqual(movie.tmdb_id, 201)
         self.assertEqual(show.media_type, "Shows")
+        self.assertEqual(show.status, "Watching")
         self.assertEqual(show.seasons[0].watched, 4)
         self.assertEqual(anime.media_type, "Anime")
+        self.assertEqual(anime.status, "Watchlist")
         self.assertEqual(anime.availability, "Plan To Watch")
+        self.assertEqual(paused.status, "On Hold")
+
+    def test_watchlist_contains_only_plan_to_watch_items(self) -> None:
+        records = cineshelf.title_records_from_simkl(
+            {
+                "movies": [
+                    {
+                        "status": status,
+                        "movie": {
+                            "ids": {"simkl": index, "tmdb": index + 100},
+                        },
+                    }
+                    for index, status in enumerate(
+                        ("plantowatch", "completed", "dropped"),
+                        start=1,
+                    )
+                ],
+                "shows": [
+                    {
+                        "status": status,
+                        "show": {
+                            "ids": {"simkl": index, "tmdb": index + 100},
+                        },
+                    }
+                    for index, status in enumerate(
+                        ("watching", "hold"),
+                        start=10,
+                    )
+                ],
+                "anime": [],
+            }
+        )
+
+        statuses = {record.id: record.status for record in records}
+        self.assertEqual(statuses["simkl-movies-1"], "Watchlist")
+        self.assertEqual(statuses["simkl-shows-10"], "Watching")
+        self.assertEqual(statuses["simkl-shows-11"], "On Hold")
+        self.assertEqual(
+            sum(status == "Watchlist" for status in statuses.values()),
+            1,
+        )
 
     def test_invalid_simkl_id_is_skipped(self) -> None:
         payload = {
