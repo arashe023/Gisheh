@@ -6,6 +6,7 @@ import importlib.util
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 LINUX_DIR = Path(__file__).resolve().parents[1] / "linux"
@@ -50,6 +51,75 @@ class ProfileFormattingTests(unittest.TestCase):
         self.assertEqual(cineshelf.format_watch_time(6502), "4d 12h 22m")
         parsed = cineshelf.parse_watched_date("Aug 8, 2026 at 2:49 AM")
         self.assertEqual(parsed.isoformat() if parsed else None, "2026-08-08")
+
+
+class SimklMappingTests(unittest.TestCase):
+    def test_library_payload_maps_movies_shows_and_anime(self) -> None:
+        payload = {
+            "movies": [
+                {
+                    "status": "completed",
+                    "last_watched_at": "2026-08-30T20:10:00Z",
+                    "user_rating": 9,
+                    "movie": {
+                        "title": "Example Movie",
+                        "year": 2025,
+                        "poster": "12/345",
+                        "ids": {"simkl": 101, "tmdb": 201},
+                    },
+                }
+            ],
+            "shows": [
+                {
+                    "status": "watching",
+                    "watched_episodes_count": 4,
+                    "total_episodes_count": 10,
+                    "show": {
+                        "title": "Example Show",
+                        "year": 2024,
+                        "ids": {"simkl": 102, "tmdb": 202},
+                    },
+                }
+            ],
+            "anime": [
+                {
+                    "status": "plantowatch",
+                    "show": {
+                        "title": "Example Anime",
+                        "year": 2023,
+                        "ids": {"simkl": 103},
+                    },
+                }
+            ],
+        }
+
+        with patch.object(cineshelf.simkl_client, "cached_poster", return_value=None):
+            records = cineshelf.title_records_from_simkl(payload)
+
+        by_title = {record.title: record for record in records}
+        self.assertEqual(set(by_title), {"Example Movie", "Example Show", "Example Anime"})
+        self.assertEqual(by_title["Example Movie"].media_type, "Movies")
+        self.assertEqual(by_title["Example Movie"].status, "Watched")
+        self.assertEqual(by_title["Example Movie"].user_rating, 9)
+        self.assertEqual(by_title["Example Movie"].tmdb_id, 201)
+        self.assertEqual(by_title["Example Show"].media_type, "Shows")
+        self.assertEqual(by_title["Example Show"].seasons[0].watched, 4)
+        self.assertEqual(by_title["Example Anime"].media_type, "Anime")
+        self.assertEqual(by_title["Example Anime"].availability, "Plan To Watch")
+
+    def test_invalid_simkl_id_is_skipped(self) -> None:
+        payload = {
+            "movies": [
+                {
+                    "status": "completed",
+                    "movie": {
+                        "title": "Invalid",
+                        "ids": {"simkl": "not-a-number"},
+                    },
+                }
+            ]
+        }
+        self.assertEqual(cineshelf.title_records_from_simkl(payload), ())
 
 
 if __name__ == "__main__":

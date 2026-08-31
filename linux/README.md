@@ -34,7 +34,7 @@ python-gobject python-cairo gtk4 libadwaita
 ./linux/install-local.sh
 ```
 
-این دستور چهار فایل اجرایی و دادهٔ برنامه را در مسیر اختصاصی CineShelf زیر `~/.local/share` قرار می‌دهد، launcher را در `~/.local/bin` می‌سازد و برنامه را به منوی نرم‌افزارهای لینوکس اضافه می‌کند.
+این دستور فایل‌های اجرایی و دادهٔ برنامه را در مسیر اختصاصی CineShelf زیر `~/.local/share` قرار می‌دهد، launcher را در `~/.local/bin` می‌سازد و برنامه را به منوی نرم‌افزارهای لینوکس اضافه می‌کند.
 
 برای حذف نسخهٔ نصب‌شده:
 
@@ -63,3 +63,15 @@ export TMDB_READ_TOKEN='YOUR_READ_ACCESS_TOKEN'
 ```
 
 در صورت نبود توکن یا قطع شبکه، برنامه بدون توقف از کاتالوگ نمونهٔ محلی استفاده می‌کند. داده‌ها و تصاویر زنده توسط TMDB ارائه می‌شوند؛ CineShelf مورد تأیید یا تضمین TMDB نیست.
+
+## اتصال حساب Simkl
+
+در صفحهٔ **Profile** روی **Connect Simkl** بزنید. برای اولین اتصال، Client ID برنامه‌ای را که در [Simkl Developer Settings](https://simkl.com/settings/developer/) ساخته‌اید وارد کنید. CineShelf صفحهٔ تأیید را در مرورگر باز می‌کند؛ با وارد کردن PIN، کتابخانه، تصویر پروفایل و آمار واقعی حساب دریافت و در رابط نمایش داده می‌شوند.
+
+CineShelf به Client Secret یا رمز عبور حساب دسترسی ندارد. Access Token در فایل زیر با سطح دسترسی `600` ذخیره می‌شود:
+
+```text
+~/.config/io.github.cineshelf.CineShelf/simkl-access-token
+```
+
+برای استقرار سازمانی یا اجرای موقت می‌توان Client ID و Access Token را به‌ترتیب از متغیرهای `SIMKL_CLIENT_ID` و `SIMKL_ACCESS_TOKEN` نیز تأمین کرد. با **Disconnect Simkl** توکن محلی حذف می‌شود و هیچ تغییری در حساب ابری Simkl ایجاد نخواهد شد.

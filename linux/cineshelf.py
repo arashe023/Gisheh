@@ -10,6 +10,7 @@ import random
 import re
 import sys
 import threading
+import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
@@ -29,6 +30,7 @@ from gi.repository import Adw, Gdk, Gio, GLib, Gtk, Pango, PangoCairo  # noqa: E
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import tmdb_client  # noqa: E402
+import simkl_client  # noqa: E402
 
 
 APP_ID = "io.github.cineshelf.CineShelf"
@@ -131,7 +133,10 @@ def parse_watched_date(value: str) -> date | None:
     try:
         return datetime.strptime(value, "%b %d, %Y at %I:%M %p").date()
     except ValueError:
-        return None
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).date()
+        except ValueError:
+            return None
 
 
 def format_watch_time(minutes: int) -> str:
@@ -427,6 +432,130 @@ def title_record_from_tmdb(
         artwork_file=poster_file or backdrop_file,
         poster_file=poster_file,
         backdrop_file=backdrop_file,
+    )
+
+
+def title_records_from_simkl(payload: dict[str, Any]) -> tuple[TitleRecord, ...]:
+    status_map = {
+        "plantowatch": "Watchlist",
+        "watching": "Watchlist",
+        "hold": "Watchlist",
+        "completed": "Watched",
+        "dropped": "Dropped",
+    }
+    media_map = {
+        "movies": ("Movies", "movie", "movie"),
+        "shows": ("Shows", "show", "tv"),
+        "anime": ("Anime", "show", "tv"),
+    }
+    sortable: list[tuple[str, TitleRecord]] = []
+    for group, (media_type, object_key, tmdb_namespace) in media_map.items():
+        items = payload.get(group, ())
+        if not isinstance(items, list):
+            continue
+        for position, entry in enumerate(items, start=1):
+            if not isinstance(entry, dict):
+                continue
+            media = entry.get(object_key)
+            if not isinstance(media, dict):
+                continue
+            ids = media.get("ids") if isinstance(media.get("ids"), dict) else {}
+            simkl_id = ids.get("simkl")
+            try:
+                numeric_simkl_id = int(simkl_id)
+            except (TypeError, ValueError):
+                continue
+            title = str(media.get("title") or "Untitled")
+            try:
+                year = int(media.get("year") or datetime.now().year)
+            except (TypeError, ValueError):
+                year = datetime.now().year
+            user_rating = entry.get("user_rating")
+            rating = float(user_rating) if isinstance(user_rating, (int, float)) else 0.0
+            status = status_map.get(str(entry.get("status")), "Watchlist")
+            poster_path = str(media.get("poster") or "") or None
+            poster_file = simkl_client.cached_poster(poster_path)
+            watched_count = int(entry.get("watched_episodes_count") or 0)
+            total_count = int(entry.get("total_episodes_count") or 0)
+            runtime = str(media.get("runtime") or "")
+            if runtime.isdigit():
+                runtime = f"{runtime}m"
+            elif not runtime:
+                runtime = (
+                    f"{total_count} episodes"
+                    if media_type != "Movies" and total_count
+                    else "Runtime unavailable"
+                )
+            last_activity = str(
+                entry.get("last_watched_at")
+                or entry.get("added_to_watchlist_at")
+                or ""
+            )
+            tmdb_value = ids.get("tmdb")
+            try:
+                tmdb_id = int(tmdb_value) if tmdb_value is not None else None
+            except (TypeError, ValueError):
+                tmdb_id = None
+            record = TitleRecord(
+                id=f"simkl-{group}-{simkl_id}",
+                title=title,
+                media_type=media_type,
+                status=status,
+                date=last_activity or "Synced from Simkl",
+                year=year,
+                runtime=runtime,
+                rating=rating,
+                user_rating=(
+                    int(user_rating)
+                    if isinstance(user_rating, int) and 1 <= user_rating <= 10
+                    else None
+                ),
+                genres=("Synced",),
+                country="—",
+                creator="Simkl",
+                description="This title was synced from your Simkl library.",
+                poster_palette=_tmdb_palette(numeric_simkl_id),
+                poster_variant=numeric_simkl_id % 6 + 1,
+                order=max(1, 100000 - position),
+                certification="NR",
+                language="—",
+                availability=str(entry.get("status") or "Synced")
+                .replace("plantowatch", "Plan to watch")
+                .title(),
+                network="Simkl",
+                external_ratings=(
+                    (("Your rating", f"{rating:.0f}"),) if rating else ()
+                ),
+                cast=(),
+                seasons=(
+                    (
+                        SeasonInfo(
+                            id="s1",
+                            number=1,
+                            title="Progress",
+                            watched=watched_count,
+                            episodes=total_count,
+                        ),
+                    )
+                    if media_type != "Movies" and total_count
+                    else ()
+                ),
+                recommendations=(),
+                discover_period="All releases",
+                featured=False,
+                popularity=0,
+                release_rank=position,
+                discover_layout="poster",
+                tmdb_id=tmdb_id,
+                tmdb_media_type=tmdb_namespace if tmdb_id is not None else None,
+                artwork_file=poster_file,
+                poster_file=poster_file,
+            )
+            sortable.append((last_activity, record))
+    sortable.sort(key=lambda item: (item[0], item[1].title), reverse=True)
+    return tuple(
+        replace(record, order=max(1, len(sortable) - position))
+        for position, (_activity, record) in enumerate(sortable)
     )
 
 
@@ -796,6 +925,32 @@ class CineShelfWindow:
             raise FileNotFoundError(f"Missing application files: {', '.join(missing)}")
 
         self.records, self.explore_records, self.totals = load_catalog()
+        self.simkl_client_id = simkl_client.read_client_id()
+        self.simkl_token = simkl_client.read_token()
+        self.simkl_settings: dict[str, Any] = {}
+        self.simkl_stats: dict[str, Any] = {}
+        self.simkl_connected = False
+        if self.simkl_client_id and self.simkl_token:
+            snapshot = simkl_client.load_snapshot()
+            if snapshot is not None:
+                simkl_records = title_records_from_simkl(
+                    snapshot.get("library", {})
+                    if isinstance(snapshot.get("library"), dict)
+                    else {}
+                )
+                if simkl_records:
+                    self.records = simkl_records
+                self.simkl_settings = (
+                    snapshot.get("settings", {})
+                    if isinstance(snapshot.get("settings"), dict)
+                    else {}
+                )
+                self.simkl_stats = (
+                    snapshot.get("stats", {})
+                    if isinstance(snapshot.get("stats"), dict)
+                    else {}
+                )
+                self.simkl_connected = bool(self.simkl_settings)
         self.library_ids = {record.id for record in self.records}
         self.explore_ids = {record.id for record in self.explore_records}
         if self.library_ids & self.explore_ids:
@@ -811,7 +966,13 @@ class CineShelfWindow:
         self.sort_key = "recent"
         self.sort_reversed = False
         self.view_mode = "list"
-        self.selected_id: str | None = "hush-girls"
+        default_record = next(
+            (record for record in self.records if record.status == "Watched"),
+            self.records[0] if self.records else None,
+        )
+        self.selected_id: str | None = (
+            default_record.id if default_record is not None else None
+        )
         self.library_selected_id: str | None = self.selected_id
         self.explore_selected_id: str | None = None
         self.visible_records: tuple[TitleRecord, ...] = ()
@@ -826,8 +987,14 @@ class CineShelfWindow:
         self._sidebar_resize_source_id = 0
         self._last_explore_layout_width = 0
 
-        self.bookmarks = {"hush-girls", "dune-two", "past-lives", "pluto"}
-        self.favorites = {"oppenheimer", "perfect-days", "frieren"}
+        self.bookmarks = {
+            record.id for record in self.records if record.status == "Watchlist"
+        }
+        self.favorites = (
+            set()
+            if self.simkl_connected
+            else {"oppenheimer", "perfect-days", "frieren"}
+        )
         self.completed = {
             record.id for record in self.records if record.status == "Watched"
         }
@@ -1022,7 +1189,13 @@ class CineShelfWindow:
             return
 
         valid_ids = set(self.records_by_id)
-        is_valid_id = lambda value: value in valid_ids or str(value).startswith("tmdb-")
+        def is_valid_id(value: object) -> bool:
+            record_id = str(value)
+            return (
+                record_id in valid_ids
+                or record_id.startswith("tmdb-")
+                or (bool(self.simkl_token) and record_id.startswith("simkl-"))
+            )
         self.bookmarks = {
             value
             for value in payload.get("bookmarks", self.bookmarks)
@@ -1279,20 +1452,71 @@ class CineShelfWindow:
 
         hero = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
         hero.add_css_class("profile-hero")
-        avatar = Adw.Avatar(size=72, text=getuser(), show_initials=True)
-        avatar.add_css_class("profile-avatar")
-        hero.append(avatar)
+        profile_user = self.simkl_settings.get("user", {})
+        profile_account = self.simkl_settings.get("account", {})
+        profile_name = str(profile_user.get("name") or getuser())
+        self.profile_avatar = Adw.Avatar(
+            size=72,
+            text=profile_name,
+            show_initials=True,
+        )
+        self.profile_avatar.add_css_class("profile-avatar")
+        cached_avatar = simkl_client.cached_avatar() if self.simkl_connected else None
+        if cached_avatar:
+            try:
+                self.profile_avatar.set_custom_image(
+                    Gdk.Texture.new_from_filename(cached_avatar)
+                )
+            except GLib.Error:
+                pass
+        else:
+            self.profile_avatar.set_custom_image(None)
+        hero.append(self.profile_avatar)
 
         identity = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
         identity.set_hexpand(True)
         identity.set_valign(Gtk.Align.CENTER)
-        name = Gtk.Label(label=getuser(), xalign=0)
-        name.add_css_class("title-1")
-        identity.append(name)
-        subtitle = Gtk.Label(label="Your private CineShelf profile", xalign=0)
-        subtitle.add_css_class("dim-label")
-        identity.append(subtitle)
+        self.profile_name_label = Gtk.Label(label=profile_name, xalign=0)
+        self.profile_name_label.add_css_class("title-1")
+        identity.append(self.profile_name_label)
+        account_type = str(profile_account.get("type") or "").upper()
+        subtitle_text = (
+            f"Connected to Simkl · {account_type or 'Account'}"
+            if self.simkl_connected
+            else "Local profile · Connect Simkl to sync your library"
+        )
+        self.profile_subtitle_label = Gtk.Label(label=subtitle_text, xalign=0)
+        self.profile_subtitle_label.add_css_class("dim-label")
+        identity.append(self.profile_subtitle_label)
         hero.append(identity)
+
+        hero_actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        hero_actions.set_valign(Gtk.Align.CENTER)
+        self.simkl_button = Gtk.Button(
+            label="Sync Simkl" if self.simkl_connected else "Connect Simkl"
+        )
+        self.simkl_button.set_tooltip_text(
+            "Refresh data from Simkl"
+            if self.simkl_connected
+            else "Sign in to Simkl"
+        )
+        self.simkl_button.add_css_class("pill")
+        if not self.simkl_connected:
+            self.simkl_button.add_css_class("suggested-action")
+        self.simkl_button.connect("clicked", self._on_simkl_button_clicked)
+        hero_actions.append(self.simkl_button)
+        self.simkl_disconnect_button = Gtk.Button.new_from_icon_name(
+            "system-log-out-symbolic"
+        )
+        self.simkl_disconnect_button.set_tooltip_text("Disconnect Simkl")
+        self.simkl_disconnect_button.add_css_class("flat")
+        self.simkl_disconnect_button.add_css_class("circular")
+        self.simkl_disconnect_button.set_visible(self.simkl_connected)
+        self.simkl_disconnect_button.connect(
+            "clicked",
+            self._on_simkl_disconnect_clicked,
+        )
+        hero_actions.append(self.simkl_disconnect_button)
 
         settings = Gtk.Button.new_from_icon_name("emblem-system-symbolic")
         settings.set_tooltip_text("Profile settings")
@@ -1300,7 +1524,8 @@ class CineShelfWindow:
         settings.add_css_class("circular")
         settings.set_valign(Gtk.Align.CENTER)
         settings.connect("clicked", self._on_preferences_clicked)
-        hero.append(settings)
+        hero_actions.append(settings)
+        hero.append(hero_actions)
         content.append(hero)
 
         self.profile_tabs = Adw.ToggleGroup()
@@ -1413,7 +1638,13 @@ class CineShelfWindow:
                 activity[watched_date] += 1
                 record = self.records_by_id.get(record_id)
                 if record is not None:
-                    movie_events.append((watched_date, runtime_minutes(record.runtime)))
+                    minutes = runtime_minutes(record.runtime)
+                    if record.media_type == "Movies":
+                        movie_events.append((watched_date, minutes))
+                    else:
+                        if minutes == 0:
+                            minutes = 24 if record.media_type == "Anime" else 45
+                        episode_events.append((watched_date, minutes))
 
         today = date.today()
         current_streak = 0
@@ -1470,14 +1701,53 @@ class CineShelfWindow:
             genre
             for record in watched_records
             for genre in record.genres
+            if genre != "Synced"
         )
+        if self.simkl_stats:
+            movies_stats = self.simkl_stats.get("movies", {})
+            tv_stats = self.simkl_stats.get("tv", {})
+            anime_stats = self.simkl_stats.get("anime", {})
+
+            def watched_episodes(group: Any) -> int:
+                if not isinstance(group, dict):
+                    return 0
+                return sum(
+                    int(bucket.get("watched_episodes_count") or 0)
+                    for bucket in group.values()
+                    if isinstance(bucket, dict)
+                )
+
+            if isinstance(movies_stats, dict):
+                movie_minutes = int(movies_stats.get("total_mins") or movie_minutes)
+                completed_movies = movies_stats.get("completed", {})
+                if isinstance(completed_movies, dict):
+                    watched_movies_count = int(
+                        completed_movies.get("count") or len(watched_movies)
+                    )
+                else:
+                    watched_movies_count = len(watched_movies)
+            else:
+                watched_movies_count = len(watched_movies)
+            television_minutes = sum(
+                int(group.get("total_mins") or 0)
+                for group in (tv_stats, anime_stats)
+                if isinstance(group, dict)
+            ) or television_minutes
+            episode_count = watched_episodes(tv_stats) + watched_episodes(anime_stats)
+            total_minutes = int(
+                self.simkl_stats.get("total_mins")
+                or movie_minutes + television_minutes
+            )
+        else:
+            watched_movies_count = len(watched_movies)
+            total_minutes = movie_minutes + television_minutes
         return {
             "watched_records": watched_records,
-            "movie_count": len(watched_movies),
+            "movie_count": watched_movies_count,
             "episode_count": episode_count,
             "movie_minutes": movie_minutes,
             "television_minutes": television_minutes,
-            "total_minutes": movie_minutes + television_minutes,
+            "total_minutes": total_minutes,
             "rating_histogram": rating_histogram,
             "rating_count": len(self.ratings),
             "genres": genres,
@@ -1860,6 +2130,487 @@ class CineShelfWindow:
         self._update_details()
         self._set_details_open(True)
         self._load_tmdb_details_async(record)
+
+    def _on_simkl_button_clicked(self, _button: Gtk.Button) -> None:
+        if self.simkl_connected and self.simkl_client_id and self.simkl_token:
+            self._start_simkl_sync()
+            return
+        dialog = Adw.AlertDialog(
+            heading="Connect Simkl",
+            body=(
+                "Create an app in Simkl Developer Settings, then paste its "
+                "Client ID here. CineShelf uses the PIN flow and never needs "
+                "your Client Secret or password."
+            ),
+        )
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        entry = Gtk.Entry()
+        entry.set_placeholder_text("Simkl Client ID")
+        entry.set_text(self.simkl_client_id or "")
+        entry.set_activates_default(True)
+        content.append(entry)
+        developer_link = Gtk.LinkButton(
+            uri="https://simkl.com/settings/developer/",
+            label="Open Simkl Developer Settings",
+        )
+        developer_link.set_halign(Gtk.Align.START)
+        content.append(developer_link)
+        dialog.set_extra_child(content)
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("continue", "Continue")
+        dialog.set_default_response("continue")
+        dialog.set_close_response("cancel")
+        dialog.set_response_appearance(
+            "continue",
+            Adw.ResponseAppearance.SUGGESTED,
+        )
+        dialog.connect("response", self._on_simkl_client_id_response, entry)
+        dialog.present(self.window)
+
+    def _on_simkl_client_id_response(
+        self,
+        _dialog: Adw.AlertDialog,
+        response: str,
+        entry: Gtk.Entry,
+    ) -> None:
+        if response != "continue":
+            return
+        client_id = entry.get_text().strip()
+        if not client_id:
+            self._toast("Enter a Simkl Client ID")
+            return
+        try:
+            simkl_client.store_client_id(client_id)
+        except simkl_client.SimklError as error:
+            print(f"CineShelf Simkl Client ID: {error}", file=sys.stderr)
+            self._toast("Could not save the Simkl Client ID")
+            return
+        self.simkl_client_id = client_id
+        self.simkl_button.set_sensitive(False)
+        self.simkl_button.set_label("Requesting PIN…")
+        threading.Thread(
+            target=self._simkl_pin_worker,
+            args=(client_id,),
+            name="cineshelf-simkl-pin",
+            daemon=True,
+        ).start()
+
+    def _simkl_pin_worker(self, client_id: str) -> None:
+        try:
+            payload = simkl_client.request_pin(client_id)
+        except simkl_client.SimklError as error:
+            GLib.idle_add(self._on_simkl_failed, str(error), error.code)
+            return
+        GLib.idle_add(self._present_simkl_pin, client_id, payload)
+
+    def _present_simkl_pin(
+        self,
+        client_id: str,
+        payload: dict[str, Any],
+    ) -> bool:
+        user_code = str(payload["user_code"])
+        verification_uri = str(
+            payload.get("verification_uri") or "https://simkl.com/pin"
+        )
+        interval = max(5, int(payload.get("interval") or 5))
+        expires_in = max(60, int(payload.get("expires_in") or 900))
+
+        dialog = Adw.AlertDialog(
+            heading="Enter this code on Simkl",
+            body=(
+                "The browser has been opened. Sign in to Simkl and enter the "
+                "code below. CineShelf will finish automatically after approval."
+            ),
+        )
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        code = Gtk.Label(label=user_code)
+        code.set_selectable(True)
+        code.add_css_class("simkl-pin-code")
+        content.append(code)
+        waiting = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        waiting.set_halign(Gtk.Align.CENTER)
+        spinner = Gtk.Spinner(spinning=True)
+        waiting.append(spinner)
+        waiting.append(Gtk.Label(label="Waiting for approval…"))
+        content.append(waiting)
+        dialog.set_extra_child(content)
+        dialog.add_response("cancel", "Cancel")
+        dialog.set_close_response("cancel")
+        dialog.connect("response", self._on_simkl_pin_dialog_response)
+        self.simkl_pin_dialog = dialog
+        self._simkl_poll_cancelled = False
+        dialog.present(self.window)
+        try:
+            Gio.AppInfo.launch_default_for_uri(verification_uri, None)
+        except GLib.Error as error:
+            print(f"CineShelf Simkl browser: {error}", file=sys.stderr)
+        threading.Thread(
+            target=self._simkl_poll_worker,
+            args=(client_id, user_code, interval, expires_in),
+            name="cineshelf-simkl-poll",
+            daemon=True,
+        ).start()
+        return GLib.SOURCE_REMOVE
+
+    def _on_simkl_pin_dialog_response(
+        self,
+        _dialog: Adw.AlertDialog,
+        _response: str,
+    ) -> None:
+        self._simkl_poll_cancelled = True
+        self.simkl_button.set_sensitive(True)
+        self.simkl_button.set_label("Connect Simkl")
+
+    def _simkl_poll_worker(
+        self,
+        client_id: str,
+        user_code: str,
+        interval: int,
+        expires_in: int,
+    ) -> None:
+        deadline = time.monotonic() + expires_in
+        while time.monotonic() < deadline and not self._simkl_poll_cancelled:
+            time.sleep(interval)
+            if self._simkl_poll_cancelled:
+                return
+            try:
+                payload = simkl_client.poll_pin(client_id, user_code)
+            except simkl_client.SimklError as error:
+                GLib.idle_add(self._on_simkl_failed, str(error), error.code)
+                return
+            access_token = str(payload.get("access_token") or "")
+            if payload.get("result") == "OK" and access_token:
+                GLib.idle_add(self._on_simkl_authorized, access_token)
+                return
+            if payload.get("device_code"):
+                GLib.idle_add(
+                    self._on_simkl_failed,
+                    "The Simkl PIN expired. Request a new code.",
+                    None,
+                )
+                return
+        if not self._simkl_poll_cancelled:
+            GLib.idle_add(
+                self._on_simkl_failed,
+                "The Simkl PIN expired. Request a new code.",
+                None,
+            )
+
+    def _on_simkl_authorized(self, access_token: str) -> bool:
+        self._simkl_poll_cancelled = True
+        try:
+            simkl_client.clear_account_cache()
+            simkl_client.store_token(access_token)
+        except simkl_client.SimklError as error:
+            return self._on_simkl_failed(str(error), error.code)
+        self.simkl_token = access_token
+        if getattr(self, "simkl_pin_dialog", None) is not None:
+            self.simkl_pin_dialog.close()
+        self._toast("Simkl connected — syncing your library…")
+        self._start_simkl_sync()
+        return GLib.SOURCE_REMOVE
+
+    def _start_simkl_sync(self) -> None:
+        if not self.simkl_client_id or not self.simkl_token:
+            return
+        self.simkl_button.set_sensitive(False)
+        self.simkl_button.set_label("Syncing…")
+        threading.Thread(
+            target=self._simkl_sync_worker,
+            args=(self.simkl_client_id, self.simkl_token),
+            name="cineshelf-simkl-sync",
+            daemon=True,
+        ).start()
+
+    def _simkl_sync_worker(self, client_id: str, token: str) -> None:
+        try:
+            snapshot = simkl_client.load_snapshot()
+            cached_activities = (
+                snapshot.get("activities", {})
+                if isinstance(snapshot, dict)
+                and isinstance(snapshot.get("activities"), dict)
+                else {}
+            )
+            cached_library = (
+                snapshot.get("library", {})
+                if isinstance(snapshot, dict)
+                and isinstance(snapshot.get("library"), dict)
+                else None
+            )
+            cached_settings = (
+                snapshot.get("settings", {})
+                if isinstance(snapshot, dict)
+                and isinstance(snapshot.get("settings"), dict)
+                else {}
+            )
+            last_sync = str(cached_activities.get("all") or "")
+            has_incremental_state = cached_library is not None and bool(last_sync)
+            if has_incremental_state:
+                activities = simkl_client.fetch_activities(client_id, token)
+                previous_settings_activity = cached_activities.get("settings", {})
+                current_settings_activity = activities.get("settings", {})
+                previous_settings_timestamp = (
+                    previous_settings_activity.get("all")
+                    if isinstance(previous_settings_activity, dict)
+                    else None
+                )
+                current_settings_timestamp = (
+                    current_settings_activity.get("all")
+                    if isinstance(current_settings_activity, dict)
+                    else None
+                )
+                settings_changed = (
+                    not cached_settings
+                    or previous_settings_timestamp != current_settings_timestamp
+                )
+                settings = (
+                    simkl_client.fetch_settings(client_id, token)
+                    if settings_changed
+                    else cached_settings
+                )
+            else:
+                activities = {}
+                settings = simkl_client.fetch_settings(client_id, token)
+            account = settings.get("account", {})
+            try:
+                user_id = (
+                    int(account.get("id") or 0)
+                    if isinstance(account, dict)
+                    else 0
+                )
+            except (TypeError, ValueError):
+                user_id = 0
+            if user_id <= 0:
+                raise simkl_client.SimklError(
+                    "Simkl did not return a valid account ID."
+                )
+            stats = simkl_client.fetch_stats(client_id, token, user_id)
+            if not has_incremental_state:
+                library = simkl_client.fetch_library(client_id, token)
+                activities = simkl_client.fetch_activities(client_id, token)
+            elif activities.get("all") == last_sync:
+                library = cached_library
+            else:
+                delta = simkl_client.fetch_library_delta(
+                    client_id,
+                    token,
+                    last_sync,
+                )
+                valid_ids = None
+                if simkl_client.removals_changed(cached_activities, activities):
+                    id_snapshot = simkl_client.fetch_library_ids(client_id, token)
+                    valid_ids = simkl_client.library_ids(id_snapshot)
+                library = simkl_client.merge_library(
+                    cached_library,
+                    delta,
+                    valid_ids,
+                )
+            poster_paths = []
+            for group, object_key in (
+                ("movies", "movie"),
+                ("shows", "show"),
+                ("anime", "show"),
+            ):
+                for entry in library.get(group, ()):
+                    if not isinstance(entry, dict):
+                        continue
+                    media = entry.get(object_key)
+                    if isinstance(media, dict) and media.get("poster"):
+                        poster_paths.append(str(media["poster"]))
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                list(executor.map(simkl_client.cache_poster, poster_paths[:80]))
+            user = settings.get("user", {})
+            if isinstance(user, dict):
+                simkl_client.cache_avatar(str(user.get("avatar") or "") or None)
+            simkl_client.store_snapshot(settings, stats, library, activities)
+            records = title_records_from_simkl(library)
+        except simkl_client.SimklError as error:
+            GLib.idle_add(self._on_simkl_failed, str(error), error.code)
+            return
+        GLib.idle_add(self._apply_simkl_sync, settings, stats, records)
+
+    def _replace_library(self, records: tuple[TitleRecord, ...]) -> None:
+        self.records = records
+        self.library_ids = {record.id for record in records}
+        self.records_by_id = {
+            record.id: record for record in (*records, *self.explore_records)
+        }
+        default_record = next(
+            (record for record in records if record.status == "Watched"),
+            records[0] if records else None,
+        )
+        self.selected_id = default_record.id if default_record is not None else None
+        self.library_selected_id = self.selected_id
+        self.status_overrides = {
+            record_id: status
+            for record_id, status in self.status_overrides.items()
+            if record_id in self.library_ids
+        }
+
+    def _apply_simkl_sync(
+        self,
+        settings: dict[str, Any],
+        stats: dict[str, Any],
+        records: tuple[TitleRecord, ...],
+    ) -> bool:
+        self.simkl_settings = settings
+        self.simkl_stats = stats
+        self.simkl_connected = True
+        self._replace_library(records)
+        self.completed = {
+            record.id for record in records if record.status == "Watched"
+        }
+        self.bookmarks = {
+            record.id for record in records if record.status == "Watchlist"
+        }
+        self.ratings = {
+            record.id: record.user_rating
+            for record in records
+            if record.user_rating is not None
+        }
+        self.title_watched_at = {
+            record.id: record.date
+            for record in records
+            if record.status == "Watched"
+            and parse_watched_date(record.date) is not None
+        }
+        self.episode_watched_at = {}
+        self.episode_status_overrides = {}
+        self.favorites.intersection_update(self.library_ids)
+        self._save_user_state()
+        self._tmdb_details_loading.clear()
+        self._tmdb_details_loaded.clear()
+        self._update_profile_identity()
+        self._update_sidebar_counts()
+        self._update_genre_model()
+        self._refresh_results()
+        self._refresh_profile()
+        self.simkl_button.set_sensitive(True)
+        self._toast(f"Synced {len(records)} titles from Simkl")
+        return GLib.SOURCE_REMOVE
+
+    def _update_profile_identity(self) -> None:
+        user = self.simkl_settings.get("user", {})
+        account = self.simkl_settings.get("account", {})
+        name = str(user.get("name") or getuser()) if isinstance(user, dict) else getuser()
+        account_type = (
+            str(account.get("type") or "Account").upper()
+            if isinstance(account, dict)
+            else "Account"
+        )
+        self.profile_name_label.set_label(name)
+        self.profile_avatar.set_text(name)
+        cached_avatar = simkl_client.cached_avatar()
+        if cached_avatar:
+            try:
+                self.profile_avatar.set_custom_image(
+                    Gdk.Texture.new_from_filename(cached_avatar)
+                )
+            except GLib.Error:
+                pass
+        self.profile_subtitle_label.set_label(
+            f"Connected to Simkl · {account_type}"
+            if self.simkl_connected
+            else "Local profile · Connect Simkl to sync your library"
+        )
+        self.simkl_button.set_label(
+            "Sync Simkl" if self.simkl_connected else "Connect Simkl"
+        )
+        self.simkl_button.set_tooltip_text(
+            "Refresh data from Simkl"
+            if self.simkl_connected
+            else "Sign in to Simkl"
+        )
+        self.simkl_button.remove_css_class("suggested-action")
+        if not self.simkl_connected:
+            self.simkl_button.add_css_class("suggested-action")
+        self.simkl_disconnect_button.set_visible(self.simkl_connected)
+        self.simkl_button.set_sensitive(True)
+
+    def _on_simkl_failed(self, message: str, code: int | None) -> bool:
+        print(f"CineShelf Simkl: {message}", file=sys.stderr)
+        self._simkl_poll_cancelled = True
+        if code == 401:
+            try:
+                simkl_client.clear_token()
+            except simkl_client.SimklError:
+                pass
+            self.simkl_token = None
+            self.simkl_connected = False
+        if getattr(self, "simkl_pin_dialog", None) is not None:
+            self.simkl_pin_dialog.close()
+        self._update_profile_identity()
+        self._toast(message)
+        return GLib.SOURCE_REMOVE
+
+    def _on_simkl_disconnect_clicked(self, _button: Gtk.Button) -> None:
+        dialog = Adw.AlertDialog(
+            heading="Disconnect Simkl?",
+            body=(
+                "The local access token will be removed. Your Simkl account "
+                "and cloud library will not be changed."
+            ),
+        )
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("disconnect", "Disconnect")
+        dialog.set_close_response("cancel")
+        dialog.set_response_appearance(
+            "disconnect",
+            Adw.ResponseAppearance.DESTRUCTIVE,
+        )
+        dialog.connect("response", self._on_simkl_disconnect_response)
+        dialog.present(self.window)
+
+    def _on_simkl_disconnect_response(
+        self,
+        _dialog: Adw.AlertDialog,
+        response: str,
+    ) -> None:
+        if response != "disconnect":
+            return
+        try:
+            simkl_client.clear_token()
+        except simkl_client.SimklError as error:
+            self._toast(str(error))
+            return
+        try:
+            simkl_client.clear_account_cache()
+        except simkl_client.SimklError as error:
+            print(f"CineShelf Simkl cache: {error}", file=sys.stderr)
+        self.simkl_token = None
+        self.simkl_connected = False
+        self.simkl_settings = {}
+        self.simkl_stats = {}
+        records, _explore, _totals = load_catalog()
+        self._replace_library(records)
+        self.completed = {
+            record.id for record in records if record.status == "Watched"
+        }
+        self.bookmarks = {
+            record.id for record in records if record.status == "Watchlist"
+        }
+        self.ratings = {
+            record.id: record.user_rating
+            for record in records
+            if record.user_rating is not None
+        }
+        self.favorites.intersection_update(self.library_ids)
+        self.status_overrides = {}
+        self.episode_status_overrides = {}
+        self.episode_watched_at = {}
+        self.title_watched_at = {
+            record.id: record.date
+            for record in records
+            if record.status == "Watched"
+            and parse_watched_date(record.date) is not None
+        }
+        self._save_user_state()
+        self._update_profile_identity()
+        self._update_sidebar_counts()
+        self._update_genre_model()
+        self._refresh_results()
+        self._refresh_profile()
+        self._toast("Simkl disconnected")
 
     def _build_detail_sections(self) -> None:
         self.image_mode = "backdrops"
@@ -2747,6 +3498,10 @@ class CineShelfWindow:
         self._tmdb_details_loading.discard(updated.id)
         self._tmdb_details_loaded.add(updated.id)
         self.records_by_id[updated.id] = updated
+        self.records = tuple(
+            updated if record.id == updated.id else record
+            for record in self.records
+        )
         self.explore_records = tuple(
             updated if record.id == updated.id else record
             for record in self.explore_records
@@ -2809,23 +3564,17 @@ class CineShelfWindow:
         return self.status_overrides.get(record.id, record.status)
 
     def _status_total(self, media_type: str, status: str) -> int:
-        total = self.totals[media_type][status]
+        total = sum(
+            record.media_type == media_type
+            and self._effective_status(record) == status
+            for record in self.records
+        )
         total += sum(
             record.id in self.bookmarks
             and record.media_type == media_type
             and self._effective_status(record) == status
             for record in self.explore_records
         )
-        for record_id, override in self.status_overrides.items():
-            if record_id not in self.library_ids:
-                continue
-            record = self.records_by_id[record_id]
-            if record.media_type != media_type or override == record.status:
-                continue
-            if record.status == status:
-                total -= 1
-            if override == status:
-                total += 1
         return total
 
     def _explore_total(self, media_type: str) -> int:
