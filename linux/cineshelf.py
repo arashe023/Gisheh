@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import random
@@ -16,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from getpass import getuser
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +42,19 @@ RESOURCE_DIR = Path(__file__).resolve().parent
 UI_FILE = RESOURCE_DIR / "cineshelf.ui"
 CSS_FILE = RESOURCE_DIR / "cineshelf.css"
 DATA_FILE = RESOURCE_DIR / "library.json"
+_APP_LOGGER: logging.Logger | None = None
+
+
+class PrivateRotatingFileHandler(RotatingFileHandler):
+    """Rotating log whose active file always remains private to the user."""
+
+    def _open(self) -> Any:
+        stream = super()._open()
+        try:
+            os.chmod(self.baseFilename, 0o600)
+        except OSError:
+            pass
+        return stream
 
 MEDIA_TYPES = ("Movies", "Shows", "Anime")
 STATUSES = ("Watchlist", "Watched", "Calendar", "Dropped")
@@ -107,6 +122,67 @@ TMDB_GENRES = {
     10767: "Talk",
     10768: "War & Politics",
 }
+
+
+def application_log_file() -> Path:
+    configured = os.environ.get("XDG_STATE_HOME")
+    base = (
+        Path(configured).expanduser()
+        if configured
+        else Path.home() / ".local" / "state"
+    )
+    return base / APP_ID / "cineshelf.log"
+
+
+def application_logger() -> logging.Logger:
+    global _APP_LOGGER
+    if _APP_LOGGER is not None:
+        return _APP_LOGGER
+
+    logger = logging.getLogger(APP_ID)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    formatter = logging.Formatter(
+        "%(asctime)s  %(levelname)s  %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    stream = logging.StreamHandler(sys.stderr)
+    stream.setFormatter(formatter)
+    logger.addHandler(stream)
+    try:
+        destination = application_log_file()
+        destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        os.chmod(destination.parent, 0o700)
+        file_handler = PrivateRotatingFileHandler(
+            destination,
+            maxBytes=1_000_000,
+            backupCount=2,
+            encoding="utf-8",
+        )
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+    except OSError as error:
+        logger.warning("File logging is unavailable: %s", error)
+    _APP_LOGGER = logger
+    return logger
+
+
+def read_application_log(max_bytes: int = 250_000) -> str:
+    path = application_log_file()
+    try:
+        with path.open("rb") as source:
+            source.seek(0, os.SEEK_END)
+            size = source.tell()
+            source.seek(max(0, size - max_bytes))
+            content = source.read()
+    except FileNotFoundError:
+        return "No log entries yet."
+    except OSError as error:
+        return f"Could not read the application log: {error}"
+    text = content.decode("utf-8", errors="replace")
+    if size > max_bytes:
+        text = text.split("\n", 1)[-1]
+    return text or "No log entries yet."
 
 
 def user_state_file() -> Path:
@@ -1010,8 +1086,12 @@ class CineShelfWindow:
         self.tmdb_token = tmdb_client.read_token()
         self._tmdb_details_loading: set[str] = set()
         self._tmdb_details_loaded: set[str] = set()
+        self._log_dialog: Adw.AlertDialog | None = None
+        self._log_text_view: Gtk.TextView | None = None
+        self._simkl_sync_started_at = 0.0
         self.state_file = user_state_file()
         self._load_user_state()
+        application_logger().info("CineShelf %s started", APP_VERSION)
 
         self._updating = False
         self._updating_details = False
@@ -1331,6 +1411,7 @@ class CineShelfWindow:
         self.explore_period_dropdown.set_selected(0)
 
         menu = Gio.Menu()
+        menu.append("Application Log", "app.logs")
         menu.append("About CineShelf", "app.about")
         menu.append("Quit", "app.quit")
         self.main_menu_button.set_menu_model(menu)
@@ -2133,8 +2214,11 @@ class CineShelfWindow:
 
     def _on_simkl_button_clicked(self, _button: Gtk.Button) -> None:
         if self.simkl_connected and self.simkl_client_id and self.simkl_token:
+            self._app_log("Manual Simkl refresh requested.")
             self._start_simkl_sync()
             return
+        self._simkl_sync_started_at = 0.0
+        self._app_log("Simkl connection flow opened.")
         dialog = Adw.AlertDialog(
             heading="Connect Simkl",
             body=(
@@ -2182,10 +2266,15 @@ class CineShelfWindow:
         try:
             simkl_client.store_client_id(client_id)
         except simkl_client.SimklError as error:
-            print(f"CineShelf Simkl Client ID: {error}", file=sys.stderr)
+            self._app_log(
+                "Could not save the Simkl Client ID: %s",
+                error,
+                level=logging.ERROR,
+            )
             self._toast("Could not save the Simkl Client ID")
             return
         self.simkl_client_id = client_id
+        self._app_log("Simkl Client ID saved; requesting a PIN.")
         self.simkl_button.set_sensitive(False)
         self.simkl_button.set_label("Requesting PIN…")
         threading.Thread(
@@ -2196,11 +2285,16 @@ class CineShelfWindow:
         ).start()
 
     def _simkl_pin_worker(self, client_id: str) -> None:
+        started_at = time.monotonic()
         try:
             payload = simkl_client.request_pin(client_id)
         except simkl_client.SimklError as error:
             GLib.idle_add(self._on_simkl_failed, str(error), error.code)
             return
+        self._app_log(
+            "Simkl PIN received in %.1fs.",
+            time.monotonic() - started_at,
+        )
         GLib.idle_add(self._present_simkl_pin, client_id, payload)
 
     def _present_simkl_pin(
@@ -2239,11 +2333,19 @@ class CineShelfWindow:
         dialog.connect("response", self._on_simkl_pin_dialog_response)
         self.simkl_pin_dialog = dialog
         self._simkl_poll_cancelled = False
+        self._app_log(
+            "Waiting for Simkl authorization; the PIN expires in %d minutes.",
+            max(1, expires_in // 60),
+        )
         dialog.present(self.window)
         try:
             Gio.AppInfo.launch_default_for_uri(verification_uri, None)
         except GLib.Error as error:
-            print(f"CineShelf Simkl browser: {error}", file=sys.stderr)
+            self._app_log(
+                "Could not open the Simkl authorization page: %s",
+                error,
+                level=logging.WARNING,
+            )
         threading.Thread(
             target=self._simkl_poll_worker,
             args=(client_id, user_code, interval, expires_in),
@@ -2257,9 +2359,12 @@ class CineShelfWindow:
         _dialog: Adw.AlertDialog,
         _response: str,
     ) -> None:
+        was_waiting = not self._simkl_poll_cancelled
         self._simkl_poll_cancelled = True
         self.simkl_button.set_sensitive(True)
         self.simkl_button.set_label("Connect Simkl")
+        if was_waiting:
+            self._app_log("Simkl PIN authorization cancelled by the user.")
 
     def _simkl_poll_worker(
         self,
@@ -2304,6 +2409,7 @@ class CineShelfWindow:
         except simkl_client.SimklError as error:
             return self._on_simkl_failed(str(error), error.code)
         self.simkl_token = access_token
+        self._app_log("Simkl authorization approved; access token stored securely.")
         if getattr(self, "simkl_pin_dialog", None) is not None:
             self.simkl_pin_dialog.close()
         self._toast("Simkl connected — syncing your library…")
@@ -2313,6 +2419,8 @@ class CineShelfWindow:
     def _start_simkl_sync(self) -> None:
         if not self.simkl_client_id or not self.simkl_token:
             return
+        self._simkl_sync_started_at = time.monotonic()
+        self._app_log("Simkl sync started.")
         self.simkl_button.set_sensitive(False)
         self.simkl_button.set_label("Syncing…")
         threading.Thread(
@@ -2346,7 +2454,13 @@ class CineShelfWindow:
             last_sync = str(cached_activities.get("all") or "")
             has_incremental_state = cached_library is not None and bool(last_sync)
             if has_incremental_state:
+                phase_started = time.monotonic()
+                self._app_log("Checking Simkl activity timestamps.")
                 activities = simkl_client.fetch_activities(client_id, token)
+                self._app_log(
+                    "Activity check finished in %.1fs.",
+                    time.monotonic() - phase_started,
+                )
                 previous_settings_activity = cached_activities.get("settings", {})
                 current_settings_activity = activities.get("settings", {})
                 previous_settings_timestamp = (
@@ -2368,8 +2482,13 @@ class CineShelfWindow:
                     if settings_changed
                     else cached_settings
                 )
+                self._app_log(
+                    "Account settings %s.",
+                    "refreshed" if settings_changed else "loaded from cache",
+                )
             else:
                 activities = {}
+                self._app_log("Initial sync: fetching Simkl account settings.")
                 settings = simkl_client.fetch_settings(client_id, token)
             account = settings.get("account", {})
             try:
@@ -2384,13 +2503,30 @@ class CineShelfWindow:
                 raise simkl_client.SimklError(
                     "Simkl did not return a valid account ID."
                 )
+            phase_started = time.monotonic()
+            self._app_log("Fetching Simkl watch statistics.")
             stats = simkl_client.fetch_stats(client_id, token, user_id)
+            self._app_log(
+                "Watch statistics received in %.1fs.",
+                time.monotonic() - phase_started,
+            )
             if not has_incremental_state:
+                phase_started = time.monotonic()
+                self._app_log(
+                    "Initial sync: downloading movies, shows, and anime sequentially."
+                )
                 library = simkl_client.fetch_library(client_id, token)
                 activities = simkl_client.fetch_activities(client_id, token)
+                self._app_log(
+                    "Initial library download finished in %.1fs.",
+                    time.monotonic() - phase_started,
+                )
             elif activities.get("all") == last_sync:
                 library = cached_library
+                self._app_log("No Simkl library changes; using the local snapshot.")
             else:
+                phase_started = time.monotonic()
+                self._app_log("Changes found; downloading the incremental library delta.")
                 delta = simkl_client.fetch_library_delta(
                     client_id,
                     token,
@@ -2398,6 +2534,9 @@ class CineShelfWindow:
                 )
                 valid_ids = None
                 if simkl_client.removals_changed(cached_activities, activities):
+                    self._app_log(
+                        "Removed items detected; reconciling the compact ID list."
+                    )
                     id_snapshot = simkl_client.fetch_library_ids(client_id, token)
                     valid_ids = simkl_client.library_ids(id_snapshot)
                 library = simkl_client.merge_library(
@@ -2405,6 +2544,20 @@ class CineShelfWindow:
                     delta,
                     valid_ids,
                 )
+                self._app_log(
+                    "Incremental library merge finished in %.1fs.",
+                    time.monotonic() - phase_started,
+                )
+            group_counts = {
+                group: len(library.get(group, ()))
+                for group in ("movies", "shows", "anime")
+            }
+            self._app_log(
+                "Library contains %d movies, %d shows, and %d anime titles.",
+                group_counts["movies"],
+                group_counts["shows"],
+                group_counts["anime"],
+            )
             poster_paths = []
             for group, object_key in (
                 ("movies", "movie"),
@@ -2417,15 +2570,39 @@ class CineShelfWindow:
                     media = entry.get(object_key)
                     if isinstance(media, dict) and media.get("poster"):
                         poster_paths.append(str(media["poster"]))
+            poster_paths = list(dict.fromkeys(poster_paths))[:80]
+            phase_started = time.monotonic()
+            self._app_log("Caching up to %d Simkl posters.", len(poster_paths))
             with ThreadPoolExecutor(max_workers=8) as executor:
-                list(executor.map(simkl_client.cache_poster, poster_paths[:80]))
+                cached_posters = list(
+                    executor.map(simkl_client.cache_poster, poster_paths)
+                )
+            self._app_log(
+                "Poster cache finished: %d/%d available in %.1fs.",
+                sum(path is not None for path in cached_posters),
+                len(poster_paths),
+                time.monotonic() - phase_started,
+            )
             user = settings.get("user", {})
             if isinstance(user, dict):
                 simkl_client.cache_avatar(str(user.get("avatar") or "") or None)
             simkl_client.store_snapshot(settings, stats, library, activities)
+            self._app_log("Secure local Simkl snapshot updated.")
             records = title_records_from_simkl(library)
         except simkl_client.SimklError as error:
             GLib.idle_add(self._on_simkl_failed, str(error), error.code)
+            return
+        except Exception as error:
+            self._app_log(
+                "Unexpected Simkl sync failure: %s",
+                type(error).__name__,
+                level=logging.ERROR,
+            )
+            GLib.idle_add(
+                self._on_simkl_failed,
+                "Unexpected Simkl sync error. Open Application Log for details.",
+                None,
+            )
             return
         GLib.idle_add(self._apply_simkl_sync, settings, stats, records)
 
@@ -2486,6 +2663,17 @@ class CineShelfWindow:
         self._refresh_results()
         self._refresh_profile()
         self.simkl_button.set_sensitive(True)
+        elapsed = (
+            time.monotonic() - self._simkl_sync_started_at
+            if self._simkl_sync_started_at
+            else 0.0
+        )
+        self._app_log(
+            "Simkl sync completed: %d titles in %.1fs.",
+            len(records),
+            elapsed,
+        )
+        self._simkl_sync_started_at = 0.0
         self._toast(f"Synced {len(records)} titles from Simkl")
         return GLib.SOURCE_REMOVE
 
@@ -2528,7 +2716,18 @@ class CineShelfWindow:
         self.simkl_button.set_sensitive(True)
 
     def _on_simkl_failed(self, message: str, code: int | None) -> bool:
-        print(f"CineShelf Simkl: {message}", file=sys.stderr)
+        elapsed = (
+            time.monotonic() - self._simkl_sync_started_at
+            if self._simkl_sync_started_at
+            else 0.0
+        )
+        self._app_log(
+            "Simkl operation failed after %.1fs: %s",
+            elapsed,
+            message,
+            level=logging.ERROR,
+        )
+        self._simkl_sync_started_at = 0.0
         self._simkl_poll_cancelled = True
         if code == 401:
             try:
@@ -2576,7 +2775,11 @@ class CineShelfWindow:
         try:
             simkl_client.clear_account_cache()
         except simkl_client.SimklError as error:
-            print(f"CineShelf Simkl cache: {error}", file=sys.stderr)
+            self._app_log(
+                "Could not clear the Simkl cache: %s",
+                error,
+                level=logging.WARNING,
+            )
         self.simkl_token = None
         self.simkl_connected = False
         self.simkl_settings = {}
@@ -2610,6 +2813,7 @@ class CineShelfWindow:
         self._update_genre_model()
         self._refresh_results()
         self._refresh_profile()
+        self._app_log("Simkl disconnected; local credentials and account cache removed.")
         self._toast("Simkl disconnected")
 
     def _build_detail_sections(self) -> None:
@@ -5391,6 +5595,84 @@ class CineShelfWindow:
         toast.set_timeout(2)
         self.toast_overlay.add_toast(toast)
 
+    def _app_log(
+        self,
+        message: str,
+        *args: object,
+        level: int = logging.INFO,
+    ) -> None:
+        application_logger().log(level, message, *args)
+        if self._log_text_view is not None:
+            GLib.idle_add(self._refresh_log_view)
+
+    def _refresh_log_view(self) -> bool:
+        if self._log_text_view is None:
+            return GLib.SOURCE_REMOVE
+        buffer = self._log_text_view.get_buffer()
+        buffer.set_text(read_application_log())
+        end = buffer.get_end_iter()
+        self._log_text_view.scroll_to_iter(end, 0.0, False, 0.0, 1.0)
+        return GLib.SOURCE_REMOVE
+
+    def show_application_log(self) -> None:
+        if self._log_dialog is not None:
+            self._log_dialog.present(self.window)
+            self._refresh_log_view()
+            return
+
+        dialog = Adw.AlertDialog(
+            heading="Application Log",
+            body=str(application_log_file()),
+        )
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        content.set_size_request(700, 360)
+        scroller = Gtk.ScrolledWindow()
+        scroller.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scroller.set_vexpand(True)
+        scroller.add_css_class("card")
+        text_view = Gtk.TextView()
+        text_view.set_editable(False)
+        text_view.set_cursor_visible(False)
+        text_view.set_monospace(True)
+        text_view.set_wrap_mode(Gtk.WrapMode.NONE)
+        text_view.set_left_margin(10)
+        text_view.set_right_margin(10)
+        text_view.set_top_margin(10)
+        text_view.set_bottom_margin(10)
+        scroller.set_child(text_view)
+        content.append(scroller)
+
+        actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        actions.set_halign(Gtk.Align.END)
+        refresh = Gtk.Button(label="Refresh")
+        refresh.connect("clicked", lambda *_args: self._refresh_log_view())
+        actions.append(refresh)
+        copy = Gtk.Button(label="Copy Log")
+        copy.connect("clicked", self._on_copy_log_clicked)
+        actions.append(copy)
+        content.append(actions)
+
+        dialog.set_extra_child(content)
+        dialog.add_response("close", "Close")
+        dialog.set_close_response("close")
+        dialog.connect("response", self._on_log_dialog_response)
+        self._log_dialog = dialog
+        self._log_text_view = text_view
+        self._refresh_log_view()
+        dialog.present(self.window)
+
+    def _on_copy_log_clicked(self, _button: Gtk.Button) -> None:
+        self.window.get_clipboard().set_text(read_application_log())
+        self._toast("Application log copied")
+
+    def _on_log_dialog_response(
+        self,
+        _dialog: Adw.AlertDialog,
+        _response: str,
+    ) -> None:
+        self._log_dialog = None
+        self._log_text_view = None
+
 
 class CineShelfApplication(Adw.Application):
     def __init__(self) -> None:
@@ -5413,6 +5695,10 @@ class CineShelfApplication(Adw.Application):
         about_action = Gio.SimpleAction.new("about", None)
         about_action.connect("activate", self._show_about_dialog)
         self.add_action(about_action)
+
+        logs_action = Gio.SimpleAction.new("logs", None)
+        logs_action.connect("activate", self._show_logs)
+        self.add_action(logs_action)
 
     def do_activate(self) -> None:
         if self.props.active_window is None:
@@ -5450,6 +5736,14 @@ class CineShelfApplication(Adw.Application):
             license_type=Gtk.License.MIT_X11,
         )
         dialog.present(window)
+
+    def _show_logs(
+        self,
+        _action: Gio.SimpleAction,
+        _parameter: GLib.Variant | None,
+    ) -> None:
+        if self.controller is not None:
+            self.controller.show_application_log()
 
 
 def main() -> int:
