@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -107,7 +108,7 @@ class SimklClientTests(unittest.TestCase):
             with self.assertRaisesRegex(simkl_client.SimklError, "Invalid client"):
                 simkl_client.request_pin("client-id")
 
-    def test_initial_library_fetches_renderable_metadata(self) -> None:
+    def test_initial_library_fetches_only_the_required_state_endpoint(self) -> None:
         calls: list[tuple[str, dict[str, object]]] = []
 
         def fake_request(path: str, **kwargs: object) -> dict[str, object]:
@@ -125,16 +126,21 @@ class SimklClientTests(unittest.TestCase):
             [path for path, _kwargs in calls],
             ["/sync/all-items"],
         )
-        self.assertEqual(calls[0][1]["params"], {"language": "en"})
+        self.assertNotIn("params", calls[0][1])
         self.assertEqual(library["anime"], [{"group": "anime"}])
 
-    def test_metadata_validation_rejects_id_only_snapshots(self) -> None:
-        id_only = {
-            "movies": [{"movie": {"ids": {"simkl": 1, "tmdb": 2}}}],
+    def test_state_validation_does_not_require_simkl_catalog_metadata(self) -> None:
+        state_only = {
+            "movies": [
+                {
+                    "status": "completed",
+                    "movie": {"ids": {"simkl": 1, "tmdb": 2}},
+                }
+            ],
             "shows": [],
             "anime": [],
         }
-        complete = {
+        missing_state = {
             "movies": [
                 {
                     "movie": {
@@ -147,10 +153,10 @@ class SimklClientTests(unittest.TestCase):
             "shows": [],
             "anime": [],
         }
-        self.assertFalse(simkl_client.library_has_metadata(id_only))
-        self.assertTrue(simkl_client.library_has_metadata(complete))
+        self.assertTrue(simkl_client.library_has_user_state(state_only))
+        self.assertFalse(simkl_client.library_has_user_state(missing_state))
         self.assertTrue(
-            simkl_client.library_has_metadata(
+            simkl_client.library_has_user_state(
                 {"movies": [], "shows": [], "anime": []}
             )
         )
@@ -196,6 +202,62 @@ class SimklClientTests(unittest.TestCase):
         self.assertFalse(simkl_client.removals_changed(previous, unchanged))
         self.assertTrue(simkl_client.removals_changed(previous, changed))
 
+    def test_rating_write_uses_simkl_sync_api(self) -> None:
+        response = BytesIO(b'{"added":{"movies":1},"not_found":{"movies":[]}}')
+        with patch.object(simkl_client, "urlopen", return_value=response) as opener:
+            simkl_client.set_rating(
+                "client-id",
+                "access-token",
+                "movies",
+                {"simkl": 10, "tmdb": 20},
+                9,
+            )
+
+        request = opener.call_args.args[0]
+        self.assertEqual(request.full_url.split("?", 1)[0], "https://api.simkl.com/sync/ratings")
+        self.assertEqual(request.get_header("Authorization"), "Bearer access-token")
+        self.assertEqual(request.get_header("Simkl-api-key"), "client-id")
+        self.assertEqual(
+            json.loads(request.data),
+            {
+                "movies": [
+                    {"rating": 9, "ids": {"simkl": 10, "tmdb": 20}}
+                ]
+            },
+        )
+
+    def test_watchlist_and_history_writes_use_expected_endpoints(self) -> None:
+        response = lambda: BytesIO(
+            b'{"added":{"shows":1},"not_found":{"shows":[]}}'
+        )
+        with patch.object(
+            simkl_client,
+            "urlopen",
+            side_effect=[response(), response()],
+        ) as opener:
+            simkl_client.set_list_status(
+                "client-id",
+                "token",
+                "shows",
+                {"simkl": 11},
+                "plantowatch",
+            )
+            simkl_client.set_watched(
+                "client-id",
+                "token",
+                "shows",
+                {"simkl": 11},
+                True,
+            )
+
+        urls = [call.args[0].full_url.split("?", 1)[0] for call in opener.call_args_list]
+        self.assertEqual(
+            urls,
+            [
+                "https://api.simkl.com/sync/add-to-list",
+                "https://api.simkl.com/sync/history",
+            ],
+        )
 
 if __name__ == "__main__":
     unittest.main()

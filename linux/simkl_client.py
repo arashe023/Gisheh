@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dependency-free Simkl authentication, sync, and image cache client."""
+"""Simkl authentication and user-state sync client."""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+
+import image_http
 
 
 APP_ID = "io.github.cineshelf.CineShelf"
@@ -162,6 +164,8 @@ def _request_json(
         with urlopen(request, timeout=timeout) as response:
             payload = json.load(response)
     except HTTPError as error:
+        code = error.code
+        error.close()
         messages = {
             401: "Simkl authorization was revoked. Connect the account again.",
             403: "This Simkl profile is private.",
@@ -169,8 +173,8 @@ def _request_json(
             429: "Simkl rate limit reached. Try again later.",
         }
         raise SimklError(
-            messages.get(error.code, f"Simkl request failed with HTTP {error.code}."),
-            code=error.code,
+            messages.get(code, f"Simkl request failed with HTTP {code}."),
+            code=code,
         ) from None
     except (URLError, TimeoutError, OSError, ValueError) as error:
         reason = getattr(error, "reason", error)
@@ -178,6 +182,155 @@ def _request_json(
     if not isinstance(payload, dict):
         raise SimklError("Simkl returned an unexpected response.")
     return payload
+
+
+def _write_sync_json(
+    path: str,
+    *,
+    client_id: str,
+    token: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    query = urlencode(
+        {
+            "client_id": client_id,
+            "app-name": APP_NAME,
+            "app-version": APP_VERSION,
+        }
+    )
+    request = Request(
+        f"{API_ROOT}{path}?{query}",
+        data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
+        headers={
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "simkl-api-key": client_id,
+            "User-Agent": USER_AGENT,
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=20) as response:
+            result = json.load(response)
+    except HTTPError as error:
+        code = error.code
+        error.close()
+        messages = {
+            400: "Simkl rejected the tracking update.",
+            401: "Simkl authorization was revoked. Connect the account again.",
+            412: "The Simkl Client ID is not valid.",
+            429: "Simkl rate limit reached. Try again later.",
+        }
+        raise SimklError(
+            messages.get(code, f"Simkl update failed with HTTP {code}."),
+            code=code,
+        ) from None
+    except (URLError, TimeoutError, OSError, ValueError) as error:
+        reason = getattr(error, "reason", error)
+        raise SimklError(f"Could not update Simkl: {reason}") from None
+    if not isinstance(result, dict):
+        raise SimklError("Simkl returned an unexpected update response.")
+    not_found = result.get("not_found", {})
+    if isinstance(not_found, dict) and any(
+        isinstance(items, list) and items for items in not_found.values()
+    ):
+        raise SimklError("Simkl could not match this TMDB title.")
+    return result
+
+
+def set_rating(
+    client_id: str,
+    token: str,
+    group: str,
+    ids: dict[str, int | str],
+    rating: int,
+) -> dict[str, Any]:
+    if group not in LIBRARY_GROUPS or not 1 <= rating <= 10:
+        raise SimklError("The Simkl rating must be between 1 and 10.")
+    return _write_sync_json(
+        "/sync/ratings",
+        client_id=client_id,
+        token=token,
+        payload={group: [{"rating": rating, "ids": ids}]},
+    )
+
+
+def set_list_status(
+    client_id: str,
+    token: str,
+    group: str,
+    ids: dict[str, int | str],
+    status: str,
+) -> dict[str, Any]:
+    if group not in LIBRARY_GROUPS or status not in {
+        "watching",
+        "plantowatch",
+        "hold",
+        "dropped",
+        "completed",
+    }:
+        raise SimklError("The requested Simkl list status is not valid.")
+    return _write_sync_json(
+        "/sync/add-to-list",
+        client_id=client_id,
+        token=token,
+        payload={group: [{"to": status, "ids": ids}]},
+    )
+
+
+def remove_from_library(
+    client_id: str,
+    token: str,
+    group: str,
+    ids: dict[str, int | str],
+) -> dict[str, Any]:
+    if group not in LIBRARY_GROUPS:
+        raise SimklError("The requested Simkl media type is not valid.")
+    return _write_sync_json(
+        "/sync/history/remove",
+        client_id=client_id,
+        token=token,
+        payload={group: [{"ids": ids}]},
+    )
+
+
+def set_watched(
+    client_id: str,
+    token: str,
+    group: str,
+    ids: dict[str, int | str],
+    watched: bool,
+) -> dict[str, Any]:
+    if group not in LIBRARY_GROUPS:
+        raise SimklError("The requested Simkl media type is not valid.")
+    if watched:
+        return _write_sync_json(
+            "/sync/history",
+            client_id=client_id,
+            token=token,
+            payload={group: [{"status": "completed", "ids": ids}]},
+        )
+    remove_from_library(client_id, token, group, ids)
+    try:
+        return set_list_status(
+            client_id,
+            token,
+            group,
+            ids,
+            "plantowatch",
+        )
+    except SimklError:
+        try:
+            _write_sync_json(
+                "/sync/history",
+                client_id=client_id,
+                token=token,
+                payload={group: [{"status": "completed", "ids": ids}]},
+            )
+        except SimklError:
+            pass
+        raise
 
 
 def request_pin(client_id: str) -> dict[str, Any]:
@@ -223,7 +376,6 @@ def fetch_library(client_id: str, token: str) -> dict[str, Any]:
         "/sync/all-items",
         client_id=client_id,
         token=token,
-        params={"language": "en"},
         timeout=60,
     )
     return {
@@ -243,10 +395,7 @@ def fetch_library_delta(
         "/sync/all-items",
         client_id=client_id,
         token=token,
-        params={
-            "language": "en",
-            "date_from": date_from,
-        },
+        params={"date_from": date_from},
         timeout=60,
     )
 
@@ -311,8 +460,8 @@ def library_ids(payload: dict[str, Any]) -> dict[str, set[str]]:
     }
 
 
-def library_has_metadata(payload: dict[str, Any]) -> bool:
-    """Reject ID-only snapshots, which cannot render titles or artwork."""
+def library_has_user_state(payload: dict[str, Any]) -> bool:
+    """Accept snapshots containing only Simkl-owned state and identifiers."""
     for group, object_key in LIBRARY_GROUPS.items():
         items = payload.get(group)
         if not isinstance(items, list):
@@ -321,7 +470,10 @@ def library_has_metadata(payload: dict[str, Any]) -> bool:
             if not isinstance(entry, dict):
                 return False
             media = entry.get(object_key)
-            if not isinstance(media, dict) or not str(media.get("title") or "").strip():
+            ids = media.get("ids") if isinstance(media, dict) else None
+            if not isinstance(ids, dict) or ids.get("simkl") is None:
+                return False
+            if not str(entry.get("status") or "").strip():
                 return False
     return True
 
@@ -385,40 +537,12 @@ def store_snapshot(
     return destination
 
 
-def image_url(path: str | None, *, size: str = "_m") -> str | None:
-    if not path:
-        return None
-    return (
-        "https://wsrv.nl/?url=https://simkl.in/posters/"
-        f"{path}{size}.webp&q=90"
-    )
+def close_image_http_client() -> None:
+    image_http.close_client()
 
 
-def cached_poster(path: str | None, *, size: str = "_m") -> str | None:
-    if not path:
-        return None
-    destination = cache_dir() / "images" / f"{path.replace('/', '-')}{size}.webp"
-    return str(destination) if destination.is_file() else None
-
-
-def cache_poster(path: str | None, *, size: str = "_m") -> str | None:
-    url = image_url(path, size=size)
-    if not url or not path:
-        return None
-    destination = cache_dir() / "images" / f"{path.replace('/', '-')}{size}.webp"
-    if destination.is_file() and destination.stat().st_size > 0:
-        return str(destination)
-    try:
-        destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        request = Request(url, headers={"User-Agent": USER_AGENT})
-        with urlopen(request, timeout=20) as response:
-            content = response.read()
-        if not content:
-            return None
-        destination.write_bytes(content)
-    except (HTTPError, URLError, TimeoutError, OSError):
-        return None
-    return str(destination)
+def _download_image(url: str, destination: Path) -> bool:
+    return image_http.download(url, destination)
 
 
 def cache_avatar(url: str | None) -> str | None:
@@ -429,15 +553,9 @@ def cache_avatar(url: str | None) -> str | None:
         return str(destination)
     try:
         destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        request = Request(url, headers={"User-Agent": USER_AGENT})
-        with urlopen(request, timeout=20) as response:
-            content = response.read()
-        if not content:
-            return None
-        destination.write_bytes(content)
-    except (HTTPError, URLError, TimeoutError, OSError):
+    except OSError:
         return None
-    return str(destination)
+    return str(destination) if _download_image(url, destination) else None
 
 
 def cached_avatar() -> str | None:

@@ -77,6 +77,75 @@ class TmdbClientTests(unittest.TestCase):
         self.assertEqual(len(result["Shows"]), 1)
         self.assertEqual(len(result["Anime"]), 1)
 
+    def test_summary_is_fetched_from_tmdb_and_cached(self) -> None:
+        payload = {"id": 42, "title": "TMDB title", "poster_path": "/p.jpg"}
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            with (
+                patch.dict(
+                    os.environ,
+                    {"XDG_CACHE_HOME": temporary_directory},
+                    clear=False,
+                ),
+                patch.object(
+                    tmdb_client,
+                    "request_json",
+                    return_value=payload,
+                ) as requester,
+            ):
+                result = tmdb_client.fetch_summary("token", "movie", 42)
+                cached = tmdb_client.load_summary("movie", 42)
+
+        self.assertEqual(result, payload)
+        self.assertEqual(cached, payload)
+        requester.assert_called_once_with(
+            "/movie/42",
+            token="token",
+            params={"language": "en-US"},
+        )
+
+    def test_cached_image_only_returns_complete_existing_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            with patch.dict(
+                os.environ,
+                {"XDG_CACHE_HOME": temporary_directory},
+                clear=False,
+            ):
+                self.assertIsNone(tmdb_client.cached_image("/poster.jpg", size="w500"))
+                destination = tmdb_client.cache_dir() / "w500-poster.jpg"
+                destination.parent.mkdir(parents=True)
+                destination.write_bytes(b"image")
+                self.assertEqual(
+                    tmdb_client.cached_image("/poster.jpg", size="w500"),
+                    str(destination),
+                )
+
+    def test_cache_image_uses_shared_pooled_transport(self) -> None:
+        def download(url: str, destination: Path, **kwargs: object) -> bool:
+            self.assertEqual(
+                url,
+                "https://image.tmdb.org/t/p/w500/poster.jpg",
+            )
+            self.assertEqual(kwargs["max_bytes"], 8 * 1024 * 1024)
+            destination.write_bytes(b"image")
+            return True
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            with (
+                patch.dict(
+                    os.environ,
+                    {"XDG_CACHE_HOME": temporary_directory},
+                    clear=False,
+                ),
+                patch.object(
+                    tmdb_client.image_http,
+                    "download",
+                    side_effect=download,
+                ) as downloader,
+            ):
+                cached = tmdb_client.cache_image("/poster.jpg", size="w500")
+        self.assertIsNotNone(cached)
+        downloader.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -93,19 +93,24 @@ class SimklMappingTests(unittest.TestCase):
             ],
         }
 
-        with patch.object(cineshelf.simkl_client, "cached_poster", return_value=None):
-            records = cineshelf.title_records_from_simkl(payload)
+        records = cineshelf.title_records_from_simkl(payload)
 
-        by_title = {record.title: record for record in records}
-        self.assertEqual(set(by_title), {"Example Movie", "Example Show", "Example Anime"})
-        self.assertEqual(by_title["Example Movie"].media_type, "Movies")
-        self.assertEqual(by_title["Example Movie"].status, "Watched")
-        self.assertEqual(by_title["Example Movie"].user_rating, 9)
-        self.assertEqual(by_title["Example Movie"].tmdb_id, 201)
-        self.assertEqual(by_title["Example Show"].media_type, "Shows")
-        self.assertEqual(by_title["Example Show"].seasons[0].watched, 4)
-        self.assertEqual(by_title["Example Anime"].media_type, "Anime")
-        self.assertEqual(by_title["Example Anime"].availability, "Plan To Watch")
+        by_id = {record.id: record for record in records}
+        movie = by_id["simkl-movies-101"]
+        show = by_id["simkl-shows-102"]
+        anime = by_id["simkl-anime-103"]
+        self.assertTrue(all(record.title == "Loading from TMDB…" for record in records))
+        self.assertTrue(all(record.year == 0 for record in records))
+        self.assertEqual(movie.media_type, "Movies")
+        self.assertEqual(movie.status, "Watched")
+        self.assertEqual(movie.user_rating, 9)
+        self.assertEqual(movie.rating, 0.0)
+        self.assertIsNone(movie.poster_file)
+        self.assertEqual(movie.tmdb_id, 201)
+        self.assertEqual(show.media_type, "Shows")
+        self.assertEqual(show.seasons[0].watched, 4)
+        self.assertEqual(anime.media_type, "Anime")
+        self.assertEqual(anime.availability, "Plan To Watch")
 
     def test_invalid_simkl_id_is_skipped(self) -> None:
         payload = {
@@ -121,23 +126,48 @@ class SimklMappingTests(unittest.TestCase):
         }
         self.assertEqual(cineshelf.title_records_from_simkl(payload), ())
 
-    def test_all_missing_posters_are_scheduled_without_an_eighty_item_cap(self) -> None:
-        payload = {
-            "movies": [
-                {
-                    "movie": {
-                        "title": f"Movie {index}",
-                        "poster": f"poster/{index}",
-                        "ids": {"simkl": index},
+    def test_tmdb_enrichment_preserves_simkl_user_state(self) -> None:
+        record = cineshelf.title_records_from_simkl(
+            {
+                "movies": [
+                    {
+                        "status": "completed",
+                        "user_rating": 9,
+                        "movie": {
+                            "title": "Simkl fallback",
+                            "ids": {"simkl": 10, "tmdb": 20},
+                        },
                     }
-                }
-                for index in range(1, 101)
-            ]
+                ]
+            }
+        )[0]
+        summary = {
+            "id": 20,
+            "title": "TMDB title",
+            "release_date": "2025-01-02",
+            "runtime": 124,
+            "vote_average": 7.8,
+            "genres": [{"name": "Drama"}],
+            "overview": "TMDB overview",
+            "poster_path": "/poster.jpg",
         }
-        with patch.object(cineshelf.simkl_client, "cached_poster", return_value=None):
-            jobs = cineshelf.simkl_poster_jobs(payload)
-        self.assertEqual(len(jobs), 100)
-        self.assertEqual(jobs[-1], ("simkl-movies-100", "poster/100"))
+        with patch.object(
+            cineshelf.tmdb_client,
+            "cached_image",
+            return_value="/cache/poster.jpg",
+        ):
+            enriched = cineshelf.enrich_record_from_tmdb(record, summary)
+
+        self.assertEqual(enriched.title, "TMDB title")
+        self.assertEqual(enriched.rating, 7.8)
+        self.assertEqual(enriched.genres, ("Drama",))
+        self.assertEqual(enriched.poster_file, "/cache/poster.jpg")
+        self.assertEqual(enriched.status, "Watched")
+        self.assertEqual(enriched.user_rating, 9)
+        self.assertEqual(
+            enriched.external_ratings,
+            (("TMDB", "7.8"), ("Your rating", "9")),
+        )
 
     def test_stats_refresh_is_skipped_when_activity_is_unchanged(self) -> None:
         self.assertFalse(
@@ -158,6 +188,241 @@ class SimklMappingTests(unittest.TestCase):
                 last_sync="2026-08-31T10:00:00Z",
             )
         )
+
+    def test_watchlist_removal_executes_the_simkl_remove_request(self) -> None:
+        controller = object.__new__(cineshelf.CineShelfWindow)
+        controller.simkl_client_id = "client"
+        controller.simkl_token = "token"
+        record = cineshelf.title_records_from_simkl(
+            {
+                "movies": [
+                    {
+                        "status": "plantowatch",
+                        "movie": {
+                            "title": "Remove me",
+                            "ids": {"simkl": 10, "tmdb": 20},
+                        },
+                    }
+                ]
+            }
+        )[0]
+        captured: dict[str, object] = {}
+
+        def capture_mutation(_self, _key, operation, *_args) -> None:
+            captured["operation"] = operation
+
+        with (
+            patch.object(
+                cineshelf.CineShelfWindow,
+                "_run_simkl_mutation",
+                new=capture_mutation,
+            ),
+            patch.object(cineshelf.simkl_client, "remove_from_library") as remove,
+            patch.object(cineshelf.simkl_client, "set_list_status") as add,
+        ):
+            controller._write_simkl_list_change(
+                record,
+                adding=False,
+                on_success=lambda: None,
+            )
+            operation = captured["operation"]
+            assert callable(operation)
+            operation()
+
+        remove.assert_called_once_with(
+            "client",
+            "token",
+            "movies",
+            {"simkl": 10, "tmdb": 20},
+        )
+        add.assert_not_called()
+
+
+class TmdbProgressiveLoadingTests(unittest.TestCase):
+    def test_detail_backdrop_does_not_replace_portrait_card_artwork(self) -> None:
+        controller = object.__new__(cineshelf.CineShelfWindow)
+        published: list[cineshelf.TitleRecord] = []
+        record = cineshelf.title_record_from_tmdb(
+            {
+                "id": 42,
+                "title": "Stable cover",
+                "release_date": "2026-08-31",
+            },
+            "Movies",
+            1,
+            None,
+            None,
+        )
+        payload = {
+            "title": "Stable cover",
+            "poster_path": "/poster.jpg",
+            "backdrop_path": "/backdrop.jpg",
+            "credits": {"cast": [], "crew": []},
+            "images": {"backdrops": [], "posters": []},
+            "videos": {"results": []},
+            "recommendations": {"results": []},
+        }
+
+        def cached_image(path: str, *, size: str) -> str | None:
+            if path == "/poster.jpg" and size == "w500":
+                return "/cache/poster.jpg"
+            if path == "/backdrop.jpg" and size == "w780":
+                return "/cache/backdrop.jpg"
+            return None
+
+        def idle_add(callback, *args):
+            if callback.__name__ == "_apply_tmdb_details":
+                published.append(args[1])
+            return 1
+
+        with (
+            patch.object(cineshelf.tmdb_client, "fetch_details", return_value=payload),
+            patch.object(
+                cineshelf.tmdb_client,
+                "cached_image",
+                side_effect=cached_image,
+            ),
+            patch.object(cineshelf.GLib, "idle_add", side_effect=idle_add),
+        ):
+            controller._load_tmdb_details_worker(record, "token", 1)
+
+        self.assertEqual(len(published), 1)
+        self.assertEqual(published[0].poster_file, "/cache/poster.jpg")
+        self.assertEqual(published[0].backdrop_file, "/cache/backdrop.jpg")
+        self.assertEqual(published[0].artwork_file, "/cache/poster.jpg")
+
+    def test_simkl_library_record_is_enriched_from_tmdb_before_poster(self) -> None:
+        controller = object.__new__(cineshelf.CineShelfWindow)
+        events: list[str] = []
+        record = cineshelf.title_records_from_simkl(
+            {
+                "movies": [
+                    {
+                        "status": "completed",
+                        "movie": {
+                            "title": "Fallback",
+                            "ids": {"simkl": 10, "tmdb": 20},
+                        },
+                    }
+                ]
+            }
+        )[0]
+        summary = {
+            "id": 20,
+            "title": "TMDB title",
+            "poster_path": "/poster.jpg",
+        }
+
+        def idle_add(callback, *_args):
+            events.append(callback.__name__)
+            return 1
+
+        def cache_image(_path: str, *, size: str) -> str:
+            events.append(f"download:{size}")
+            return "/cache/poster.jpg"
+
+        with (
+            patch.object(cineshelf.tmdb_client, "load_summary", return_value=None),
+            patch.object(cineshelf.tmdb_client, "fetch_summary", return_value=summary),
+            patch.object(cineshelf.tmdb_client, "cache_image", side_effect=cache_image),
+            patch.object(cineshelf.GLib, "idle_add", side_effect=idle_add),
+        ):
+            loaded = controller._load_tmdb_library_record(record, "token", 1)
+
+        self.assertTrue(loaded)
+        self.assertEqual(events[0], "_apply_tmdb_library_summary")
+        self.assertEqual(events[1], "download:w500")
+        self.assertEqual(events[2], "_apply_tmdb_library_poster")
+
+    def test_explore_records_are_published_before_image_downloads(self) -> None:
+        controller = object.__new__(cineshelf.CineShelfWindow)
+        events: list[str] = []
+        payload = {
+            "Movies": [
+                {
+                    "id": 42,
+                    "title": "Progressive",
+                    "release_date": "2026-08-31",
+                    "poster_path": "/poster.jpg",
+                    "backdrop_path": "/backdrop.jpg",
+                }
+            ],
+            "Shows": [],
+            "Anime": [],
+        }
+
+        def idle_add(callback, *_args):
+            events.append(callback.__name__)
+            return 1
+
+        def cache_image(path: str, *, size: str) -> str:
+            events.append(f"download:{size}:{path}")
+            return f"/cache/{size}-{Path(path).name}"
+
+        with (
+            patch.object(cineshelf.tmdb_client, "fetch_explore", return_value=payload),
+            patch.object(cineshelf.tmdb_client, "cached_image", return_value=None),
+            patch.object(cineshelf.tmdb_client, "cache_image", side_effect=cache_image),
+            patch.object(cineshelf.GLib, "idle_add", side_effect=idle_add),
+        ):
+            controller._load_tmdb_explore_worker("token", 1, "Movies")
+
+        self.assertEqual(events[0], "_apply_tmdb_explore")
+        self.assertIn("download:w500:/poster.jpg", events[1:])
+        self.assertIn("download:w780:/backdrop.jpg", events[1:])
+
+    def test_detail_metadata_is_published_before_artwork_downloads(self) -> None:
+        controller = object.__new__(cineshelf.CineShelfWindow)
+        events: list[str] = []
+        record = cineshelf.title_record_from_tmdb(
+            {
+                "id": 42,
+                "title": "Progressive details",
+                "release_date": "2026-08-31",
+            },
+            "Movies",
+            1,
+            None,
+            None,
+        )
+        payload = {
+            "poster_path": "/poster.jpg",
+            "backdrop_path": "/backdrop.jpg",
+            "overview": "Metadata first.",
+            "credits": {
+                "cast": [
+                    {
+                        "name": "Actor",
+                        "character": "Lead",
+                        "profile_path": "/actor.jpg",
+                    }
+                ],
+                "crew": [],
+            },
+            "images": {
+                "backdrops": [{"file_path": "/gallery-backdrop.jpg"}],
+                "posters": [{"file_path": "/gallery-poster.jpg"}],
+            },
+        }
+
+        def idle_add(callback, *_args):
+            events.append(callback.__name__)
+            return 1
+
+        def cache_image(path: str, *, size: str) -> str:
+            events.append(f"download:{size}:{path}")
+            return f"/cache/{size}-{Path(path).name}"
+
+        with (
+            patch.object(cineshelf.tmdb_client, "fetch_details", return_value=payload),
+            patch.object(cineshelf.tmdb_client, "cached_image", return_value=None),
+            patch.object(cineshelf.tmdb_client, "cache_image", side_effect=cache_image),
+            patch.object(cineshelf.GLib, "idle_add", side_effect=idle_add),
+        ):
+            controller._load_tmdb_details_worker(record, "token", 1)
+
+        self.assertEqual(events[0], "_apply_tmdb_details")
+        self.assertTrue(any(event.startswith("download:") for event in events[1:]))
 
 
 if __name__ == "__main__":

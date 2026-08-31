@@ -24,22 +24,23 @@
 - تعامل‌های Favorite، Bookmark، Watched و امتیازدهی ۱ تا ۱۰
 - ورود به Simkl با PIN و همگام‌سازی کتابخانه، پروفایل و آمار واقعی کاربر
 - لاگ داخلی قابل مشاهده برای مراحل و مدت همگام‌سازی Simkl، بدون ثبت اطلاعات ورود
-- پوسترهای داخلی؛ بدون نیاز به تصویر یا سرویس خارجی
+- پوستر و backdrop زنده از TMDB با طرح داخلی به‌عنوان placeholder/fallback
 - رابط دسکتاپ، پشتیبانی از high contrast و هماهنگی مستقیم با تم و رنگ accent سیستم
 
 ## معماری بومی
 
 - `linux/cineshelf.ui`: ساختار پنجره در قالب XML با `AdwNavigationSplitView`، دو HeaderBar و صفحهٔ Explore مستقل
 - `linux/cineshelf.py`: بارگذاری رابط با `Gtk.Builder`، مدیریت داده‌ها و اتصال رویدادها
-- `linux/tmdb_client.py`: دریافت امن داده‌ها، جزئیات و تصاویر زنده از TMDB با fallback محلی
-- `linux/simkl_client.py`: ورود PIN، دریافت کتابخانه و آمار حساب Simkl و کش امن محلی
+- `linux/tmdb_client.py`: منبع متادیتا، امتیاز عمومی، جزئیات و تمام تصاویر فیلم و سریال
+- `linux/simkl_client.py`: منبع وضعیت کاربر، امتیاز شخصی، فهرست‌ها و آمار حساب
+- `linux/image_http.py`: connection pool و retry مشترک برای همهٔ تصاویر شبکه
 - `linux/cineshelf.css`: استایل‌های محدود و تکمیلی روی رنگ‌ها و حالت‌های استاندارد تم
 - `linux/library.json`: داده‌های محلی کتابخانه و کاتالوگ نمونهٔ Explore
 
 تم، رنگ accent و حالت high contrast مستقیماً توسط GTK و libadwaita اعمال می‌شوند و به پل یا لایهٔ نمایش جداگانه‌ای نیاز ندارند.
-وضعیت Favorite، Bookmark، Watched و امتیازها نیز در مسیر استاندارد state کاربر ذخیره می‌شود.
+Bookmark، Watched و امتیاز شخصی از طریق Sync API در Simkl ثبت می‌شوند و state محلی فقط کش رابط و fallback است. Favorite فعلاً محلی است، چون به فهرست سفارشی Simkl متصل نشده است.
 Explore در صورت تنظیم `TMDB_READ_TOKEN` از داده‌ها و تصاویر زندهٔ TMDB استفاده می‌کند و در نبود شبکه یا توکن به دادهٔ نمونهٔ داخلی برمی‌گردد. روش تنظیم امن توکن در `linux/README.md` آمده است.
-اتصال Simkl از صفحهٔ Profile انجام می‌شود و پس از تأیید PIN، کتابخانه و آمار حساب جای داده‌های نمونه را می‌گیرند.
+اتصال Simkl از صفحهٔ Profile انجام می‌شود. Simkl عضویت عنوان‌ها در فهرست‌ها، وضعیت تماشا و امتیاز شخصی را مشخص می‌کند؛ اطلاعات نمایشی و کاورها با شناسهٔ TMDB همان عنوان دریافت می‌شوند.
 
 اندازهٔ پیش‌فرض پنجره `1360×820` و حداقل اندازهٔ دسکتاپ `1120×640` است.
 
@@ -63,6 +64,7 @@ Explore در صورت تنظیم `TMDB_READ_TOKEN` از داده‌ها و تص�
 linux/
 ├── cineshelf.py
 ├── simkl_client.py
+├── image_http.py
 ├── cineshelf.ui
 ├── cineshelf.css
 ├── library.json

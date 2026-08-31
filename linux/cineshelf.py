@@ -511,6 +511,118 @@ def title_record_from_tmdb(
     )
 
 
+def enrich_record_from_tmdb(
+    record: TitleRecord,
+    payload: dict[str, Any],
+    *,
+    poster_file: str | None = None,
+    backdrop_file: str | None = None,
+) -> TitleRecord:
+    """Apply TMDB-owned catalog metadata while preserving Simkl user state."""
+    title = str(payload.get("title") or payload.get("name") or record.title)
+    release_date = str(
+        payload.get("release_date") or payload.get("first_air_date") or ""
+    )
+    year = int(release_date[:4]) if release_date[:4].isdigit() else record.year
+    genre_items = payload.get("genres", ())
+    genres = tuple(
+        str(item["name"])
+        for item in genre_items
+        if isinstance(item, dict) and item.get("name")
+    )
+    if not genres:
+        genres = tuple(
+            TMDB_GENRES[genre_id]
+            for genre_id in payload.get("genre_ids", ())
+            if genre_id in TMDB_GENRES
+        ) or record.genres
+
+    runtime_minutes = int(payload.get("runtime") or 0)
+    if not runtime_minutes:
+        episode_runtimes = payload.get("episode_run_time") or ()
+        runtime_minutes = int(episode_runtimes[0]) if episode_runtimes else 0
+    runtime = (
+        f"{runtime_minutes // 60}h {runtime_minutes % 60:02d}m"
+        if runtime_minutes >= 60
+        else f"{runtime_minutes}m" if runtime_minutes else record.runtime
+    )
+
+    countries = [
+        str(item.get("name") or item.get("iso_3166_1"))
+        for item in payload.get("production_countries", ())
+        if isinstance(item, dict) and (item.get("name") or item.get("iso_3166_1"))
+    ]
+    if not countries:
+        countries = [str(value) for value in payload.get("origin_country", ()) if value]
+    creators = [
+        str(item.get("name"))
+        for item in payload.get("created_by", ())
+        if isinstance(item, dict) and item.get("name")
+    ]
+    if not creators:
+        creators = [
+            str(item.get("name"))
+            for item in payload.get("production_companies", ())[:2]
+            if isinstance(item, dict) and item.get("name")
+        ]
+    networks = [
+        str(item.get("name"))
+        for item in payload.get("networks", ())
+        if isinstance(item, dict) and item.get("name")
+    ]
+    tmdb_rating = round(float(payload.get("vote_average") or 0), 1)
+    external_ratings = (("TMDB", f"{tmdb_rating:.1f}"),)
+    if record.user_rating is not None:
+        external_ratings += (("Your rating", str(record.user_rating)),)
+
+    poster_path = str(payload.get("poster_path") or "")
+    backdrop_path = str(payload.get("backdrop_path") or "")
+    poster_file = poster_file or tmdb_client.cached_image(poster_path, size="w500")
+    backdrop_file = backdrop_file or tmdb_client.cached_image(
+        backdrop_path,
+        size="w780",
+    )
+    return replace(
+        record,
+        title=title,
+        year=year,
+        runtime=runtime,
+        rating=tmdb_rating,
+        genres=genres,
+        country=", ".join(countries[:2]) or record.country,
+        creator=", ".join(creators[:2]) or "TMDB",
+        description=str(payload.get("overview") or record.description),
+        language=str(payload.get("original_language") or record.language).upper(),
+        availability=str(payload.get("status") or record.availability),
+        network=", ".join(networks[:2]) or "TMDB",
+        external_ratings=external_ratings,
+        popularity=round(float(payload.get("popularity") or record.popularity)),
+        artwork_file=poster_file or backdrop_file or record.artwork_file,
+        poster_file=poster_file or record.poster_file,
+        backdrop_file=backdrop_file or record.backdrop_file,
+    )
+
+
+def enrich_records_from_tmdb_cache(
+    records: tuple[TitleRecord, ...],
+) -> tuple[TitleRecord, ...]:
+    enriched: list[TitleRecord] = []
+    for record in records:
+        if record.tmdb_id is None or record.tmdb_media_type is None:
+            enriched.append(record)
+            continue
+        summary = tmdb_client.load_summary(
+            record.tmdb_media_type,
+            record.tmdb_id,
+        )
+        enriched.append(
+            enrich_record_from_tmdb(record, summary)
+            if summary is not None
+            else record
+        )
+    return tuple(enriched)
+
+
 def title_records_from_simkl(payload: dict[str, Any]) -> tuple[TitleRecord, ...]:
     status_map = {
         "plantowatch": "Watchlist",
@@ -541,27 +653,10 @@ def title_records_from_simkl(payload: dict[str, Any]) -> tuple[TitleRecord, ...]
                 numeric_simkl_id = int(simkl_id)
             except (TypeError, ValueError):
                 continue
-            title = str(media.get("title") or "Untitled")
-            try:
-                year = int(media.get("year") or datetime.now().year)
-            except (TypeError, ValueError):
-                year = datetime.now().year
             user_rating = entry.get("user_rating")
-            rating = float(user_rating) if isinstance(user_rating, (int, float)) else 0.0
             status = status_map.get(str(entry.get("status")), "Watchlist")
-            poster_path = str(media.get("poster") or "") or None
-            poster_file = simkl_client.cached_poster(poster_path)
             watched_count = int(entry.get("watched_episodes_count") or 0)
             total_count = int(entry.get("total_episodes_count") or 0)
-            runtime = str(media.get("runtime") or "")
-            if runtime.isdigit():
-                runtime = f"{runtime}m"
-            elif not runtime:
-                runtime = (
-                    f"{total_count} episodes"
-                    if media_type != "Movies" and total_count
-                    else "Runtime unavailable"
-                )
             last_activity = str(
                 entry.get("last_watched_at")
                 or entry.get("added_to_watchlist_at")
@@ -574,22 +669,22 @@ def title_records_from_simkl(payload: dict[str, Any]) -> tuple[TitleRecord, ...]
                 tmdb_id = None
             record = TitleRecord(
                 id=f"simkl-{group}-{simkl_id}",
-                title=title,
+                title="Loading from TMDB…",
                 media_type=media_type,
                 status=status,
                 date=last_activity or "Synced from Simkl",
-                year=year,
-                runtime=runtime,
-                rating=rating,
+                year=0,
+                runtime="Loading from TMDB…",
+                rating=0.0,
                 user_rating=(
                     int(user_rating)
                     if isinstance(user_rating, int) and 1 <= user_rating <= 10
                     else None
                 ),
-                genres=("Synced",),
+                genres=("Loading from TMDB",),
                 country="—",
-                creator="Simkl",
-                description="This title was synced from your Simkl library.",
+                creator="TMDB",
+                description="Catalog metadata is loading from TMDB.",
                 poster_palette=_tmdb_palette(numeric_simkl_id),
                 poster_variant=numeric_simkl_id % 6 + 1,
                 order=max(1, 100000 - position),
@@ -598,9 +693,11 @@ def title_records_from_simkl(payload: dict[str, Any]) -> tuple[TitleRecord, ...]
                 availability=str(entry.get("status") or "Synced")
                 .replace("plantowatch", "Plan to watch")
                 .title(),
-                network="Simkl",
+                network="TMDB",
                 external_ratings=(
-                    (("Your rating", f"{rating:.0f}"),) if rating else ()
+                    (("Your rating", str(user_rating)),)
+                    if isinstance(user_rating, int) and 1 <= user_rating <= 10
+                    else ()
                 ),
                 cast=(),
                 seasons=(
@@ -624,44 +721,13 @@ def title_records_from_simkl(payload: dict[str, Any]) -> tuple[TitleRecord, ...]
                 discover_layout="poster",
                 tmdb_id=tmdb_id,
                 tmdb_media_type=tmdb_namespace if tmdb_id is not None else None,
-                artwork_file=poster_file,
-                poster_file=poster_file,
             )
             sortable.append((last_activity, record))
-    sortable.sort(key=lambda item: (item[0], item[1].title), reverse=True)
+    sortable.sort(key=lambda item: (item[0], item[1].id), reverse=True)
     return tuple(
         replace(record, order=max(1, len(sortable) - position))
         for position, (_activity, record) in enumerate(sortable)
     )
-
-
-def simkl_poster_jobs(payload: dict[str, Any]) -> tuple[tuple[str, str], ...]:
-    """Return every unique Simkl poster that is not already cached locally."""
-    jobs: list[tuple[str, str]] = []
-    seen_paths: set[str] = set()
-    for group, object_key in (
-        ("movies", "movie"),
-        ("shows", "show"),
-        ("anime", "show"),
-    ):
-        entries = payload.get(group, ())
-        if not isinstance(entries, list):
-            continue
-        for entry in entries:
-            if not isinstance(entry, dict):
-                continue
-            media = entry.get(object_key)
-            if not isinstance(media, dict):
-                continue
-            ids = media.get("ids") if isinstance(media.get("ids"), dict) else {}
-            simkl_id = ids.get("simkl")
-            poster_path = str(media.get("poster") or "")
-            if not simkl_id or not poster_path or poster_path in seen_paths:
-                continue
-            seen_paths.add(poster_path)
-            if simkl_client.cached_poster(poster_path) is None:
-                jobs.append((f"simkl-{group}-{simkl_id}", poster_path))
-    return tuple(jobs)
 
 
 def should_refresh_simkl_stats(
@@ -1048,6 +1114,7 @@ class CineShelfWindow:
         self.records, self.explore_records, self.totals = load_catalog()
         self.simkl_client_id = simkl_client.read_client_id()
         self.simkl_token = simkl_client.read_token()
+        self.tmdb_token = tmdb_client.read_token()
         self.simkl_settings: dict[str, Any] = {}
         self.simkl_stats: dict[str, Any] = {}
         self.simkl_connected = False
@@ -1060,9 +1127,9 @@ class CineShelfWindow:
                     if isinstance(snapshot.get("library"), dict)
                     else {}
                 )
-                if simkl_client.library_has_metadata(library_payload):
+                if simkl_client.library_has_user_state(library_payload):
                     simkl_records = title_records_from_simkl(library_payload)
-                    self.records = simkl_records
+                    self.records = enrich_records_from_tmdb_cache(simkl_records)
                 else:
                     self.simkl_snapshot_needs_repair = True
                 self.simkl_settings = (
@@ -1132,12 +1199,16 @@ class CineShelfWindow:
         self.episode_status_overrides: dict[str, bool] = {}
         self.episode_watched_at: dict[str, str] = {}
         self.title_watched_at: dict[str, str] = {}
-        self.tmdb_token = tmdb_client.read_token()
         self._tmdb_details_loading: set[str] = set()
         self._tmdb_details_loaded: set[str] = set()
+        self._tmdb_detail_generations: dict[str, int] = {}
+        self._tmdb_explore_generation = 0
+        self._tmdb_library_generation = 0
+        self._tmdb_library_refresh_source_id = 0
         self._log_dialog: Adw.AlertDialog | None = None
         self._log_text_view: Gtk.TextView | None = None
         self._simkl_sync_started_at = 0.0
+        self._simkl_mutations_inflight: set[str] = set()
         self.state_file = user_state_file()
         self._load_user_state()
         application_logger().info("CineShelf %s started", APP_VERSION)
@@ -1171,11 +1242,14 @@ class CineShelfWindow:
         self._refresh_results()
         if self.tmdb_token:
             self._load_tmdb_explore_async()
-        if self.simkl_snapshot_needs_repair:
-            self._app_log(
-                "Incomplete Simkl snapshot detected; scheduling metadata repair.",
-                level=logging.WARNING,
-            )
+        if self.simkl_client_id and self.simkl_token:
+            if self.simkl_snapshot_needs_repair:
+                self._app_log(
+                    "Incomplete Simkl snapshot detected; scheduling state repair.",
+                    level=logging.WARNING,
+                )
+            else:
+                self._app_log("Scheduling Simkl user-state refresh.")
             GLib.idle_add(self._start_simkl_sync)
 
     def _object(self, name: str) -> Any:
@@ -2516,15 +2590,15 @@ class CineShelfWindow:
                 else {}
             )
             last_sync = str(cached_activities.get("all") or "")
-            metadata_is_valid = (
+            state_is_valid = (
                 cached_library is not None
-                and simkl_client.library_has_metadata(cached_library)
+                and simkl_client.library_has_user_state(cached_library)
             )
-            has_incremental_state = metadata_is_valid and bool(last_sync)
+            has_incremental_state = state_is_valid and bool(last_sync)
             repairing_metadata = (
                 cached_library is not None
                 and bool(last_sync)
-                and not metadata_is_valid
+                and not state_is_valid
             )
             if has_incremental_state:
                 phase_started = time.monotonic()
@@ -2564,11 +2638,11 @@ class CineShelfWindow:
                 if cached_settings:
                     settings = cached_settings
                     self._app_log(
-                        "Metadata repair: account settings loaded from cache."
+                        "State repair: account settings loaded from cache."
                     )
                 else:
                     self._app_log(
-                        "Metadata repair: fetching missing account settings."
+                        "State repair: fetching missing account settings."
                     )
                     settings = simkl_client.fetch_settings(client_id, token)
             else:
@@ -2610,18 +2684,18 @@ class CineShelfWindow:
                 phase_started = time.monotonic()
                 if repairing_metadata:
                     self._app_log(
-                        "Repairing title and poster metadata from Simkl."
+                        "Repairing Simkl user state and external IDs."
                     )
                 else:
                     self._app_log(
-                        "Initial sync: downloading complete library metadata."
+                        "Initial sync: downloading Simkl user state and IDs."
                     )
                 library = simkl_client.fetch_library(client_id, token)
                 if not repairing_metadata:
                     activities = simkl_client.fetch_activities(client_id, token)
                 self._app_log(
                     "%s library download finished in %.1fs.",
-                    "Metadata repair" if repairing_metadata else "Initial",
+                    "State repair" if repairing_metadata else "Initial",
                     time.monotonic() - phase_started,
                 )
             elif activities.get("all") == last_sync:
@@ -2651,9 +2725,9 @@ class CineShelfWindow:
                     "Incremental library merge finished in %.1fs.",
                     time.monotonic() - phase_started,
                 )
-            if not simkl_client.library_has_metadata(library):
+            if not simkl_client.library_has_user_state(library):
                 raise simkl_client.SimklError(
-                    "Simkl returned an ID-only library without title metadata."
+                    "Simkl returned an incomplete user-state response."
                 )
             group_counts = {
                 group: len(library.get(group, ()))
@@ -2667,8 +2741,9 @@ class CineShelfWindow:
             )
             simkl_client.store_snapshot(settings, stats, library, activities)
             self._app_log("Secure local Simkl snapshot updated.")
-            records = title_records_from_simkl(library)
-            poster_jobs = simkl_poster_jobs(library)
+            records = enrich_records_from_tmdb_cache(
+                title_records_from_simkl(library)
+            )
         except simkl_client.SimklError as error:
             GLib.idle_add(self._on_simkl_failed, str(error), error.code)
             return
@@ -2689,61 +2764,6 @@ class CineShelfWindow:
             settings,
             stats,
             records,
-            len(poster_jobs),
-        )
-
-        phase_started = time.monotonic()
-        cached_count = 0
-        completed_count = 0
-        poster_batch: dict[str, str] = {}
-        if poster_jobs:
-            self._app_log(
-                "Library data is ready; caching %d missing posters in the background.",
-                len(poster_jobs),
-            )
-            with ThreadPoolExecutor(max_workers=8) as executor:
-                futures = {
-                    executor.submit(simkl_client.cache_poster, poster_path): record_id
-                    for record_id, poster_path in poster_jobs
-                }
-                for future in as_completed(futures):
-                    completed_count += 1
-                    poster_file = future.result()
-                    if poster_file is not None:
-                        cached_count += 1
-                        poster_batch[futures[future]] = poster_file
-                    if len(poster_batch) >= 12:
-                        GLib.idle_add(
-                            self._apply_simkl_poster_batch,
-                            dict(poster_batch),
-                            completed_count,
-                            len(poster_jobs),
-                        )
-                        poster_batch.clear()
-            if poster_batch:
-                GLib.idle_add(
-                    self._apply_simkl_poster_batch,
-                    dict(poster_batch),
-                    completed_count,
-                    len(poster_jobs),
-                )
-            self._app_log(
-                "Background poster cache finished: %d/%d available in %.1fs.",
-                cached_count,
-                len(poster_jobs),
-                time.monotonic() - phase_started,
-            )
-        else:
-            self._app_log("All Simkl posters are already available locally.")
-
-        user = settings.get("user", {})
-        if isinstance(user, dict):
-            simkl_client.cache_avatar(str(user.get("avatar") or "") or None)
-        GLib.idle_add(
-            self._finish_simkl_sync,
-            len(records),
-            cached_count,
-            len(poster_jobs),
         )
 
     def _replace_library(self, records: tuple[TitleRecord, ...]) -> None:
@@ -2769,7 +2789,6 @@ class CineShelfWindow:
         settings: dict[str, Any],
         stats: dict[str, Any],
         records: tuple[TitleRecord, ...],
-        missing_posters: int,
     ) -> bool:
         self.simkl_settings = settings
         self.simkl_stats = stats
@@ -2806,6 +2825,19 @@ class CineShelfWindow:
         self._update_genre_model()
         self._refresh_results()
         self._refresh_profile()
+        user = settings.get("user", {})
+        avatar_url = (
+            str(user.get("avatar") or "") or None
+            if isinstance(user, dict)
+            else None
+        )
+        if avatar_url and simkl_client.cached_avatar() is None:
+            threading.Thread(
+                target=self._cache_simkl_avatar,
+                args=(avatar_url,),
+                name="cineshelf-simkl-avatar",
+                daemon=True,
+            ).start()
         elapsed = (
             time.monotonic() - self._simkl_sync_started_at
             if self._simkl_sync_started_at
@@ -2816,51 +2848,69 @@ class CineShelfWindow:
             len(records),
             elapsed,
         )
-        self.simkl_button.set_label(
-            "Loading artwork…" if missing_posters else "Finishing…"
-        )
-        self._toast(
-            f"Synced {len(records)} titles — artwork is loading in the background"
-            if missing_posters
-            else f"Synced {len(records)} titles from Simkl"
-        )
+        self.simkl_button.set_label("Finishing…")
+        if self.tmdb_token:
+            self._toast(
+                f"Synced {len(records)} Simkl states — loading catalog from TMDB"
+            )
+            self._load_tmdb_library_async(records)
+        else:
+            self._toast(
+                "Simkl state synced — connect TMDB to load titles and artwork"
+            )
+        self._finish_simkl_sync(len(records))
         return GLib.SOURCE_REMOVE
 
-    def _apply_simkl_poster_batch(
-        self,
-        poster_files: dict[str, str],
-        completed: int,
-        total: int,
-    ) -> bool:
-        if not poster_files:
+    def _cache_simkl_avatar(self, avatar_url: str) -> None:
+        avatar_file = simkl_client.cache_avatar(avatar_url)
+        if avatar_file is not None:
+            GLib.idle_add(self._apply_simkl_avatar, avatar_file)
+
+    def _apply_simkl_avatar(self, avatar_file: str) -> bool:
+        if not self.simkl_connected:
             return GLib.SOURCE_REMOVE
-        self.records = tuple(
-            replace(
-                record,
-                artwork_file=poster_files[record.id],
-                poster_file=poster_files[record.id],
+        try:
+            self.profile_avatar.set_custom_image(
+                Gdk.Texture.new_from_filename(avatar_file)
             )
-            if record.id in poster_files
-            else record
-            for record in self.records
-        )
-        self.records_by_id.update({record.id: record for record in self.records})
-        if self.active_destination == "library":
-            scroll_position = self.results_scroller.get_vadjustment().get_value()
-            self._refresh_results()
-            self._scroll_to_value(self.results_scroller, scroll_position)
-        elif self.active_destination == "profile":
-            self._refresh_profile()
-        if self.detail_record_id in poster_files:
-            self._update_details()
-        self.simkl_button.set_label(f"Artwork {completed}/{total}")
+        except GLib.Error:
+            pass
         return GLib.SOURCE_REMOVE
+
+    def _library_artwork_priorities(self) -> dict[str, int]:
+        """Prioritize the current viewport, its look-ahead rows, then the library."""
+        records = self.visible_records
+        if not records:
+            return {}
+        adjustment = self.results_scroller.get_vadjustment()
+        scroll_value = adjustment.get_value()
+        page_size = adjustment.get_page_size()
+        if page_size <= 1.0:
+            page_size = 600.0
+        if self.view_mode == "grid":
+            columns = max(4, self.results_scroller.get_width() // 108)
+            row_height = 197
+            start = int(scroll_value // row_height) * columns
+            visible_count = max(columns, math.ceil(page_size / row_height) * columns)
+        else:
+            row_height = 126
+            start = int(scroll_value // row_height)
+            visible_count = max(1, math.ceil(page_size / row_height))
+        visible = records[start : start + visible_count + 2]
+        near_visible = records[
+            start + visible_count + 2 : start + (visible_count * 3) + 2
+        ]
+        priorities = {record.id: 10 for record in near_visible}
+        priorities.update({record.id: 0 for record in visible})
+        if self.selected_id is not None:
+            priorities[self.selected_id] = -10
+        if self.detail_record_id is not None:
+            priorities[self.detail_record_id] = -10
+        return priorities
 
     def _finish_simkl_sync(
         self,
         title_count: int,
-        cached_posters: int,
-        requested_posters: int,
     ) -> bool:
         elapsed = (
             time.monotonic() - self._simkl_sync_started_at
@@ -2868,17 +2918,13 @@ class CineShelfWindow:
             else 0.0
         )
         self._app_log(
-            "Simkl sync completed: %d titles and %d/%d new posters in %.1fs.",
+            "Simkl user-state sync completed for %d titles in %.1fs.",
             title_count,
-            cached_posters,
-            requested_posters,
             elapsed,
         )
         self._simkl_sync_started_at = 0.0
         self._update_profile_identity()
         self.simkl_disconnect_button.set_sensitive(True)
-        if requested_posters:
-            self._toast(f"Artwork ready for {cached_posters} titles")
         return GLib.SOURCE_REMOVE
 
     def _update_profile_identity(self) -> None:
@@ -3609,7 +3655,8 @@ class CineShelfWindow:
             return round(card_width * 3 / 2)
         return round(card_width * 9 / 16)
 
-    def _update_genre_model(self) -> None:
+    def _update_genre_model(self, *, preserve: bool = False) -> None:
+        previous_genre = self.genre
         genres = sorted(
             {
                 genre
@@ -3619,10 +3666,15 @@ class CineShelfWindow:
             }
         )
         self.genre_options = ("All genres", *genres)
+        selected_genre = (
+            previous_genre
+            if preserve and previous_genre in self.genre_options
+            else "All genres"
+        )
         self._updating = True
         self.genre_dropdown.set_model(Gtk.StringList.new(list(self.genre_options)))
-        self.genre_dropdown.set_selected(0)
-        self.genre = "All genres"
+        self.genre_dropdown.set_selected(self.genre_options.index(selected_genre))
+        self.genre = selected_genre
         self._updating = False
 
     def _update_explore_genre_model(self, *, preserve: bool = True) -> None:
@@ -3651,21 +3703,218 @@ class CineShelfWindow:
         self.explore_genre = selected_genre
         self._updating = False
 
+    def _load_tmdb_library_async(
+        self,
+        records: tuple[TitleRecord, ...],
+    ) -> None:
+        token = self.tmdb_token
+        if not token:
+            self._app_log(
+                "TMDB token is missing; Simkl state is available but catalog metadata cannot load.",
+                level=logging.WARNING,
+            )
+            return
+        candidates = tuple(
+            record
+            for record in records
+            if record.tmdb_id is not None and record.tmdb_media_type is not None
+        )
+        missing_matches = len(records) - len(candidates)
+        if missing_matches:
+            self._app_log(
+                "%d Simkl titles have no TMDB ID and will keep placeholders.",
+                missing_matches,
+                level=logging.WARNING,
+            )
+        if not candidates:
+            return
+        self._tmdb_library_generation += 1
+        generation = self._tmdb_library_generation
+        priorities = self._library_artwork_priorities()
+        ordered = tuple(
+            sorted(
+                candidates,
+                key=lambda record: (priorities.get(record.id, 100), -record.order),
+            )
+        )
+        threading.Thread(
+            target=self._load_tmdb_library_worker,
+            args=(ordered, token, generation),
+            name="cineshelf-tmdb-library",
+            daemon=True,
+        ).start()
+
+    def _load_tmdb_library_worker(
+        self,
+        records: tuple[TitleRecord, ...],
+        token: str,
+        generation: int,
+    ) -> None:
+        started_at = time.monotonic()
+        completed = 0
+        with ThreadPoolExecutor(max_workers=6) as executor:
+            futures = [
+                executor.submit(
+                    self._load_tmdb_library_record,
+                    record,
+                    token,
+                    generation,
+                )
+                for record in records
+            ]
+            for future in as_completed(futures):
+                if future.result():
+                    completed += 1
+        self._app_log(
+            "TMDB catalog enrichment finished: %d/%d titles in %.1fs.",
+            completed,
+            len(records),
+            time.monotonic() - started_at,
+        )
+        GLib.idle_add(
+            self._finish_tmdb_library_enrichment,
+            generation,
+            completed,
+            len(records),
+        )
+
+    def _load_tmdb_library_record(
+        self,
+        record: TitleRecord,
+        token: str,
+        generation: int,
+    ) -> bool:
+        if record.tmdb_id is None or record.tmdb_media_type is None:
+            return False
+        summary = tmdb_client.load_summary(
+            record.tmdb_media_type,
+            record.tmdb_id,
+            max_age_seconds=24 * 60 * 60,
+        )
+        if summary is None:
+            try:
+                summary = tmdb_client.fetch_summary(
+                    token,
+                    record.tmdb_media_type,
+                    record.tmdb_id,
+                )
+            except tmdb_client.TmdbError as error:
+                self._app_log(
+                    "TMDB metadata failed for %s: %s",
+                    record.title,
+                    error,
+                    level=logging.WARNING,
+                )
+                return False
+        GLib.idle_add(
+            self._apply_tmdb_library_summary,
+            generation,
+            record.id,
+            summary,
+        )
+        poster_path = str(summary.get("poster_path") or "")
+        if poster_path:
+            poster_file = tmdb_client.cache_image(poster_path, size="w500")
+            if poster_file is not None:
+                GLib.idle_add(
+                    self._apply_tmdb_library_poster,
+                    generation,
+                    record.id,
+                    poster_file,
+                )
+        return True
+
+    def _apply_tmdb_library_summary(
+        self,
+        generation: int,
+        record_id: str,
+        summary: dict[str, Any],
+    ) -> bool:
+        if generation != self._tmdb_library_generation:
+            return GLib.SOURCE_REMOVE
+        record = self.records_by_id.get(record_id)
+        if record is None or record_id not in self.library_ids:
+            return GLib.SOURCE_REMOVE
+        self._store_tmdb_record(enrich_record_from_tmdb(record, summary))
+        self._schedule_tmdb_library_refresh()
+        return GLib.SOURCE_REMOVE
+
+    def _apply_tmdb_library_poster(
+        self,
+        generation: int,
+        record_id: str,
+        poster_file: str,
+    ) -> bool:
+        if generation != self._tmdb_library_generation:
+            return GLib.SOURCE_REMOVE
+        record = self.records_by_id.get(record_id)
+        if record is None or record_id not in self.library_ids:
+            return GLib.SOURCE_REMOVE
+        self._store_tmdb_record(
+            replace(
+                record,
+                artwork_file=poster_file,
+                poster_file=poster_file,
+            )
+        )
+        self._schedule_tmdb_library_refresh()
+        return GLib.SOURCE_REMOVE
+
+    def _schedule_tmdb_library_refresh(self) -> None:
+        if self._tmdb_library_refresh_source_id:
+            return
+        self._tmdb_library_refresh_source_id = GLib.timeout_add(
+            50,
+            self._refresh_tmdb_library_ui,
+        )
+
+    def _refresh_tmdb_library_ui(self) -> bool:
+        self._tmdb_library_refresh_source_id = 0
+        if self.active_destination == "library":
+            scroll_position = self.results_scroller.get_vadjustment().get_value()
+            self._refresh_results()
+            self._scroll_to_value(self.results_scroller, scroll_position)
+        elif self.active_destination == "profile":
+            self._refresh_profile()
+        return GLib.SOURCE_REMOVE
+
+    def _finish_tmdb_library_enrichment(
+        self,
+        generation: int,
+        completed: int,
+        total: int,
+    ) -> bool:
+        if generation != self._tmdb_library_generation:
+            return GLib.SOURCE_REMOVE
+        self._update_genre_model(preserve=True)
+        if self.active_destination == "library":
+            self._refresh_results()
+        self._toast(f"TMDB catalog ready for {completed}/{total} titles")
+        return GLib.SOURCE_REMOVE
+
     def _load_tmdb_explore_async(self) -> None:
         token = self.tmdb_token
         if not token:
             return
+        self._tmdb_explore_generation += 1
+        generation = self._tmdb_explore_generation
         threading.Thread(
             target=self._load_tmdb_explore_worker,
-            args=(token,),
+            args=(token, generation, self.active_media),
             name="cineshelf-tmdb-explore",
             daemon=True,
         ).start()
 
-    def _load_tmdb_explore_worker(self, token: str) -> None:
+    def _load_tmdb_explore_worker(
+        self,
+        token: str,
+        generation: int,
+        active_media: str,
+    ) -> None:
         try:
             collections = tmdb_client.fetch_explore(token)
             records: list[TitleRecord] = []
+            image_work: list[tuple[int, int, str, str, str, str]] = []
             work_items = [
                 (media_type, position, raw)
                 for media_type in MEDIA_TYPES
@@ -3674,44 +3923,83 @@ class CineShelfWindow:
                     start=1,
                 )
             ]
-            with ThreadPoolExecutor(max_workers=8) as executor:
-                image_jobs = [
-                    (
-                        executor.submit(
-                            tmdb_client.cache_image,
-                            str(raw.get("poster_path") or "") or None,
-                            size="w500",
-                        ),
-                        executor.submit(
-                            tmdb_client.cache_image,
-                            str(raw.get("backdrop_path") or "") or None,
-                            size="w780",
-                        ),
-                    )
-                    for _media_type, _position, raw in work_items
-                ]
-                for (media_type, position, raw), (poster_job, backdrop_job) in zip(
-                    work_items,
-                    image_jobs,
-                    strict=True,
-                ):
-                    records.append(
-                        title_record_from_tmdb(
-                            raw,
-                            media_type,
+            for media_type, position, raw in work_items:
+                poster_path = str(raw.get("poster_path") or "")
+                backdrop_path = str(raw.get("backdrop_path") or "")
+                poster_file = tmdb_client.cached_image(poster_path, size="w500")
+                backdrop_file = tmdb_client.cached_image(backdrop_path, size="w780")
+                record = title_record_from_tmdb(
+                    raw,
+                    media_type,
+                    position,
+                    poster_file,
+                    backdrop_file,
+                )
+                records.append(record)
+                media_priority = 0 if media_type == active_media else 100
+                viewport_priority = 0 if position <= 8 else 10
+                if poster_path and poster_file is None:
+                    image_work.append(
+                        (
+                            media_priority + viewport_priority,
                             position,
-                            poster_job.result(),
-                            backdrop_job.result(),
+                            record.id,
+                            "poster",
+                            poster_path,
+                            "w500",
+                        )
+                    )
+                if backdrop_path and backdrop_file is None:
+                    image_work.append(
+                        (
+                            media_priority + viewport_priority + 1,
+                            position,
+                            record.id,
+                            "backdrop",
+                            backdrop_path,
+                            "w780",
                         )
                     )
             if not records:
                 raise tmdb_client.TmdbError("TMDB returned no titles.")
         except tmdb_client.TmdbError as error:
-            GLib.idle_add(self._on_tmdb_explore_failed, str(error))
+            GLib.idle_add(
+                self._on_tmdb_explore_failed,
+                generation,
+                str(error),
+            )
             return
-        GLib.idle_add(self._apply_tmdb_explore, tuple(records))
+        GLib.idle_add(self._apply_tmdb_explore, generation, tuple(records))
 
-    def _apply_tmdb_explore(self, records: tuple[TitleRecord, ...]) -> bool:
+        image_work.sort(key=lambda item: (item[0], item[1]))
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            futures = {
+                executor.submit(tmdb_client.cache_image, path, size=size): (
+                    record_id,
+                    kind,
+                )
+                for _priority, _position, record_id, kind, path, size in image_work
+            }
+            for future in as_completed(futures):
+                image_file = future.result()
+                if image_file is None:
+                    continue
+                record_id, kind = futures[future]
+                GLib.idle_add(
+                    self._apply_tmdb_explore_image,
+                    generation,
+                    record_id,
+                    kind,
+                    image_file,
+                )
+
+    def _apply_tmdb_explore(
+        self,
+        generation: int,
+        records: tuple[TitleRecord, ...],
+    ) -> bool:
+        if generation != self._tmdb_explore_generation:
+            return GLib.SOURCE_REMOVE
         self.explore_records = records
         self.explore_ids = {record.id for record in records}
         self.records_by_id = {
@@ -3725,7 +4013,71 @@ class CineShelfWindow:
         self._toast("Live TMDB data loaded")
         return GLib.SOURCE_REMOVE
 
-    def _on_tmdb_explore_failed(self, message: str) -> bool:
+    def _apply_tmdb_explore_image(
+        self,
+        generation: int,
+        record_id: str,
+        kind: str,
+        image_file: str,
+    ) -> bool:
+        if generation != self._tmdb_explore_generation:
+            return GLib.SOURCE_REMOVE
+        record = self.records_by_id.get(record_id)
+        if record is None or record_id not in self.explore_ids:
+            return GLib.SOURCE_REMOVE
+        updated = replace(
+            record,
+            artwork_file=record.artwork_file or image_file,
+            poster_file=image_file if kind == "poster" else record.poster_file,
+            backdrop_file=(
+                image_file if kind == "backdrop" else record.backdrop_file
+            ),
+        )
+        self.explore_records = tuple(
+            updated if item.id == record_id else item for item in self.explore_records
+        )
+        self.explore_visible_records = tuple(
+            updated if item.id == record_id else item
+            for item in self.explore_visible_records
+        )
+        self.records_by_id[record_id] = updated
+        self._update_explore_card_artwork(updated)
+        if self.detail_record_id == record_id:
+            self._update_details()
+        return GLib.SOURCE_REMOVE
+
+    def _update_explore_card_artwork(self, record: TitleRecord) -> None:
+        button = getattr(self, "_explore_card_buttons", {}).get(record.id)
+        layout = getattr(self, "_explore_card_layouts", {}).get(record.id)
+        if button is None or layout is None:
+            return
+        kind, span = layout
+        overlay = button.get_child()
+        if not isinstance(overlay, Gtk.Overlay):
+            return
+        preferred_artwork = (
+            record.backdrop_file
+            if kind in ("hero", "landscape")
+            else record.poster_file
+        )
+        artwork_record = replace(
+            record,
+            artwork_file=preferred_artwork or record.artwork_file,
+        )
+        art_width = 480 if kind == "hero" else 320 if kind == "landscape" else 160
+        overlay.set_child(
+            PosterWidget(
+                artwork_record,
+                art_width,
+                self._explore_card_height(kind, span),
+                variant_offset=1 if kind == "landscape" else 0,
+                show_text=False,
+            )
+        )
+
+    def _on_tmdb_explore_failed(self, generation: int, message: str) -> bool:
+        if generation != self._tmdb_explore_generation:
+            return GLib.SOURCE_REMOVE
         print(f"CineShelf TMDB: {message}", file=sys.stderr)
         self._toast("TMDB unavailable — showing local sample data")
         return GLib.SOURCE_REMOVE
@@ -3740,28 +4092,31 @@ class CineShelfWindow:
         ):
             return
         self._tmdb_details_loading.add(record.id)
+        generation = self._tmdb_detail_generations.get(record.id, 0) + 1
+        self._tmdb_detail_generations[record.id] = generation
         threading.Thread(
             target=self._load_tmdb_details_worker,
-            args=(record, self.tmdb_token),
+            args=(record, self.tmdb_token, generation),
             name=f"cineshelf-tmdb-{record.tmdb_id}",
             daemon=True,
         ).start()
 
-    def _load_tmdb_details_worker(self, record: TitleRecord, token: str) -> None:
+    def _load_tmdb_details_worker(
+        self,
+        record: TitleRecord,
+        token: str,
+        generation: int,
+    ) -> None:
         try:
             payload = tmdb_client.fetch_details(
                 token,
                 record.tmdb_media_type or "movie",
                 record.tmdb_id or 0,
             )
-            poster_file = tmdb_client.cache_image(
-                str(payload.get("poster_path") or ""),
-                size="w500",
-            )
-            backdrop_file = tmdb_client.cache_image(
-                str(payload.get("backdrop_path") or ""),
-                size="w780",
-            )
+            poster_path = str(payload.get("poster_path") or "")
+            backdrop_path = str(payload.get("backdrop_path") or "")
+            poster_file = tmdb_client.cached_image(poster_path, size="w500")
+            backdrop_file = tmdb_client.cached_image(backdrop_path, size="w780")
             genres = tuple(
                 str(item["name"])
                 for item in payload.get("genres", ())
@@ -3782,49 +4137,39 @@ class CineShelfWindow:
                 for item in payload.get("images", {}).get("posters", ())[:8]
                 if isinstance(item, dict) and item.get("file_path")
             ]
-            with ThreadPoolExecutor(max_workers=6) as executor:
-                profile_jobs = [
-                    executor.submit(
-                        tmdb_client.cache_image,
-                        str(item.get("profile_path") or "") or None,
+            cast = tuple(
+                CastMember(
+                    str(item.get("name", "—")),
+                    str(item.get("character", "Cast")),
+                    tmdb_client.cached_image(
+                        str(item.get("profile_path") or ""),
                         size="w185",
-                    )
-                    for item in cast_items
-                ]
-                cast = tuple(
-                    CastMember(
-                        str(item.get("name", "—")),
-                        str(item.get("character", "Cast")),
-                        profile_job.result(),
-                    )
-                    for item, profile_job in zip(
-                        cast_items,
-                        profile_jobs,
-                        strict=True,
-                    )
+                    ),
                 )
-                backdrop_jobs = [
-                    executor.submit(
-                        tmdb_client.cache_image,
+                for item in cast_items
+            )
+            gallery_backdrops = tuple(
+                cached
+                for item in backdrop_items
+                for cached in (
+                    tmdb_client.cached_image(
                         str(item["file_path"]),
                         size="w500",
-                    )
-                    for item in backdrop_items
-                ]
-                poster_jobs = [
-                    executor.submit(
-                        tmdb_client.cache_image,
+                    ),
+                )
+                if cached is not None
+            )
+            gallery_posters = tuple(
+                cached
+                for item in poster_items
+                for cached in (
+                    tmdb_client.cached_image(
                         str(item["file_path"]),
                         size="w342",
-                    )
-                    for item in poster_items
-                ]
-                gallery_backdrops = tuple(
-                    path for job in backdrop_jobs if (path := job.result()) is not None
+                    ),
                 )
-                gallery_posters = tuple(
-                    path for job in poster_jobs if (path := job.result()) is not None
-                )
+                if cached is not None
+            )
             if record.tmdb_media_type == "movie":
                 runtime_minutes = int(payload.get("runtime") or 0)
                 directors = [
@@ -3843,16 +4188,40 @@ class CineShelfWindow:
                     if isinstance(item, dict) and item.get("name")
                 ]
                 creator = ", ".join(creators[:2]) or record.creator
+                total_watched = sum(season.watched for season in record.seasons)
+                season_rows = [
+                    item
+                    for item in payload.get("seasons", ())
+                    if isinstance(item, dict)
+                ]
+                watched_by_number: dict[int, int] = {}
+                remaining_watched = total_watched
+                for item in sorted(
+                    season_rows,
+                    key=lambda value: int(value.get("season_number") or 0),
+                ):
+                    season_number = int(item.get("season_number") or 0)
+                    if season_number <= 0:
+                        watched_by_number[season_number] = 0
+                        continue
+                    episode_count = int(item.get("episode_count") or 0)
+                    watched_by_number[season_number] = min(
+                        episode_count,
+                        remaining_watched,
+                    )
+                    remaining_watched = max(0, remaining_watched - episode_count)
                 seasons = tuple(
                     SeasonInfo(
                         id=f"s{int(item.get('season_number', position))}",
                         number=int(item.get("season_number", position)),
                         title=str(item.get("name") or f"Season {position}"),
-                        watched=0,
+                        watched=watched_by_number.get(
+                            int(item.get("season_number", position)),
+                            0,
+                        ),
                         episodes=int(item.get("episode_count") or 0),
                     )
-                    for position, item in enumerate(payload.get("seasons", ()), start=1)
-                    if isinstance(item, dict)
+                    for position, item in enumerate(season_rows, start=1)
                 )
             runtime = (
                 f"{runtime_minutes // 60}h {runtime_minutes % 60:02d}m"
@@ -3879,8 +4248,14 @@ class CineShelfWindow:
                 for item in payload.get("recommendations", {}).get("results", ())[:12]
                 if isinstance(item, dict) and item.get("id") is not None
             )
-            updated = replace(
+            tmdb_record = enrich_record_from_tmdb(
                 record,
+                payload,
+                poster_file=poster_file,
+                backdrop_file=backdrop_file,
+            )
+            updated = replace(
+                tmdb_record,
                 runtime=runtime,
                 genres=genres,
                 country=", ".join(countries[:2]) or record.country,
@@ -3891,7 +4266,9 @@ class CineShelfWindow:
                 cast=cast or record.cast,
                 seasons=seasons or record.seasons,
                 recommendations=recommendation_ids or record.recommendations,
-                artwork_file=backdrop_file or poster_file or record.artwork_file,
+                # The canonical card artwork stays portrait. Landscape views
+                # opt into backdrop_file explicitly when they render.
+                artwork_file=poster_file or backdrop_file or record.artwork_file,
                 poster_file=poster_file or record.poster_file,
                 backdrop_file=backdrop_file or record.backdrop_file,
                 gallery_backdrops=gallery_backdrops,
@@ -3899,13 +4276,100 @@ class CineShelfWindow:
                 video_titles=video_titles,
             )
         except tmdb_client.TmdbError as error:
-            GLib.idle_add(self._on_tmdb_details_failed, record.id, str(error))
+            GLib.idle_add(
+                self._on_tmdb_details_failed,
+                record.id,
+                generation,
+                str(error),
+            )
             return
-        GLib.idle_add(self._apply_tmdb_details, updated)
+        GLib.idle_add(self._apply_tmdb_details, generation, updated)
 
-    def _apply_tmdb_details(self, updated: TitleRecord) -> bool:
+        main_images = [
+            ("poster", poster_path, "w500")
+            if poster_path and poster_file is None
+            else None,
+            ("backdrop", backdrop_path, "w780")
+            if backdrop_path and backdrop_file is None
+            else None,
+        ]
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = {
+                executor.submit(tmdb_client.cache_image, path, size=size): kind
+                for job in main_images
+                if job is not None
+                for kind, path, size in (job,)
+            }
+            for future in as_completed(futures):
+                image_file = future.result()
+                if image_file is not None:
+                    GLib.idle_add(
+                        self._apply_tmdb_detail_artwork,
+                        record.id,
+                        generation,
+                        futures[future],
+                        image_file,
+                    )
+
+        profile_work = [
+            (index, str(item.get("profile_path") or ""))
+            for index, item in enumerate(cast_items)
+            if item.get("profile_path") and cast[index].profile_file is None
+        ]
+        with ThreadPoolExecutor(max_workers=6) as executor:
+            futures = {
+                executor.submit(tmdb_client.cache_image, path, size="w185"): index
+                for index, path in profile_work
+            }
+            for future in as_completed(futures):
+                image_file = future.result()
+                if image_file is not None:
+                    GLib.idle_add(
+                        self._apply_tmdb_cast_artwork,
+                        record.id,
+                        generation,
+                        futures[future],
+                        image_file,
+                    )
+
+        gallery_work = [
+            ("backdrop", str(item["file_path"]), "w500")
+            for item in backdrop_items
+            if tmdb_client.cached_image(str(item["file_path"]), size="w500") is None
+        ] + [
+            ("poster", str(item["file_path"]), "w342")
+            for item in poster_items
+            if tmdb_client.cached_image(str(item["file_path"]), size="w342") is None
+        ]
+        with ThreadPoolExecutor(max_workers=6) as executor:
+            futures = {
+                executor.submit(tmdb_client.cache_image, path, size=size): kind
+                for kind, path, size in gallery_work
+            }
+            for future in as_completed(futures):
+                image_file = future.result()
+                if image_file is not None:
+                    GLib.idle_add(
+                        self._apply_tmdb_gallery_artwork,
+                        record.id,
+                        generation,
+                        futures[future],
+                        image_file,
+                    )
+
+    def _apply_tmdb_details(
+        self,
+        generation: int,
+        updated: TitleRecord,
+    ) -> bool:
+        if self._tmdb_detail_generations.get(updated.id) != generation:
+            return GLib.SOURCE_REMOVE
         self._tmdb_details_loading.discard(updated.id)
         self._tmdb_details_loaded.add(updated.id)
+        self._store_tmdb_record(updated)
+        return GLib.SOURCE_REMOVE
+
+    def _store_tmdb_record(self, updated: TitleRecord) -> None:
         self.records_by_id[updated.id] = updated
         self.records = tuple(
             updated if record.id == updated.id else record
@@ -3915,11 +4379,91 @@ class CineShelfWindow:
             updated if record.id == updated.id else record
             for record in self.explore_records
         )
+        self.visible_records = tuple(
+            updated if record.id == updated.id else record
+            for record in self.visible_records
+        )
+        self.explore_visible_records = tuple(
+            updated if record.id == updated.id else record
+            for record in self.explore_visible_records
+        )
+        if updated.id in self.explore_ids:
+            self._update_explore_card_artwork(updated)
         if self.selected_id == updated.id:
             self._update_details()
+
+    def _apply_tmdb_detail_artwork(
+        self,
+        record_id: str,
+        generation: int,
+        kind: str,
+        image_file: str,
+    ) -> bool:
+        if self._tmdb_detail_generations.get(record_id) != generation:
+            return GLib.SOURCE_REMOVE
+        record = self.records_by_id.get(record_id)
+        if record is None:
+            return GLib.SOURCE_REMOVE
+        poster_file = image_file if kind == "poster" else record.poster_file
+        backdrop_file = image_file if kind == "backdrop" else record.backdrop_file
+        self._store_tmdb_record(
+            replace(
+                record,
+                artwork_file=poster_file or backdrop_file or record.artwork_file,
+                poster_file=poster_file,
+                backdrop_file=backdrop_file,
+            )
+        )
         return GLib.SOURCE_REMOVE
 
-    def _on_tmdb_details_failed(self, record_id: str, message: str) -> bool:
+    def _apply_tmdb_cast_artwork(
+        self,
+        record_id: str,
+        generation: int,
+        index: int,
+        image_file: str,
+    ) -> bool:
+        if self._tmdb_detail_generations.get(record_id) != generation:
+            return GLib.SOURCE_REMOVE
+        record = self.records_by_id.get(record_id)
+        if record is None or index >= len(record.cast):
+            return GLib.SOURCE_REMOVE
+        cast = tuple(
+            replace(member, profile_file=image_file) if position == index else member
+            for position, member in enumerate(record.cast)
+        )
+        self._store_tmdb_record(replace(record, cast=cast))
+        return GLib.SOURCE_REMOVE
+
+    def _apply_tmdb_gallery_artwork(
+        self,
+        record_id: str,
+        generation: int,
+        kind: str,
+        image_file: str,
+    ) -> bool:
+        if self._tmdb_detail_generations.get(record_id) != generation:
+            return GLib.SOURCE_REMOVE
+        record = self.records_by_id.get(record_id)
+        if record is None:
+            return GLib.SOURCE_REMOVE
+        if kind == "poster":
+            gallery = tuple(dict.fromkeys((*record.gallery_posters, image_file)))
+            updated = replace(record, gallery_posters=gallery)
+        else:
+            gallery = tuple(dict.fromkeys((*record.gallery_backdrops, image_file)))
+            updated = replace(record, gallery_backdrops=gallery)
+        self._store_tmdb_record(updated)
+        return GLib.SOURCE_REMOVE
+
+    def _on_tmdb_details_failed(
+        self,
+        record_id: str,
+        generation: int,
+        message: str,
+    ) -> bool:
+        if self._tmdb_detail_generations.get(record_id) != generation:
+            return GLib.SOURCE_REMOVE
         self._tmdb_details_loading.discard(record_id)
         print(f"CineShelf TMDB details: {message}", file=sys.stderr)
         return GLib.SOURCE_REMOVE
@@ -3967,6 +4511,8 @@ class CineShelfWindow:
         self._tmdb_details_loading.clear()
         self._tmdb_details_loaded.clear()
         self._toast("Connecting to TMDB…")
+        if self.simkl_connected:
+            self._load_tmdb_library_async(self.records)
         self._load_tmdb_explore_async()
 
     def _effective_status(self, record: TitleRecord) -> str:
@@ -4153,6 +4699,7 @@ class CineShelfWindow:
         self._clear_container(self.explore_feed_box)
         self._clear_container(self.explore_grid)
         self._explore_card_buttons: dict[str, Gtk.Button] = {}
+        self._explore_card_layouts: dict[str, tuple[str, int]] = {}
 
         if not self.explore_visible_records:
             self.explore_feed_box.append(self.explore_empty_page)
@@ -4176,6 +4723,7 @@ class CineShelfWindow:
                 card = self._create_explore_card(record, kind, span)
                 self.explore_grid.attach(card, column, row, span, 1)
                 self._explore_card_buttons[record.id] = card
+                self._explore_card_layouts[record.id] = (kind, span)
                 column += span
 
         self.explore_feed_box.append(self.explore_grid)
@@ -4389,7 +4937,11 @@ class CineShelfWindow:
         overlay.set_hexpand(False)
         overlay.set_halign(Gtk.Align.CENTER)
         overlay.set_valign(Gtk.Align.START)
-        overlay.set_child(PosterWidget(record, width, height))
+        poster_record = replace(
+            record,
+            artwork_file=record.poster_file or record.artwork_file,
+        )
+        overlay.set_child(PosterWidget(poster_record, width, height))
 
         score = self.ratings.get(record.id)
         if score is not None:
@@ -4460,7 +5012,13 @@ class CineShelfWindow:
     def _build_detail_hero(self, record: TitleRecord) -> None:
         self._clear_container(self.detail_poster_host)
         overlay = Gtk.Overlay()
-        overlay.set_child(PosterWidget(record, 352, 198, show_text=False))
+        hero_record = replace(
+            record,
+            artwork_file=(
+                record.backdrop_file or record.poster_file or record.artwork_file
+            ),
+        )
+        overlay.set_child(PosterWidget(hero_record, 352, 198, show_text=False))
 
         trailer_content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         trailer_content.append(Gtk.Image.new_from_icon_name("media-playback-start-symbolic"))
@@ -4989,8 +5547,14 @@ class CineShelfWindow:
     ) -> Gtk.Button:
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
         overlay = Gtk.Overlay()
+        video_record = replace(
+            record,
+            artwork_file=(
+                record.backdrop_file or record.poster_file or record.artwork_file
+            ),
+        )
         overlay.set_child(
-            PosterWidget(record, 156, 88, variant_offset=variant_offset)
+            PosterWidget(video_record, 156, 88, variant_offset=variant_offset)
         )
         play = Gtk.Label(label="▶")
         play.set_halign(Gtk.Align.CENTER)
@@ -5699,47 +6263,177 @@ class CineShelfWindow:
         self.window.set_focus(None)
         return True
 
+    @staticmethod
+    def _simkl_group(record: TitleRecord) -> str:
+        return (
+            "movies"
+            if record.media_type == "Movies"
+            else "anime" if record.media_type == "Anime" else "shows"
+        )
+
+    @staticmethod
+    def _simkl_ids(record: TitleRecord) -> dict[str, int | str]:
+        ids: dict[str, int | str] = {}
+        if record.id.startswith("simkl-"):
+            try:
+                ids["simkl"] = int(record.id.rsplit("-", 1)[1])
+            except (TypeError, ValueError):
+                pass
+        if record.tmdb_id is not None:
+            ids["tmdb"] = record.tmdb_id
+        if not ids:
+            raise simkl_client.SimklError(
+                "This title has no Simkl or TMDB identifier."
+            )
+        return ids
+
+    def _run_simkl_mutation(
+        self,
+        key: str,
+        operation: Any,
+        on_success: Any,
+        success_message: str,
+    ) -> None:
+        if not self.simkl_client_id or not self.simkl_token or not self.simkl_connected:
+            self._update_details()
+            self._toast("Connect Simkl to change ratings or lists")
+            return
+        if key in self._simkl_mutations_inflight:
+            self._update_details()
+            return
+        self._simkl_mutations_inflight.add(key)
+        self._update_details()
+
+        def worker() -> None:
+            try:
+                operation()
+            except simkl_client.SimklError as error:
+                GLib.idle_add(
+                    self._finish_simkl_mutation,
+                    key,
+                    None,
+                    "",
+                    str(error),
+                )
+                return
+            GLib.idle_add(
+                self._finish_simkl_mutation,
+                key,
+                on_success,
+                success_message,
+                None,
+            )
+
+        threading.Thread(
+            target=worker,
+            name="cineshelf-simkl-write",
+            daemon=True,
+        ).start()
+
+    def _finish_simkl_mutation(
+        self,
+        key: str,
+        on_success: Any | None,
+        success_message: str,
+        error_message: str | None,
+    ) -> bool:
+        self._simkl_mutations_inflight.discard(key)
+        if error_message is not None:
+            self._update_details()
+            self._toast(error_message)
+            return GLib.SOURCE_REMOVE
+        if on_success is not None:
+            on_success()
+        self._toast(success_message)
+        return GLib.SOURCE_REMOVE
+
+    def _write_simkl_list_change(
+        self,
+        record: TitleRecord,
+        *,
+        adding: bool,
+        on_success: Any,
+    ) -> None:
+        if adding:
+            operation = lambda: simkl_client.set_list_status(
+                self.simkl_client_id or "",
+                self.simkl_token or "",
+                self._simkl_group(record),
+                self._simkl_ids(record),
+                "plantowatch",
+            )
+        else:
+            operation = lambda: simkl_client.remove_from_library(
+                self.simkl_client_id or "",
+                self.simkl_token or "",
+                self._simkl_group(record),
+                self._simkl_ids(record),
+            )
+        self._run_simkl_mutation(
+            f"{record.id}:watchlist",
+            operation,
+            on_success,
+            "Added to Simkl watchlist" if adding else "Removed from Simkl watchlist",
+        )
+
     def _on_watched_clicked(self, _button: Gtk.Button) -> None:
         if self.selected_id is None:
             return
         record = self.records_by_id[self.selected_id]
         if self.active_destination == "explore" and record.id in self.explore_ids:
-            if record.id in self.bookmarks:
-                self.bookmarks.discard(record.id)
-                self.status_overrides.pop(record.id, None)
-                self.completed.discard(record.id)
-                message = "Removed from watchlist"
+            adding = record.id not in self.bookmarks
+
+            def apply_explore_watchlist() -> None:
+                if adding:
+                    self.bookmarks.add(record.id)
+                    if record.status != "Watchlist":
+                        self.status_overrides[record.id] = "Watchlist"
+                else:
+                    self.bookmarks.discard(record.id)
+                    self.status_overrides.pop(record.id, None)
+                    self.completed.discard(record.id)
+                self._save_user_state()
+                self._update_sidebar_counts()
+                self._refresh_explore(reset_scroll=False)
+
+            self._write_simkl_list_change(
+                record,
+                adding=adding,
+                on_success=apply_explore_watchlist,
+            )
+            return
+        watched = record.id not in self.completed
+
+        def apply_watched() -> None:
+            if watched:
+                self.completed.add(record.id)
+                self.status_overrides[record.id] = "Watched"
+                self.title_watched_at[record.id] = self._watched_timestamp()
             else:
-                self.bookmarks.add(record.id)
-                if record.status != "Watchlist":
-                    self.status_overrides[record.id] = "Watchlist"
-                message = "Added to watchlist"
+                self.completed.discard(record.id)
+                self.status_overrides[record.id] = "Watchlist"
+                self.title_watched_at.pop(record.id, None)
+            if self.status_overrides[record.id] == record.status:
+                self.status_overrides.pop(record.id)
             self._save_user_state()
             self._update_sidebar_counts()
-            self._refresh_explore(reset_scroll=False)
-            self._toast(message)
-            return
-        if self.selected_id in self.completed:
-            self.completed.remove(self.selected_id)
-            self.status_overrides[self.selected_id] = "Watchlist"
-            self.title_watched_at.pop(self.selected_id, None)
-            message = "Marked as unwatched"
-        else:
-            self.completed.add(self.selected_id)
-            self.status_overrides[self.selected_id] = "Watched"
-            self.title_watched_at[self.selected_id] = self._watched_timestamp()
-            message = "Marked as watched"
-        if self.status_overrides[self.selected_id] == record.status:
-            self.status_overrides.pop(self.selected_id)
-        self._save_user_state()
-        self._update_sidebar_counts()
-        if self.active_destination == "explore":
-            self._refresh_explore(reset_scroll=False)
-        elif self.active_destination == "profile":
-            self._refresh_profile()
-        else:
-            self._refresh_results()
-        self._toast(message)
+            if self.active_destination == "profile":
+                self._refresh_profile()
+            else:
+                self._refresh_results()
+
+        self._run_simkl_mutation(
+            f"{record.id}:watched",
+            lambda: simkl_client.set_watched(
+                self.simkl_client_id or "",
+                self.simkl_token or "",
+                self._simkl_group(record),
+                self._simkl_ids(record),
+                watched,
+            ),
+            apply_watched,
+            "Marked as watched" if watched else "Marked as unwatched",
+        )
 
     def _on_favorite_toggled(self, button: Gtk.ToggleButton) -> None:
         if self._updating_details or self.selected_id is None:
@@ -5756,22 +6450,29 @@ class CineShelfWindow:
     def _on_bookmark_toggled(self, button: Gtk.ToggleButton) -> None:
         if self._updating_details or self.selected_id is None:
             return
-        if button.get_active():
-            self.bookmarks.add(self.selected_id)
-            message = "Added to watchlist"
-        else:
-            self.bookmarks.discard(self.selected_id)
-            message = "Removed from watchlist"
-            if self.selected_id in self.explore_ids:
-                self.status_overrides.pop(self.selected_id, None)
-                self.completed.discard(self.selected_id)
-        self._save_user_state()
-        if self.active_destination == "explore":
-            self._refresh_explore(reset_scroll=False)
-        elif self.selected_id in self.explore_ids:
+        record = self.records_by_id[self.selected_id]
+        adding = button.get_active()
+
+        def apply_bookmark() -> None:
+            if adding:
+                self.bookmarks.add(record.id)
+            else:
+                self.bookmarks.discard(record.id)
+                if record.id in self.explore_ids:
+                    self.status_overrides.pop(record.id, None)
+                    self.completed.discard(record.id)
+            self._save_user_state()
             self._update_sidebar_counts()
-            self._refresh_results()
-        self._toast(message)
+            if self.active_destination == "explore":
+                self._refresh_explore(reset_scroll=False)
+            elif record.id in self.explore_ids:
+                self._refresh_results()
+
+        self._write_simkl_list_change(
+            record,
+            adding=adding,
+            on_success=apply_bookmark,
+        )
 
     def _on_more_clicked(self, _button: Gtk.Button) -> None:
         record = self.records_by_id.get(self.selected_id or "")
@@ -5785,15 +6486,42 @@ class CineShelfWindow:
     ) -> None:
         if self._updating_details or self.selected_id is None or not button.get_active():
             return
-        self.ratings[self.selected_id] = score
-        self._save_user_state()
-        if self.active_destination == "explore":
-            self._refresh_explore(reset_scroll=False)
-        elif self.active_destination == "profile":
-            self._refresh_profile()
-        else:
-            self._refresh_results()
-        self._toast(f"Your rating is now {score}/10")
+        record = self.records_by_id[self.selected_id]
+
+        def apply_rating() -> None:
+            self.ratings[record.id] = score
+            sources = tuple(
+                source
+                for source in record.external_ratings
+                if source[0] != "Your rating"
+            ) + (("Your rating", str(score)),)
+            self._store_tmdb_record(
+                replace(
+                    self.records_by_id[record.id],
+                    user_rating=score,
+                    external_ratings=sources,
+                )
+            )
+            self._save_user_state()
+            if self.active_destination == "explore":
+                self._refresh_explore(reset_scroll=False)
+            elif self.active_destination == "profile":
+                self._refresh_profile()
+            else:
+                self._refresh_results()
+
+        self._run_simkl_mutation(
+            f"{record.id}:rating",
+            lambda: simkl_client.set_rating(
+                self.simkl_client_id or "",
+                self.simkl_token or "",
+                self._simkl_group(record),
+                self._simkl_ids(record),
+                score,
+            ),
+            apply_rating,
+            f"Your Simkl rating is now {score}/10",
+        )
 
     def _toast(self, message: str) -> None:
         toast = Adw.Toast.new(message)
@@ -5923,6 +6651,10 @@ class CineShelfApplication(Adw.Application):
         window = self.props.active_window
         if window is not None:
             window.present()
+
+    def do_shutdown(self) -> None:
+        simkl_client.close_image_http_client()
+        Adw.Application.do_shutdown(self)
 
     def _show_about_dialog(
         self,

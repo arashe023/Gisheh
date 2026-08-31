@@ -14,6 +14,7 @@ payload_files=(
   "cineshelf.py"
   "tmdb_client.py"
   "simkl_client.py"
+  "image_http.py"
   "cineshelf.ui"
   "cineshelf.css"
   "library.json"
@@ -29,6 +30,7 @@ done
 python3 - <<'PY'
 import cairo
 import gi
+import httpx
 import sys
 
 if sys.version_info < (3, 10):
@@ -63,6 +65,7 @@ install -d "$app_dir"
 install -m 755 "$script_dir/cineshelf.py" "$app_dir/cineshelf.py"
 install -m 644 "$script_dir/tmdb_client.py" "$app_dir/tmdb_client.py"
 install -m 644 "$script_dir/simkl_client.py" "$app_dir/simkl_client.py"
+install -m 644 "$script_dir/image_http.py" "$app_dir/image_http.py"
 install -m 644 "$script_dir/cineshelf.ui" "$app_dir/cineshelf.ui"
 install -m 644 "$script_dir/cineshelf.css" "$app_dir/cineshelf.css"
 install -m 644 "$script_dir/library.json" "$app_dir/library.json"

@@ -5,11 +5,15 @@ from __future__ import annotations
 
 import json
 import os
+import threading
+import time
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+
+import image_http
 
 
 APP_ID = "io.github.cineshelf.CineShelf"
@@ -48,7 +52,9 @@ def store_token(token: str) -> Path:
         raise TmdbError("The TMDB read token cannot be empty.")
 
     destination = token_file()
-    temporary = destination.with_name(f".{destination.name}.tmp")
+    temporary = destination.with_name(
+        f".{destination.name}.{threading.get_ident()}.tmp"
+    )
     try:
         parent_was_missing = not destination.parent.exists()
         destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -78,6 +84,64 @@ def cache_dir() -> Path:
     return base / APP_ID / "tmdb-images"
 
 
+def metadata_cache_dir() -> Path:
+    configured = os.environ.get("XDG_CACHE_HOME")
+    base = Path(configured).expanduser() if configured else Path.home() / ".cache"
+    return base / APP_ID / "tmdb-metadata"
+
+
+def _summary_file(media_type: str, tmdb_id: int) -> Path:
+    namespace = "movie" if media_type == "movie" else "tv"
+    return metadata_cache_dir() / f"{namespace}-{tmdb_id}.json"
+
+
+def load_summary(
+    media_type: str,
+    tmdb_id: int,
+    *,
+    max_age_seconds: float | None = None,
+) -> dict[str, Any] | None:
+    destination = _summary_file(media_type, tmdb_id)
+    try:
+        cached = json.loads(destination.read_text(encoding="utf-8"))
+        payload = cached["payload"]
+        fetched_at = float(cached["fetched_at"])
+    except (OSError, ValueError, TypeError, KeyError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if max_age_seconds is not None and time.time() - fetched_at > max_age_seconds:
+        return None
+    return payload
+
+
+def store_summary(
+    media_type: str,
+    tmdb_id: int,
+    payload: dict[str, Any],
+) -> Path:
+    destination = _summary_file(media_type, tmdb_id)
+    temporary = destination.with_name(f".{destination.name}.tmp")
+    try:
+        destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        temporary.write_text(
+            json.dumps(
+                {"fetched_at": time.time(), "payload": payload},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+            encoding="utf-8",
+        )
+        temporary.replace(destination)
+    except OSError as error:
+        try:
+            temporary.unlink()
+        except OSError:
+            pass
+        raise TmdbError(f"Could not cache TMDB metadata: {error}") from None
+    return destination
+
+
 def request_json(
     path: str,
     *,
@@ -98,9 +162,11 @@ def request_json(
         with urlopen(request, timeout=timeout) as response:
             return json.load(response)
     except HTTPError as error:
-        if error.code == 401:
+        code = error.code
+        error.close()
+        if code == 401:
             raise TmdbError("TMDB rejected the read token (HTTP 401).") from None
-        raise TmdbError(f"TMDB request failed with HTTP {error.code}.") from None
+        raise TmdbError(f"TMDB request failed with HTTP {code}.") from None
     except (URLError, TimeoutError, OSError, ValueError) as error:
         reason = getattr(error, "reason", error)
         raise TmdbError(f"Could not reach TMDB: {reason}") from None
@@ -155,6 +221,23 @@ def fetch_details(
     )
 
 
+def fetch_summary(
+    token: str,
+    media_type: str,
+    tmdb_id: int,
+    *,
+    language: str = "en-US",
+) -> dict[str, Any]:
+    namespace = "movie" if media_type == "movie" else "tv"
+    payload = request_json(
+        f"/{namespace}/{tmdb_id}",
+        token=token,
+        params={"language": language},
+    )
+    store_summary(namespace, tmdb_id, payload)
+    return payload
+
+
 def cache_image(image_path: str | None, *, size: str = "w780") -> str | None:
     if not image_path:
         return None
@@ -165,23 +248,27 @@ def cache_image(image_path: str | None, *, size: str = "w780") -> str | None:
     if destination.is_file() and destination.stat().st_size > 0:
         return str(destination)
 
-    request = Request(
-        f"{IMAGE_ROOT}/{size}/{image_path.lstrip('/')}",
-        headers={"User-Agent": USER_AGENT},
-    )
-    temporary = destination.with_suffix(f"{destination.suffix}.tmp")
     try:
         destination.parent.mkdir(parents=True, exist_ok=True)
-        with urlopen(request, timeout=15) as response:
-            payload = response.read(8 * 1024 * 1024 + 1)
-        if not payload or len(payload) > 8 * 1024 * 1024:
-            return None
-        temporary.write_bytes(payload)
-        temporary.replace(destination)
-        return str(destination)
-    except (HTTPError, URLError, TimeoutError, OSError):
-        try:
-            temporary.unlink()
-        except OSError:
-            pass
+    except OSError:
         return None
+    downloaded = image_http.download(
+        f"{IMAGE_ROOT}/{size}/{image_path.lstrip('/')}",
+        destination,
+        max_bytes=8 * 1024 * 1024,
+    )
+    return str(destination) if downloaded else None
+
+
+def cached_image(image_path: str | None, *, size: str = "w780") -> str | None:
+    if not image_path:
+        return None
+    safe_name = Path(image_path).name
+    if not safe_name:
+        return None
+    destination = cache_dir() / f"{size}-{safe_name}"
+    return (
+        str(destination)
+        if destination.is_file() and destination.stat().st_size > 0
+        else None
+    )
