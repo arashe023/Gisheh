@@ -219,18 +219,19 @@ def fetch_activities(client_id: str, token: str) -> dict[str, Any]:
 
 
 def fetch_library(client_id: str, token: str) -> dict[str, Any]:
-    library: dict[str, Any] = {}
-    for group in LIBRARY_GROUPS:
-        payload = _request_json(
-            f"/sync/all-items/{group}",
-            client_id=client_id,
-            token=token,
-            params={"language": "en", "extended": "ids_only"},
-            timeout=60,
-        )
-        items = payload.get(group, [])
-        library[group] = items if isinstance(items, list) else []
-    return library
+    payload = _request_json(
+        "/sync/all-items",
+        client_id=client_id,
+        token=token,
+        params={"language": "en"},
+        timeout=60,
+    )
+    return {
+        group: payload.get(group, [])
+        if isinstance(payload.get(group), list)
+        else []
+        for group in LIBRARY_GROUPS
+    }
 
 
 def fetch_library_delta(
@@ -244,7 +245,6 @@ def fetch_library_delta(
         token=token,
         params={
             "language": "en",
-            "extended": "ids_only",
             "date_from": date_from,
         },
         timeout=60,
@@ -309,6 +309,21 @@ def library_ids(payload: dict[str, Any]) -> dict[str, set[str]]:
         }
         for group in LIBRARY_GROUPS
     }
+
+
+def library_has_metadata(payload: dict[str, Any]) -> bool:
+    """Reject ID-only snapshots, which cannot render titles or artwork."""
+    for group, object_key in LIBRARY_GROUPS.items():
+        items = payload.get(group)
+        if not isinstance(items, list):
+            return False
+        for entry in items:
+            if not isinstance(entry, dict):
+                return False
+            media = entry.get(object_key)
+            if not isinstance(media, dict) or not str(media.get("title") or "").strip():
+                return False
+    return True
 
 
 def removals_changed(
@@ -410,6 +425,8 @@ def cache_avatar(url: str | None) -> str | None:
     if not url:
         return None
     destination = cache_dir() / "images" / "avatar.jpg"
+    if destination.is_file() and destination.stat().st_size > 0:
+        return str(destination)
     try:
         destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         request = Request(url, headers={"User-Agent": USER_AGENT})

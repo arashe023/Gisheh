@@ -107,26 +107,53 @@ class SimklClientTests(unittest.TestCase):
             with self.assertRaisesRegex(simkl_client.SimklError, "Invalid client"):
                 simkl_client.request_pin("client-id")
 
-    def test_initial_library_fetches_types_sequentially(self) -> None:
-        calls: list[str] = []
+    def test_initial_library_fetches_renderable_metadata(self) -> None:
+        calls: list[tuple[str, dict[str, object]]] = []
 
-        def fake_request(path: str, **_kwargs: object) -> dict[str, object]:
-            calls.append(path)
-            group = path.rsplit("/", 1)[-1]
-            return {group: [{"group": group}]}
+        def fake_request(path: str, **kwargs: object) -> dict[str, object]:
+            calls.append((path, kwargs))
+            return {
+                "movies": [{"group": "movies"}],
+                "shows": [{"group": "shows"}],
+                "anime": [{"group": "anime"}],
+            }
 
         with patch.object(simkl_client, "_request_json", side_effect=fake_request):
             library = simkl_client.fetch_library("client-id", "access-token")
 
         self.assertEqual(
-            calls,
-            [
-                "/sync/all-items/movies",
-                "/sync/all-items/shows",
-                "/sync/all-items/anime",
-            ],
+            [path for path, _kwargs in calls],
+            ["/sync/all-items"],
         )
+        self.assertEqual(calls[0][1]["params"], {"language": "en"})
         self.assertEqual(library["anime"], [{"group": "anime"}])
+
+    def test_metadata_validation_rejects_id_only_snapshots(self) -> None:
+        id_only = {
+            "movies": [{"movie": {"ids": {"simkl": 1, "tmdb": 2}}}],
+            "shows": [],
+            "anime": [],
+        }
+        complete = {
+            "movies": [
+                {
+                    "movie": {
+                        "title": "Example",
+                        "poster": "12/example",
+                        "ids": {"simkl": 1},
+                    }
+                }
+            ],
+            "shows": [],
+            "anime": [],
+        }
+        self.assertFalse(simkl_client.library_has_metadata(id_only))
+        self.assertTrue(simkl_client.library_has_metadata(complete))
+        self.assertTrue(
+            simkl_client.library_has_metadata(
+                {"movies": [], "shows": [], "anime": []}
+            )
+        )
 
     def test_delta_merge_updates_and_reconciles_removed_items(self) -> None:
         movie = lambda simkl_id, title: {

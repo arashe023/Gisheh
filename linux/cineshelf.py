@@ -1006,16 +1006,20 @@ class CineShelfWindow:
         self.simkl_settings: dict[str, Any] = {}
         self.simkl_stats: dict[str, Any] = {}
         self.simkl_connected = False
+        self.simkl_snapshot_needs_repair = False
         if self.simkl_client_id and self.simkl_token:
             snapshot = simkl_client.load_snapshot()
             if snapshot is not None:
-                simkl_records = title_records_from_simkl(
+                library_payload = (
                     snapshot.get("library", {})
                     if isinstance(snapshot.get("library"), dict)
                     else {}
                 )
-                if simkl_records:
+                if simkl_client.library_has_metadata(library_payload):
+                    simkl_records = title_records_from_simkl(library_payload)
                     self.records = simkl_records
+                else:
+                    self.simkl_snapshot_needs_repair = True
                 self.simkl_settings = (
                     snapshot.get("settings", {})
                     if isinstance(snapshot.get("settings"), dict)
@@ -1122,6 +1126,12 @@ class CineShelfWindow:
         self._refresh_results()
         if self.tmdb_token:
             self._load_tmdb_explore_async()
+        if self.simkl_snapshot_needs_repair:
+            self._app_log(
+                "Incomplete Simkl snapshot detected; scheduling metadata repair.",
+                level=logging.WARNING,
+            )
+            GLib.idle_add(self._start_simkl_sync)
 
     def _object(self, name: str) -> Any:
         obj = self.builder.get_object(name)
@@ -2383,6 +2393,8 @@ class CineShelfWindow:
             except simkl_client.SimklError as error:
                 GLib.idle_add(self._on_simkl_failed, str(error), error.code)
                 return
+            if self._simkl_poll_cancelled:
+                return
             access_token = str(payload.get("access_token") or "")
             if payload.get("result") == "OK" and access_token:
                 GLib.idle_add(self._on_simkl_authorized, access_token)
@@ -2451,8 +2463,23 @@ class CineShelfWindow:
                 and isinstance(snapshot.get("settings"), dict)
                 else {}
             )
+            cached_stats = (
+                snapshot.get("stats", {})
+                if isinstance(snapshot, dict)
+                and isinstance(snapshot.get("stats"), dict)
+                else {}
+            )
             last_sync = str(cached_activities.get("all") or "")
-            has_incremental_state = cached_library is not None and bool(last_sync)
+            metadata_is_valid = (
+                cached_library is not None
+                and simkl_client.library_has_metadata(cached_library)
+            )
+            has_incremental_state = metadata_is_valid and bool(last_sync)
+            repairing_metadata = (
+                cached_library is not None
+                and bool(last_sync)
+                and not metadata_is_valid
+            )
             if has_incremental_state:
                 phase_started = time.monotonic()
                 self._app_log("Checking Simkl activity timestamps.")
@@ -2486,6 +2513,18 @@ class CineShelfWindow:
                     "Account settings %s.",
                     "refreshed" if settings_changed else "loaded from cache",
                 )
+            elif repairing_metadata:
+                activities = cached_activities
+                if cached_settings:
+                    settings = cached_settings
+                    self._app_log(
+                        "Metadata repair: account settings loaded from cache."
+                    )
+                else:
+                    self._app_log(
+                        "Metadata repair: fetching missing account settings."
+                    )
+                    settings = simkl_client.fetch_settings(client_id, token)
             else:
                 activities = {}
                 self._app_log("Initial sync: fetching Simkl account settings.")
@@ -2503,22 +2542,33 @@ class CineShelfWindow:
                 raise simkl_client.SimklError(
                     "Simkl did not return a valid account ID."
                 )
-            phase_started = time.monotonic()
-            self._app_log("Fetching Simkl watch statistics.")
-            stats = simkl_client.fetch_stats(client_id, token, user_id)
-            self._app_log(
-                "Watch statistics received in %.1fs.",
-                time.monotonic() - phase_started,
-            )
+            if repairing_metadata and cached_stats:
+                stats = cached_stats
+                self._app_log("Metadata repair: watch statistics loaded from cache.")
+            else:
+                phase_started = time.monotonic()
+                self._app_log("Fetching Simkl watch statistics.")
+                stats = simkl_client.fetch_stats(client_id, token, user_id)
+                self._app_log(
+                    "Watch statistics received in %.1fs.",
+                    time.monotonic() - phase_started,
+                )
             if not has_incremental_state:
                 phase_started = time.monotonic()
-                self._app_log(
-                    "Initial sync: downloading movies, shows, and anime sequentially."
-                )
+                if repairing_metadata:
+                    self._app_log(
+                        "Repairing title and poster metadata from Simkl."
+                    )
+                else:
+                    self._app_log(
+                        "Initial sync: downloading complete library metadata."
+                    )
                 library = simkl_client.fetch_library(client_id, token)
-                activities = simkl_client.fetch_activities(client_id, token)
+                if not repairing_metadata:
+                    activities = simkl_client.fetch_activities(client_id, token)
                 self._app_log(
-                    "Initial library download finished in %.1fs.",
+                    "%s library download finished in %.1fs.",
+                    "Metadata repair" if repairing_metadata else "Initial",
                     time.monotonic() - phase_started,
                 )
             elif activities.get("all") == last_sync:
@@ -2547,6 +2597,10 @@ class CineShelfWindow:
                 self._app_log(
                     "Incremental library merge finished in %.1fs.",
                     time.monotonic() - phase_started,
+                )
+            if not simkl_client.library_has_metadata(library):
+                raise simkl_client.SimklError(
+                    "Simkl returned an ID-only library without title metadata."
                 )
             group_counts = {
                 group: len(library.get(group, ()))
@@ -2633,6 +2687,7 @@ class CineShelfWindow:
         self.simkl_settings = settings
         self.simkl_stats = stats
         self.simkl_connected = True
+        self.simkl_snapshot_needs_repair = False
         self._replace_library(records)
         self.completed = {
             record.id for record in records if record.status == "Watched"
