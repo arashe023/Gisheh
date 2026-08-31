@@ -177,6 +177,9 @@ class TitleRecord:
     artwork_file: str | None = None
     poster_file: str | None = None
     backdrop_file: str | None = None
+    gallery_backdrops: tuple[str, ...] = ()
+    gallery_posters: tuple[str, ...] = ()
+    video_titles: tuple[str, ...] = ()
 
     @classmethod
     def from_mapping(cls, raw: dict[str, Any]) -> "TitleRecord":
@@ -1208,9 +1211,10 @@ class CineShelfWindow:
         self.image_mode = "backdrops"
 
         self.cast_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        self.cast_scroller = self._horizontal_scroller(self.cast_box, 116)
         self.cast_section = self._detail_section(
             "Cast & Crew",
-            self._horizontal_scroller(self.cast_box, 116),
+            self.cast_scroller,
             action_label="See all",
         )
 
@@ -1229,9 +1233,10 @@ class CineShelfWindow:
         self.series_section = self._detail_section("Episodes & Seasons", series_content)
 
         self.videos_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        self.videos_scroller = self._horizontal_scroller(self.videos_box, 126)
         self.videos_section = self._detail_section(
             "Videos",
-            self._horizontal_scroller(self.videos_box, 126),
+            self.videos_scroller,
         )
 
         self.images_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
@@ -1239,9 +1244,10 @@ class CineShelfWindow:
         self.image_switcher.add(Adw.Toggle(name="backdrops", label="Backdrops"))
         self.image_switcher.add(Adw.Toggle(name="posters", label="Posters"))
         self.image_switcher.set_active_name("backdrops")
+        self.images_scroller = self._horizontal_scroller(self.images_box, 154)
         self.images_section = self._detail_section(
             "Images",
-            self._horizontal_scroller(self.images_box, 154),
+            self.images_scroller,
             end_widget=self.image_switcher,
         )
 
@@ -1249,9 +1255,13 @@ class CineShelfWindow:
             orientation=Gtk.Orientation.HORIZONTAL,
             spacing=10,
         )
+        self.recommendations_scroller = self._horizontal_scroller(
+            self.recommendations_box,
+            186,
+        )
         self.recommendations_section = self._detail_section(
             "More like this",
-            self._horizontal_scroller(self.recommendations_box, 186),
+            self.recommendations_scroller,
         )
 
         for section in (
@@ -1505,9 +1515,10 @@ class CineShelfWindow:
         label.add_css_class("heading")
         heading.set_start_widget(label)
 
+        end_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         if end_widget is not None:
-            heading.set_end_widget(end_widget)
-        elif action_label is not None:
+            end_box.append(end_widget)
+        if action_label is not None:
             action = Gtk.Button(label=action_label)
             action.add_css_class("flat")
             action.add_css_class("caption")
@@ -1517,16 +1528,94 @@ class CineShelfWindow:
                     f"Open all {section_title.lower()}"
                 ),
             )
-            heading.set_end_widget(action)
+            end_box.append(action)
+        if isinstance(content, Gtk.ScrolledWindow):
+            end_box.append(self._carousel_controls(content, title))
+        if end_box.get_first_child() is not None:
+            heading.set_end_widget(end_box)
 
         section.append(heading)
         section.append(content)
         return section
 
+    def _carousel_controls(
+        self,
+        scroller: Gtk.ScrolledWindow,
+        title: str,
+    ) -> Gtk.Box:
+        controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        controls.add_css_class("linked")
+
+        previous = Gtk.Button.new_from_icon_name("go-previous-symbolic")
+        previous.set_tooltip_text(f"Previous {title.lower()}")
+        previous.add_css_class("flat")
+        previous.connect(
+            "clicked",
+            lambda _button: self._scroll_carousel_page(scroller, -1),
+        )
+
+        following = Gtk.Button.new_from_icon_name("go-next-symbolic")
+        following.set_tooltip_text(f"Next {title.lower()}")
+        following.add_css_class("flat")
+        following.connect(
+            "clicked",
+            lambda _button: self._scroll_carousel_page(scroller, 1),
+        )
+
+        controls.append(previous)
+        controls.append(following)
+        scroller._carousel_controls = controls
+        scroller._carousel_previous_button = previous
+        scroller._carousel_next_button = following
+        adjustment = scroller.get_hadjustment()
+
+        def update_visibility(*_args: Any) -> None:
+            scrollable = (
+                adjustment.get_upper() - adjustment.get_page_size()
+                > adjustment.get_lower() + 1
+            )
+            controls.set_visible(scrollable)
+
+        adjustment.connect("changed", update_visibility)
+        update_visibility()
+        GLib.idle_add(lambda: (update_visibility(), GLib.SOURCE_REMOVE)[1])
+        return controls
+
+    @staticmethod
+    def _scroll_carousel_page(
+        scroller: Gtk.ScrolledWindow,
+        direction: int,
+    ) -> None:
+        adjustment = scroller.get_hadjustment()
+        lower = adjustment.get_lower()
+        maximum = max(lower, adjustment.get_upper() - adjustment.get_page_size())
+        current = adjustment.get_value()
+        step = max(1.0, adjustment.get_page_size() * 0.88)
+
+        if direction < 0:
+            target = maximum if current <= lower + 1 else max(lower, current - step)
+        else:
+            target = lower if current >= maximum - 1 else min(maximum, current + step)
+
+        previous_animation = getattr(scroller, "_carousel_animation", None)
+        if previous_animation is not None:
+            previous_animation.pause()
+        target_property = Adw.PropertyAnimationTarget.new(adjustment, "value")
+        animation = Adw.TimedAnimation.new(
+            scroller,
+            current,
+            target,
+            240,
+            target_property,
+        )
+        animation.set_easing(Adw.Easing.EASE_OUT_CUBIC)
+        scroller._carousel_animation = animation
+        animation.play()
+
     @staticmethod
     def _horizontal_scroller(child: Gtk.Widget, height: int) -> Gtk.ScrolledWindow:
         scroller = Gtk.ScrolledWindow()
-        scroller.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
+        scroller.set_policy(Gtk.PolicyType.EXTERNAL, Gtk.PolicyType.NEVER)
         scroller.set_min_content_height(height)
         scroller.set_propagate_natural_height(True)
         scroller.set_child(child)
@@ -1702,11 +1791,9 @@ class CineShelfWindow:
         column_width = max(88, (content_width - 10 * (columns - 1)) / columns)
         card_width = column_width * span + 10 * (span - 1)
 
-        if kind == "hero":
-            return round(min(280, max(180, card_width / 2.35)))
-        if kind == "landscape":
-            return round(min(230, max(160, card_width * 0.62)))
-        return round(min(270, max(190, card_width * 1.42)))
+        if kind == "poster":
+            return round(card_width * 3 / 2)
+        return round(card_width * 9 / 16)
 
     def _update_genre_model(self) -> None:
         genres = sorted(
@@ -1868,8 +1955,18 @@ class CineShelfWindow:
             ) or record.genres
             cast_items = [
                 item
-                for item in payload.get("credits", {}).get("cast", ())[:8]
+                for item in payload.get("credits", {}).get("cast", ())[:12]
                 if isinstance(item, dict)
+            ]
+            backdrop_items = [
+                item
+                for item in payload.get("images", {}).get("backdrops", ())[:8]
+                if isinstance(item, dict) and item.get("file_path")
+            ]
+            poster_items = [
+                item
+                for item in payload.get("images", {}).get("posters", ())[:8]
+                if isinstance(item, dict) and item.get("file_path")
             ]
             with ThreadPoolExecutor(max_workers=6) as executor:
                 profile_jobs = [
@@ -1891,6 +1988,28 @@ class CineShelfWindow:
                         profile_jobs,
                         strict=True,
                     )
+                )
+                backdrop_jobs = [
+                    executor.submit(
+                        tmdb_client.cache_image,
+                        str(item["file_path"]),
+                        size="w500",
+                    )
+                    for item in backdrop_items
+                ]
+                poster_jobs = [
+                    executor.submit(
+                        tmdb_client.cache_image,
+                        str(item["file_path"]),
+                        size="w342",
+                    )
+                    for item in poster_items
+                ]
+                gallery_backdrops = tuple(
+                    path for job in backdrop_jobs if (path := job.result()) is not None
+                )
+                gallery_posters = tuple(
+                    path for job in poster_jobs if (path := job.result()) is not None
                 )
             if record.tmdb_media_type == "movie":
                 runtime_minutes = int(payload.get("runtime") or 0)
@@ -1936,6 +2055,16 @@ class CineShelfWindow:
                 for item in payload.get("networks", ())
                 if isinstance(item, dict) and item.get("name")
             ]
+            video_titles = tuple(
+                str(item.get("name"))
+                for item in payload.get("videos", {}).get("results", ())[:8]
+                if isinstance(item, dict) and item.get("name")
+            )
+            recommendation_ids = tuple(
+                f"tmdb-{record.tmdb_media_type}-{int(item['id'])}"
+                for item in payload.get("recommendations", {}).get("results", ())[:12]
+                if isinstance(item, dict) and item.get("id") is not None
+            )
             updated = replace(
                 record,
                 runtime=runtime,
@@ -1947,9 +2076,13 @@ class CineShelfWindow:
                 network=", ".join(networks[:2]) or record.network,
                 cast=cast or record.cast,
                 seasons=seasons or record.seasons,
+                recommendations=recommendation_ids or record.recommendations,
                 artwork_file=backdrop_file or poster_file or record.artwork_file,
                 poster_file=poster_file or record.poster_file,
                 backdrop_file=backdrop_file or record.backdrop_file,
+                gallery_backdrops=gallery_backdrops,
+                gallery_posters=gallery_posters,
+                video_titles=video_titles,
             )
         except tmdb_client.TmdbError as error:
             GLib.idle_add(self._on_tmdb_details_failed, record.id, str(error))
@@ -2515,7 +2648,7 @@ class CineShelfWindow:
     def _build_detail_hero(self, record: TitleRecord) -> None:
         self._clear_container(self.detail_poster_host)
         overlay = Gtk.Overlay()
-        overlay.set_child(PosterWidget(record, 356, 192, show_text=False))
+        overlay.set_child(PosterWidget(record, 352, 198, show_text=False))
 
         trailer_content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         trailer_content.append(Gtk.Image.new_from_icon_name("media-playback-start-symbolic"))
@@ -2594,7 +2727,7 @@ class CineShelfWindow:
     @staticmethod
     def _cast_members(record: TitleRecord) -> tuple[CastMember, ...]:
         if record.cast:
-            return record.cast[:6]
+            return record.cast[:12]
         return (
             CastMember(record.creator, "Director / Creator"),
             CastMember("Lead Ensemble", "Cast"),
@@ -2994,7 +3127,7 @@ class CineShelfWindow:
 
         self._clear_container(self.episode_hero_host)
         self.episode_hero_host.append(
-            self._episode_artwork(record, episode, 356, 200)
+            self._episode_artwork(record, episode, 352, 198)
         )
         self.episode_title_label.set_label(episode.title)
         self.episode_date_label.set_label(episode.date)
@@ -3071,17 +3204,26 @@ class CineShelfWindow:
 
     def _populate_videos(self, record: TitleRecord) -> None:
         self._clear_container(self.videos_box)
-        self.videos_box.append(self._video_card(record, "New trailer", 1))
-        self.videos_box.append(self._video_card(record, "Official trailer", 2))
+        titles = record.video_titles or ("New trailer", "Official trailer")
+        for index, title in enumerate(titles[:8], start=1):
+            self.videos_box.append(self._video_card(record, title, index))
 
     def _populate_images(self, record: TitleRecord) -> None:
         self._clear_container(self.images_box)
         is_poster = self.image_mode == "posters"
-        width, height, count = (96, 144, 3) if is_poster else (180, 104, 2)
-        for index in range(count):
+        width, height = (96, 144) if is_poster else (176, 99)
+        gallery = record.gallery_posters if is_poster else record.gallery_backdrops
+        fallback_count = 3 if is_poster else 2
+        artwork_files = gallery or tuple(None for _index in range(fallback_count))
+        for index, artwork_file in enumerate(artwork_files):
+            image_record = (
+                replace(record, artwork_file=artwork_file)
+                if artwork_file is not None
+                else record
+            )
             button = Gtk.Button()
             button.set_child(
-                PosterWidget(record, width, height, variant_offset=index + 1)
+                PosterWidget(image_record, width, height, variant_offset=index + 1)
             )
             button.add_css_class("flat")
             button.add_css_class("detail-media-card")
@@ -3103,16 +3245,16 @@ class CineShelfWindow:
             if candidate is not None and candidate.id != record.id and candidate not in related:
                 related.append(candidate)
 
-        if len(related) < 3:
+        if len(related) < 8:
             for candidate in self.records:
                 if candidate.id == record.id or candidate in related:
                     continue
                 shares_genre = bool(set(candidate.genres).intersection(record.genres))
                 if candidate.media_type == record.media_type or shares_genre:
                     related.append(candidate)
-                if len(related) == 3:
+                if len(related) == 8:
                     break
-        return tuple(related[:3])
+        return tuple(related[:8])
 
     def _populate_recommendations(self, record: TitleRecord) -> None:
         self._clear_container(self.recommendations_box)
