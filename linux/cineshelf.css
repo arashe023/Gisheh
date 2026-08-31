@@ -101,8 +101,10 @@
 }
 
 .explore-pane,
-.explore-pane > viewport {
-  background-color: @view_bg_color;
+.explore-pane > scrolledwindow,
+.explore-pane > scrolledwindow > viewport,
+.explore-pane > scrolledwindow > viewport > box {
+  background-color: @headerbar_bg_color;
 }
 
 .explore-grid {
@@ -181,7 +183,7 @@
 }
 
 .cast-card {
-  min-width: 76px;
+  min-width: 82px;
 }
 
 .cast-name {

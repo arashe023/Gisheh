@@ -6,8 +6,10 @@ from __future__ import annotations
 import json
 import math
 import os
+import random
 import sys
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
@@ -115,6 +117,7 @@ def user_state_file() -> Path:
 class CastMember:
     name: str
     role: str
+    profile_file: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,6 +175,8 @@ class TitleRecord:
     tmdb_id: int | None = None
     tmdb_media_type: str | None = None
     artwork_file: str | None = None
+    poster_file: str | None = None
+    backdrop_file: str | None = None
 
     @classmethod
     def from_mapping(cls, raw: dict[str, Any]) -> "TitleRecord":
@@ -287,6 +292,16 @@ class TitleRecord:
                 if raw.get("artworkFile") is not None
                 else None
             ),
+            poster_file=(
+                str(raw["posterFile"])
+                if raw.get("posterFile") is not None
+                else None
+            ),
+            backdrop_file=(
+                str(raw["backdropFile"])
+                if raw.get("backdropFile") is not None
+                else None
+            ),
         )
 
 
@@ -324,7 +339,8 @@ def title_record_from_tmdb(
     raw: dict[str, Any],
     media_type: str,
     position: int,
-    artwork_file: str | None,
+    poster_file: str | None,
+    backdrop_file: str | None,
 ) -> TitleRecord:
     tmdb_id = int(raw["id"])
     tmdb_namespace = "movie" if media_type == "Movies" else "tv"
@@ -339,8 +355,6 @@ def title_record_from_tmdb(
     origin = raw.get("origin_country") or ()
     country = str(origin[0]) if origin else "—"
     rating = round(float(raw.get("vote_average") or 0), 1)
-    layout = "hero" if position == 1 else "landscape" if position % 6 == 0 else "poster"
-
     return TitleRecord(
         id=f"tmdb-{tmdb_namespace}-{tmdb_id}",
         title=title,
@@ -370,11 +384,62 @@ def title_record_from_tmdb(
         featured=position == 1,
         popularity=round(float(raw.get("popularity") or 0)),
         release_rank=position,
-        discover_layout=layout,
+        discover_layout="poster",
         tmdb_id=tmdb_id,
         tmdb_media_type=tmdb_namespace,
-        artwork_file=artwork_file,
+        artwork_file=poster_file or backdrop_file,
+        poster_file=poster_file,
+        backdrop_file=backdrop_file,
     )
+
+
+def build_explore_layout_plan(
+    count: int,
+    columns: int,
+    seed: int,
+) -> tuple[tuple[tuple[str, int], ...], ...]:
+    """Build varied mosaic rows which always consume the complete grid width."""
+    columns = max(2, columns)
+    if columns == 2:
+        patterns = (
+            (("poster", 1), ("poster", 1)),
+            (("landscape", 2),),
+            (("hero", 2),),
+        )
+    elif columns == 3:
+        patterns = (
+            (("poster", 1), ("poster", 1), ("poster", 1)),
+            (("landscape", 2), ("poster", 1)),
+            (("poster", 1), ("landscape", 2)),
+            (("hero", 3),),
+        )
+    else:
+        patterns = (
+            tuple(("poster", 1) for _ in range(columns)),
+            tuple(("landscape", 2) for _ in range(columns // 2))
+            if columns % 2 == 0
+            else (("landscape", 2), *(('poster', 1) for _ in range(columns - 2))),
+            (("landscape", 2), *(('poster', 1) for _ in range(columns - 2))),
+            tuple(("poster", 1) for _ in range(columns - 2)) + (("landscape", 2),),
+            (("hero", columns),),
+        )
+
+    rng = random.Random(seed)
+    rows: list[tuple[tuple[str, int], ...]] = []
+    remaining = max(0, count)
+    previous_signature: tuple[str, ...] | None = None
+    while remaining:
+        candidates = [pattern for pattern in patterns if len(pattern) <= remaining]
+        alternatives = [
+            pattern
+            for pattern in candidates
+            if tuple(kind for kind, _span in pattern) != previous_signature
+        ]
+        pattern = rng.choice(alternatives or candidates)
+        rows.append(pattern)
+        previous_signature = tuple(kind for kind, _span in pattern)
+        remaining -= len(pattern)
+    return tuple(rows)
 
 
 def _hex_to_rgb(value: str) -> tuple[float, float, float]:
@@ -701,6 +766,7 @@ class CineShelfWindow:
         self.explore_period = "This month"
         self.explore_genre = "All genres"
         self.explore_columns = 4
+        self._explore_layout_seed = random.SystemRandom().randrange(1 << 63)
         self._explore_resize_source_id = 0
         self._last_explore_layout_width = 0
 
@@ -1642,24 +1708,42 @@ class CineShelfWindow:
         try:
             collections = tmdb_client.fetch_explore(token)
             records: list[TitleRecord] = []
-            for media_type in MEDIA_TYPES:
+            work_items = [
+                (media_type, position, raw)
+                for media_type in MEDIA_TYPES
                 for position, raw in enumerate(
                     collections.get(media_type, ())[:18],
                     start=1,
-                ):
-                    image_path = raw.get("poster_path")
-                    if position == 1 or position % 6 == 0:
-                        image_path = raw.get("backdrop_path") or image_path
-                    artwork_file = tmdb_client.cache_image(
-                        str(image_path) if image_path else None,
-                        size="w780" if position == 1 or position % 6 == 0 else "w500",
+                )
+            ]
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                image_jobs = [
+                    (
+                        executor.submit(
+                            tmdb_client.cache_image,
+                            str(raw.get("poster_path") or "") or None,
+                            size="w500",
+                        ),
+                        executor.submit(
+                            tmdb_client.cache_image,
+                            str(raw.get("backdrop_path") or "") or None,
+                            size="w780",
+                        ),
                     )
+                    for _media_type, _position, raw in work_items
+                ]
+                for (media_type, position, raw), (poster_job, backdrop_job) in zip(
+                    work_items,
+                    image_jobs,
+                    strict=True,
+                ):
                     records.append(
                         title_record_from_tmdb(
                             raw,
                             media_type,
                             position,
-                            artwork_file,
+                            poster_job.result(),
+                            backdrop_job.result(),
                         )
                     )
             if not records:
@@ -1712,8 +1796,12 @@ class CineShelfWindow:
                 record.tmdb_media_type or "movie",
                 record.tmdb_id or 0,
             )
-            artwork_file = tmdb_client.cache_image(
-                str(payload.get("backdrop_path") or payload.get("poster_path") or ""),
+            poster_file = tmdb_client.cache_image(
+                str(payload.get("poster_path") or ""),
+                size="w500",
+            )
+            backdrop_file = tmdb_client.cache_image(
+                str(payload.get("backdrop_path") or ""),
                 size="w780",
             )
             genres = tuple(
@@ -1721,11 +1809,32 @@ class CineShelfWindow:
                 for item in payload.get("genres", ())
                 if isinstance(item, dict) and item.get("name")
             ) or record.genres
-            cast = tuple(
-                CastMember(str(item.get("name", "—")), str(item.get("character", "Cast")))
+            cast_items = [
+                item
                 for item in payload.get("credits", {}).get("cast", ())[:8]
                 if isinstance(item, dict)
-            )
+            ]
+            with ThreadPoolExecutor(max_workers=6) as executor:
+                profile_jobs = [
+                    executor.submit(
+                        tmdb_client.cache_image,
+                        str(item.get("profile_path") or "") or None,
+                        size="w185",
+                    )
+                    for item in cast_items
+                ]
+                cast = tuple(
+                    CastMember(
+                        str(item.get("name", "—")),
+                        str(item.get("character", "Cast")),
+                        profile_job.result(),
+                    )
+                    for item, profile_job in zip(
+                        cast_items,
+                        profile_jobs,
+                        strict=True,
+                    )
+                )
             if record.tmdb_media_type == "movie":
                 runtime_minutes = int(payload.get("runtime") or 0)
                 directors = [
@@ -1781,7 +1890,9 @@ class CineShelfWindow:
                 network=", ".join(networks[:2]) or record.network,
                 cast=cast or record.cast,
                 seasons=seasons or record.seasons,
-                artwork_file=artwork_file or record.artwork_file,
+                artwork_file=backdrop_file or poster_file or record.artwork_file,
+                poster_file=poster_file or record.poster_file,
+                backdrop_file=backdrop_file or record.backdrop_file,
             )
         except tmdb_client.TmdbError as error:
             GLib.idle_add(self._on_tmdb_details_failed, record.id, str(error))
@@ -2036,22 +2147,6 @@ class CineShelfWindow:
         else:
             self._scroll_to_value(self.explore_scroller, scroll_value)
 
-    def _explore_layout_kind(self, record: TitleRecord) -> str:
-        """Use the editorial mosaic only for the unfiltered Trending feed."""
-        if (
-            self.explore_sort_key != "trending"
-            or self.explore_period != "This month"
-            or self.explore_genre != "All genres"
-        ):
-            return "poster"
-        kind = record.discover_layout
-        if kind not in ("hero", "landscape", "poster"):
-            return "poster"
-        # Three equal columns cannot tile two-wide landscapes without holes.
-        if self.explore_columns == 3 and kind == "landscape":
-            return "poster"
-        return kind
-
     def _populate_explore_feed(self) -> None:
         self._clear_container(self.explore_feed_box)
         self._clear_container(self.explore_grid)
@@ -2063,39 +2158,23 @@ class CineShelfWindow:
 
         records = list(self.explore_visible_records)
         columns = self.explore_columns
+        data_signature = sum(
+            (position + 1) * sum(record.id.encode("utf-8"))
+            for position, record in enumerate(records)
+        )
+        layout_seed = self._explore_layout_seed ^ data_signature ^ (columns << 24)
+        layout = build_explore_layout_plan(len(records), columns, layout_seed)
 
-        row = 0
-        column = 0
-        for record in records:
-            kind = self._explore_layout_kind(record)
-            if kind == "hero":
-                if column:
-                    row += 1
-                    column = 0
-                span = columns
-            elif kind == "landscape":
-                span = min(2, columns)
-                if column + span > columns:
-                    row += 1
-                    column = 0
-            else:
-                span = 1
-                if column >= columns:
-                    row += 1
-                    column = 0
-
-            card = self._create_explore_card(record, kind)
-            self.explore_grid.attach(card, column, row, span, 1)
-            self._explore_card_buttons[record.id] = card
-
-            if kind == "hero":
-                row += 1
-                column = 0
-            else:
+        record_index = 0
+        for row, pattern in enumerate(layout):
+            column = 0
+            for kind, span in pattern:
+                record = records[record_index]
+                record_index += 1
+                card = self._create_explore_card(record, kind)
+                self.explore_grid.attach(card, column, row, span, 1)
+                self._explore_card_buttons[record.id] = card
                 column += span
-                if column >= columns:
-                    row += 1
-                    column = 0
 
         self.explore_feed_box.append(self.explore_grid)
         if any(record.tmdb_id is not None for record in self.explore_visible_records):
@@ -2141,8 +2220,17 @@ class CineShelfWindow:
         overlay.set_size_request(-1, card_height)
         art_width = 600 if kind == "hero" else 320 if kind == "landscape" else 160
         art_height = card_height
-        artwork = PosterWidget(
+        preferred_artwork = (
+            record.backdrop_file
+            if kind in ("hero", "landscape")
+            else record.poster_file
+        )
+        artwork_record = replace(
             record,
+            artwork_file=preferred_artwork or record.artwork_file,
+        )
+        artwork = PosterWidget(
+            artwork_record,
             art_width,
             art_height,
             variant_offset=1 if kind == "landscape" else 0,
@@ -2503,23 +2591,35 @@ class CineShelfWindow:
         for member in self._cast_members(record):
             card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
             card.set_valign(Gtk.Align.START)
+            card.set_size_request(82, -1)
             card.add_css_class("cast-card")
 
             avatar = Adw.Avatar(size=58, text=member.name, show_initials=True)
             avatar.set_halign(Gtk.Align.CENTER)
             avatar.set_tooltip_text(f"{member.name}, {member.role}")
+            if member.profile_file and Path(member.profile_file).is_file():
+                try:
+                    avatar.set_custom_image(
+                        Gdk.Texture.new_from_filename(member.profile_file)
+                    )
+                except GLib.Error:
+                    pass
 
             name = Gtk.Label(label=member.name)
             name.set_wrap(True)
             name.set_lines(2)
-            name.set_max_width_chars(12)
+            name.set_width_chars(11)
+            name.set_max_width_chars(11)
             name.set_justify(Gtk.Justification.CENTER)
+            name.set_xalign(0.5)
             name.add_css_class("caption")
             name.add_css_class("cast-name")
 
             role = Gtk.Label(label=member.role)
             role.set_ellipsize(Pango.EllipsizeMode.END)
-            role.set_max_width_chars(12)
+            role.set_width_chars(11)
+            role.set_max_width_chars(11)
+            role.set_xalign(0.5)
             role.add_css_class("caption")
             role.add_css_class("dim-label")
 

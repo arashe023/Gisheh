@@ -832,7 +832,6 @@
     <property name="vexpand">true</property>
     <property name="width-request">300</property>
     <style>
-      <class name="view"/>
       <class name="explore-pane"/>
     </style>
     <child>
