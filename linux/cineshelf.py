@@ -1306,7 +1306,6 @@ class CineShelfWindow:
         self.profile_tabs = Adw.ToggleGroup()
         for key, label in (
             ("statistics", "Statistics"),
-            ("history", "Watch History"),
             ("watched", "Watched"),
         ):
             self.profile_tabs.add(Adw.Toggle(name=key, label=label))
@@ -1322,16 +1321,11 @@ class CineShelfWindow:
             orientation=Gtk.Orientation.VERTICAL,
             spacing=20,
         )
-        self.profile_history_host = Gtk.Box(
-            orientation=Gtk.Orientation.VERTICAL,
-            spacing=14,
-        )
         self.profile_watched_host = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
             spacing=14,
         )
         self.profile_stack.add_named(self.profile_statistics_host, "statistics")
-        self.profile_stack.add_named(self.profile_history_host, "history")
         self.profile_stack.add_named(self.profile_watched_host, "watched")
         content.append(self.profile_stack)
         self.profile_tabs.connect("notify::active-name", self._on_profile_tab_changed)
@@ -1401,14 +1395,25 @@ class CineShelfWindow:
             television_minutes += watched_for_record * per_episode
 
         activity: Counter[date] = Counter()
-        for watched_at in self.episode_watched_at.values():
+        episode_events: list[tuple[date, int]] = []
+        movie_events: list[tuple[date, int]] = []
+        for key, watched_at in self.episode_watched_at.items():
             watched_date = parse_watched_date(watched_at)
             if watched_date is not None:
                 activity[watched_date] += 1
-        for watched_at in self.title_watched_at.values():
+                record = self.records_by_id.get(key.split("/", 1)[0])
+                if record is not None:
+                    per_episode = runtime_minutes(record.runtime)
+                    if per_episode == 0:
+                        per_episode = 24 if record.media_type == "Anime" else 45
+                    episode_events.append((watched_date, per_episode))
+        for record_id, watched_at in self.title_watched_at.items():
             watched_date = parse_watched_date(watched_at)
             if watched_date is not None:
                 activity[watched_date] += 1
+                record = self.records_by_id.get(record_id)
+                if record is not None:
+                    movie_events.append((watched_date, runtime_minutes(record.runtime)))
 
         today = date.today()
         current_streak = 0
@@ -1429,19 +1434,36 @@ class CineShelfWindow:
             for active_day, count in activity.items()
             if active_day.year == today.year and active_day.month == today.month
         }
+        in_current_month = lambda watched_date: (
+            watched_date.year == today.year and watched_date.month == today.month
+        )
+        in_current_year = lambda watched_date: watched_date.year == today.year
         month_episode_count = sum(
-            1
-            for value in self.episode_watched_at.values()
-            if (watched_date := parse_watched_date(value)) is not None
-            and watched_date.year == today.year
-            and watched_date.month == today.month
+            1 for watched_date, _minutes in episode_events if in_current_month(watched_date)
         )
         month_movie_count = sum(
-            1
-            for value in self.title_watched_at.values()
-            if (watched_date := parse_watched_date(value)) is not None
-            and watched_date.year == today.year
-            and watched_date.month == today.month
+            1 for watched_date, _minutes in movie_events if in_current_month(watched_date)
+        )
+        year_episode_count = sum(
+            1 for watched_date, _minutes in episode_events if in_current_year(watched_date)
+        )
+        year_movie_count = sum(
+            1 for watched_date, _minutes in movie_events if in_current_year(watched_date)
+        )
+        month_minutes = sum(
+            minutes
+            for watched_date, minutes in (*episode_events, *movie_events)
+            if in_current_month(watched_date)
+        )
+        year_minutes = sum(
+            minutes
+            for watched_date, minutes in (*episode_events, *movie_events)
+            if in_current_year(watched_date)
+        )
+        year_month_activity = Counter(
+            watched_date.month
+            for watched_date, _minutes in (*episode_events, *movie_events)
+            if in_current_year(watched_date)
         )
         rating_histogram = Counter(self.ratings.values())
         genres = Counter(
@@ -1463,6 +1485,11 @@ class CineShelfWindow:
             "month_activity": month_activity,
             "month_episode_count": month_episode_count,
             "month_movie_count": month_movie_count,
+            "month_minutes": month_minutes,
+            "year_episode_count": year_episode_count,
+            "year_movie_count": year_movie_count,
+            "year_minutes": year_minutes,
+            "year_month_activity": year_month_activity,
             "current_streak": current_streak,
             "longest_streak": longest_streak,
             "active_days_year": sum(
@@ -1470,37 +1497,60 @@ class CineShelfWindow:
             ),
         }
 
-    def _build_month_review(self, stats: dict[str, Any]) -> Gtk.Box:
-        now = date.today()
-        card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
-        card.add_css_class("profile-review-card")
-        icon = Gtk.Image.new_from_icon_name("x-office-calendar-symbolic")
-        icon.set_pixel_size(32)
-        card.append(icon)
-        copy = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        copy.set_hexpand(True)
-        title = Gtk.Label(label="Month in Review", xalign=0)
-        title.add_css_class("heading")
-        copy.append(title)
-        summary = Gtk.Label(
-            label=(
-                f"{stats['month_episode_count']} episodes · "
-                f"{stats['month_movie_count']} movies"
-            ),
-            xalign=0,
-        )
-        summary.add_css_class("dim-label")
-        copy.append(summary)
-        card.append(copy)
-        month = Gtk.Label(label=now.strftime("%B %Y"))
-        month.add_css_class("heading")
-        card.append(month)
-        return card
+    @staticmethod
+    def _review_metric(value: str, label: str) -> Gtk.Box:
+        metric = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        metric.set_hexpand(True)
+        value_label = Gtk.Label(label=value, xalign=0)
+        value_label.add_css_class("title-2")
+        metric.append(value_label)
+        caption = Gtk.Label(label=label, xalign=0)
+        caption.add_css_class("caption")
+        caption.add_css_class("dim-label")
+        metric.append(caption)
+        return metric
 
-    def _build_activity_card(self, stats: dict[str, Any]) -> Gtk.Box:
+    def _build_review_summary(
+        self,
+        period: str,
+        minutes: int,
+        episodes: int,
+        movies: int,
+        active_days: int,
+    ) -> Gtk.Box:
+        summary = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        summary.add_css_class("profile-review-summary")
+        period_label = Gtk.Label(label=period, xalign=0)
+        period_label.add_css_class("heading")
+        summary.append(period_label)
+        watch_time = Gtk.Label(label=format_watch_time(minutes), xalign=0)
+        watch_time.add_css_class("review-watch-time")
+        summary.append(watch_time)
+        watch_caption = Gtk.Label(label="Watch time", xalign=0)
+        watch_caption.add_css_class("dim-label")
+        summary.append(watch_caption)
+
+        metrics = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=24)
+        metrics.append(self._review_metric(str(episodes), "Episodes"))
+        metrics.append(self._review_metric(str(movies), "Movies"))
+        metrics.append(self._review_metric(str(active_days), "Active days"))
+        summary.append(metrics)
+        return summary
+
+    def _build_monthly_review(self, stats: dict[str, Any]) -> Gtk.Box:
         today = date.today()
-        card = self._profile_card()
-        card.append(self._profile_heading("Daily streak activity", today.strftime("%B %Y")))
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
+        content.append(
+            self._build_review_summary(
+                today.strftime("%B %Y"),
+                stats["month_minutes"],
+                stats["month_episode_count"],
+                stats["month_movie_count"],
+                len(stats["month_activity"]),
+            )
+        )
+
+        content.append(self._profile_heading("Daily activity"))
 
         grid = Gtk.Grid(column_spacing=7, row_spacing=7)
         weekdays = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
@@ -1531,13 +1581,13 @@ class CineShelfWindow:
                 cell.add_css_class("today")
             cell.set_tooltip_text(f"{current.strftime('%B %d')}: {count} watched")
             grid.attach(cell, position % 7, position // 7 + 1, 1, 1)
-        card.append(grid)
+        content.append(grid)
 
         footer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, homogeneous=True)
         for value, label in (
             (stats["current_streak"], "Current streak"),
             (stats["longest_streak"], "Longest streak"),
-            (stats["active_days_year"], "Active days"),
+            (len(stats["month_activity"]), "Active this month"),
         ):
             item = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
             value_label = Gtk.Label(label=str(value))
@@ -1549,8 +1599,98 @@ class CineShelfWindow:
             caption.add_css_class("dim-label")
             item.append(caption)
             footer.append(item)
-        card.append(footer)
+        content.append(footer)
+        return content
+
+    def _build_yearly_review(self, stats: dict[str, Any]) -> Gtk.Box:
+        today = date.today()
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
+        content.append(
+            self._build_review_summary(
+                str(today.year),
+                stats["year_minutes"],
+                stats["year_episode_count"],
+                stats["year_movie_count"],
+                stats["active_days_year"],
+            )
+        )
+        content.append(self._profile_heading("Activity through the year"))
+
+        chart = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=8,
+            homogeneous=True,
+        )
+        maximum = max(stats["year_month_activity"].values(), default=1)
+        for month in range(1, 13):
+            column = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+            column.set_valign(Gtk.Align.END)
+            bar_host = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            bar_host.set_vexpand(True)
+            bar_host.set_valign(Gtk.Align.END)
+            count = stats["year_month_activity"].get(month, 0)
+            bar = Gtk.Box()
+            bar.set_size_request(-1, max(4, round(count / maximum * 112)))
+            bar.add_css_class("review-month-bar")
+            if month == today.month:
+                bar.add_css_class("current")
+            bar.set_tooltip_text(f"{date(today.year, month, 1).strftime('%B')}: {count} watched")
+            bar_host.append(bar)
+            column.append(bar_host)
+            label = Gtk.Label(label=date(today.year, month, 1).strftime("%b")[0])
+            label.add_css_class("caption")
+            label.add_css_class("dim-label")
+            column.append(label)
+            chart.append(column)
+        content.append(chart)
+        return content
+
+    def _build_review_card(self, stats: dict[str, Any]) -> Gtk.Box:
+        card = self._profile_card()
+        card.add_css_class("profile-review-shell")
+
+        heading = Gtk.CenterBox()
+        heading.set_start_widget(
+            self._profile_heading("Review", "Your activity over time")
+        )
+        self.profile_review_switcher = Adw.ToggleGroup()
+        self.profile_review_switcher.add(Adw.Toggle(name="month", label="Month"))
+        self.profile_review_switcher.add(Adw.Toggle(name="year", label="Year"))
+        active = getattr(self, "profile_review_mode", "month")
+        self.profile_review_switcher.set_active_name(active)
+        self.profile_review_switcher.connect(
+            "notify::active-name",
+            self._on_profile_review_changed,
+        )
+        heading.set_end_widget(self.profile_review_switcher)
+        card.append(heading)
+
+        self.profile_review_stack = Gtk.Stack()
+        self.profile_review_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+        self.profile_review_stack.set_transition_duration(180)
+        self.profile_review_stack.set_vhomogeneous(False)
+        self.profile_review_stack.add_named(
+            self._build_monthly_review(stats),
+            "month",
+        )
+        self.profile_review_stack.add_named(
+            self._build_yearly_review(stats),
+            "year",
+        )
+        self.profile_review_stack.set_visible_child_name(active)
+        card.append(self.profile_review_stack)
         return card
+
+    def _on_profile_review_changed(
+        self,
+        group: Adw.ToggleGroup,
+        _parameter: Any,
+    ) -> None:
+        active = group.get_active_name()
+        if active not in ("month", "year"):
+            return
+        self.profile_review_mode = active
+        self.profile_review_stack.set_visible_child_name(active)
 
     def _build_habits_card(self, stats: dict[str, Any]) -> Gtk.Box:
         card = self._profile_card()
@@ -1625,46 +1765,10 @@ class CineShelfWindow:
             card.append(progress)
         return card
 
-    def _build_recently_watched(self, stats: dict[str, Any]) -> Gtk.Box:
-        section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        records = sorted(
-            stats["watched_records"],
-            key=lambda record: (self.title_watched_at.get(record.id, ""), record.order),
-            reverse=True,
-        )[:10]
-        for record in records:
-            content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-            content.append(PosterWidget(record, 96, 144))
-            title = Gtk.Label(label=record.title, xalign=0)
-            title.set_ellipsize(Pango.EllipsizeMode.END)
-            title.set_max_width_chars(14)
-            title.add_css_class("caption")
-            title.add_css_class("heading")
-            content.append(title)
-            button = Gtk.Button(child=content)
-            button.add_css_class("flat")
-            button.add_css_class("profile-poster-card")
-            button.connect(
-                "clicked",
-                lambda _button, record_id=record.id: self._on_profile_record_clicked(
-                    record_id
-                ),
-            )
-            row.append(button)
-        scroller = self._horizontal_scroller(row, 188)
-        self.profile_recent_scroller = scroller
-        header = Gtk.CenterBox()
-        header.set_start_widget(self._profile_heading("Recently watched"))
-        header.set_end_widget(self._carousel_controls(scroller, "Recently watched"))
-        section.append(header)
-        section.append(scroller)
-        return section
-
     def _refresh_profile(self) -> None:
         stats = self._profile_stats()
         self._clear_container(self.profile_statistics_host)
-        self.profile_statistics_host.append(self._build_month_review(stats))
+        self.profile_statistics_host.append(self._build_review_card(stats))
 
         metrics = Gtk.FlowBox()
         metrics.set_selection_mode(Gtk.SelectionMode.NONE)
@@ -1703,45 +1807,11 @@ class CineShelfWindow:
         paired.set_max_children_per_line(2)
         paired.set_column_spacing(14)
         paired.set_row_spacing(14)
-        paired.append(self._build_activity_card(stats))
         paired.append(self._build_habits_card(stats))
+        paired.append(self._build_genres_card(stats))
         self.profile_statistics_host.append(paired)
         self.profile_statistics_host.append(self._build_ratings_card(stats))
-        self.profile_statistics_host.append(self._build_genres_card(stats))
-        self.profile_statistics_host.append(self._build_recently_watched(stats))
-        self._refresh_profile_history()
         self._refresh_profile_watched(stats)
-
-    def _refresh_profile_history(self) -> None:
-        self._clear_container(self.profile_history_host)
-        self.profile_history_host.append(
-            self._profile_heading("Watch history", "Your locally stored activity")
-        )
-        history = Gtk.ListBox()
-        history.set_selection_mode(Gtk.SelectionMode.NONE)
-        history.add_css_class("boxed-list")
-        events: list[tuple[str, str, str]] = []
-        for record_id, watched_at in self.title_watched_at.items():
-            record = self.records_by_id.get(record_id)
-            if record is not None:
-                events.append((watched_at, record.title, "Movie or title completed"))
-        for key, watched_at in self.episode_watched_at.items():
-            record = self.records_by_id.get(key.split("/", 1)[0])
-            if record is not None:
-                episode = key.rsplit("/", 1)[-1].upper()
-                events.append((watched_at, record.title, f"Episode {episode} watched"))
-        for watched_at, title, detail in reversed(events[-40:]):
-            row = Adw.ActionRow(title=title, subtitle=f"{detail} · {watched_at}")
-            row.add_prefix(Gtk.Image.new_from_icon_name("emblem-ok-symbolic"))
-            history.append(row)
-        if not events:
-            history.append(
-                Adw.ActionRow(
-                    title="No activity yet",
-                    subtitle="Watched movies and episodes will appear here.",
-                )
-            )
-        self.profile_history_host.append(history)
 
     def _refresh_profile_watched(self, stats: dict[str, Any]) -> None:
         self._clear_container(self.profile_watched_host)
@@ -1779,7 +1849,7 @@ class CineShelfWindow:
 
     def _on_profile_tab_changed(self, group: Adw.ToggleGroup, _parameter: Any) -> None:
         active = group.get_active_name()
-        if active in ("statistics", "history", "watched"):
+        if active in ("statistics", "watched"):
             self.profile_stack.set_visible_child_name(active)
 
     def _on_profile_record_clicked(self, record_id: str) -> None:
