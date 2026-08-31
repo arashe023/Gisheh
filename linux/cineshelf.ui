@@ -309,7 +309,7 @@
                             <property name="hexpand">true</property>
                             <property name="width-request">300</property>
                             <style>
-                              <class name="view"/>
+                              <class name="main-content-pane"/>
                             </style>
                             <child>
                               <object class="GtkBox" id="library_header">
@@ -483,8 +483,7 @@
                             <property name="hexpand">false</property>
                             <property name="vexpand">true</property>
                             <style>
-                              <class name="secondary-sidebar-pane"/>
-                              <class name="detail-tint-surface"/>
+                              <class name="detail-panel-surface"/>
                             </style>
                             <property name="child">
                               <object class="AdwNavigationView" id="detail_navigation">
@@ -505,8 +504,7 @@
                                         <property name="hscrollbar-policy">never</property>
                                         <property name="vexpand">true</property>
                                         <style>
-                                          <class name="secondary-sidebar-pane"/>
-                                          <class name="detail-tint-surface"/>
+                                          <class name="detail-panel-surface"/>
                                         </style>
                                         <property name="child">
                                           <object class="GtkBox" id="detail_box">
@@ -832,6 +830,7 @@
     <property name="vexpand">true</property>
     <property name="width-request">300</property>
     <style>
+      <class name="main-content-pane"/>
       <class name="explore-pane"/>
     </style>
     <child>

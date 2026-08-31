@@ -19,7 +19,7 @@ SPEC.loader.exec_module(cineshelf)
 
 class ExploreLayoutTests(unittest.TestCase):
     def test_every_row_fills_the_grid_without_holes(self) -> None:
-        for columns in (2, 3, 4):
+        for columns in (2, 3, 4, 5):
             for count in range(1, 24):
                 plan = cineshelf.build_explore_layout_plan(count, columns, seed=91)
                 self.assertEqual(sum(len(row) for row in plan), count)

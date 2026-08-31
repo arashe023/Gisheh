@@ -3,12 +3,16 @@
 }
 
 .secondary-sidebar-pane {
-  background-color: @secondary_sidebar_bg_color;
+  background-color: @window_bg_color;
 }
 
 .detail-tint-surface,
-.detail-tint-surface > viewport {
-  background-color: @secondary_sidebar_bg_color;
+.detail-tint-surface > viewport,
+.detail-panel-surface,
+.detail-panel-surface > viewport,
+.detail-panel-layout,
+.detail-panel-layout navigationview {
+  background-color: @window_bg_color;
 }
 
 .detail-tint-content,
@@ -20,7 +24,18 @@
 
 .detail-subpage-toolbar,
 .detail-subpage-toolbar headerbar {
-  background-color: @secondary_sidebar_bg_color;
+  background-color: @window_bg_color;
+}
+
+.detail-panel-header {
+  min-height: 46px;
+  background-color: @window_bg_color;
+}
+
+.main-content-pane,
+.main-content-pane scrolledwindow,
+.main-content-pane viewport {
+  background-color: @window_bg_color;
 }
 
 .accent {
@@ -89,8 +104,8 @@
 }
 
 .poster-grid-card {
-  min-width: 112px;
-  min-height: 209px;
+  min-width: 96px;
+  min-height: 185px;
   padding: 6px;
   border-radius: 12px;
 }
@@ -98,13 +113,6 @@
 .poster-grid-title {
   min-height: 38px;
   font-weight: 600;
-}
-
-.explore-pane,
-.explore-pane > scrolledwindow,
-.explore-pane > scrolledwindow > viewport,
-.explore-pane > scrolledwindow > viewport > box {
-  background-color: @window_bg_color;
 }
 
 .explore-grid {

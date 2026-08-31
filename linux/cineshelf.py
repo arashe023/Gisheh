@@ -768,6 +768,7 @@ class CineShelfWindow:
         self.explore_columns = 4
         self._explore_layout_seed = random.SystemRandom().randrange(1 << 63)
         self._explore_resize_source_id = 0
+        self._details_resize_source_id = 0
         self._last_explore_layout_width = 0
 
         self.bookmarks = {"hush-girls", "dune-two", "past-lives", "pluto"}
@@ -805,7 +806,6 @@ class CineShelfWindow:
 
         self._load_css()
         self._bind_objects()
-        self.details_surface.set_visible(False)
         self._build_browser_stack()
         self._configure_accessibility()
         self._build_header_controls()
@@ -833,13 +833,6 @@ class CineShelfWindow:
             provider,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
         )
-        self.detail_tint_provider = Gtk.CssProvider()
-        Gtk.StyleContext.add_provider_for_display(
-            self.window.get_display(),
-            self.detail_tint_provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1,
-        )
-
     def _bind_objects(self) -> None:
         names = (
             "toast_overlay",
@@ -912,8 +905,13 @@ class CineShelfWindow:
             setattr(self, name, self._object(name))
 
     def _build_browser_stack(self) -> None:
-        """Place the XML-defined Library and Explore panes in one native stack."""
+        """Place the content pages beside an animated end details panel."""
         self.main_workspace.remove(self.library_pane)
+        self.main_workspace.remove(self.details_surface)
+        divider = self.main_workspace.get_last_child()
+        if isinstance(divider, Gtk.Separator):
+            self.main_workspace.remove(divider)
+
         self.browser_stack = Gtk.Stack()
         self.browser_stack.set_hexpand(True)
         self.browser_stack.set_vexpand(True)
@@ -923,6 +921,44 @@ class CineShelfWindow:
         self.browser_stack.add_named(self.explore_pane, "explore")
         self.browser_stack.set_visible_child_name("library")
         self.main_workspace.prepend(self.browser_stack)
+
+        self.details_surface.set_child(None)
+        details_layout = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        details_layout.add_css_class("detail-panel-layout")
+
+        details_header = Gtk.CenterBox()
+        details_header.set_margin_start(12)
+        details_header.set_margin_end(8)
+        details_header.add_css_class("detail-panel-header")
+        details_title = Gtk.Label(label="Details")
+        details_title.add_css_class("heading")
+        details_header.set_start_widget(details_title)
+
+        close_button = Gtk.Button.new_from_icon_name("window-close-symbolic")
+        close_button.set_tooltip_text("Close details (Esc)")
+        close_button.add_css_class("flat")
+        close_button.add_css_class("circular")
+        close_button.connect("clicked", self._on_details_close_clicked)
+        details_header.set_end_widget(close_button)
+
+        details_layout.append(details_header)
+        details_layout.append(Gtk.Separator())
+        details_layout.append(self.detail_navigation)
+        self.details_surface.set_child(details_layout)
+        self.details_surface.set_visible(True)
+
+        panel_layout = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        panel_layout.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
+        panel_layout.append(self.details_surface)
+
+        self.details_revealer = Gtk.Revealer()
+        self.details_revealer.set_transition_type(
+            Gtk.RevealerTransitionType.SLIDE_LEFT
+        )
+        self.details_revealer.set_transition_duration(220)
+        self.details_revealer.set_reveal_child(False)
+        self.details_revealer.set_child(panel_layout)
+        self.main_workspace.append(self.details_revealer)
 
     def _configure_accessibility(self) -> None:
         self.storage_progress.update_property(
@@ -1114,9 +1150,9 @@ class CineShelfWindow:
         self.grid_box.set_activate_on_single_click(True)
         self.grid_box.set_homogeneous(False)
         self.grid_box.set_min_children_per_line(1)
-        self.grid_box.set_max_children_per_line(8)
-        self.grid_box.set_row_spacing(16)
-        self.grid_box.set_column_spacing(12)
+        self.grid_box.set_max_children_per_line(10)
+        self.grid_box.set_row_spacing(12)
+        self.grid_box.set_column_spacing(10)
         self.grid_box.set_valign(Gtk.Align.START)
         self.grid_box.add_css_class("movie-grid")
 
@@ -1147,8 +1183,8 @@ class CineShelfWindow:
 
         self.explore_grid = Gtk.Grid()
         self.explore_grid.set_column_homogeneous(True)
-        self.explore_grid.set_column_spacing(12)
-        self.explore_grid.set_row_spacing(12)
+        self.explore_grid.set_column_spacing(10)
+        self.explore_grid.set_row_spacing(10)
         self.explore_grid.set_hexpand(True)
         self.explore_grid.set_valign(Gtk.Align.START)
         self.explore_grid.add_css_class("explore-grid")
@@ -1576,8 +1612,11 @@ class CineShelfWindow:
         key_controller.connect("key-pressed", self._on_search_key_pressed)
         self.search_entry.add_controller(key_controller)
 
-        self.style_manager = Adw.StyleManager.get_default()
-        self.style_manager.connect("notify::dark", self._on_style_scheme_changed)
+        window_key_controller = Gtk.EventControllerKey()
+        window_key_controller.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        window_key_controller.connect("key-pressed", self._on_window_key_pressed)
+        self.window.add_controller(window_key_controller)
+
         self.window.connect("realize", self._on_window_realized)
 
     def _on_window_realized(self, window: Gtk.Window) -> None:
@@ -1624,7 +1663,7 @@ class CineShelfWindow:
 
     @staticmethod
     def _explore_columns_for_width(width: int) -> int:
-        return 4 if width >= 620 else 3 if width >= 430 else 2
+        return 5 if width >= 760 else 4 if width >= 540 else 3 if width >= 390 else 2
 
     def _explore_card_height(self, kind: str) -> int:
         """Size a card from its real grid span instead of its child request."""
@@ -1636,20 +1675,20 @@ class CineShelfWindow:
         )
         content_width = max(280, pane_width - 48)
         columns = max(2, self.explore_columns)
-        column_width = max(96, (content_width - 12 * (columns - 1)) / columns)
+        column_width = max(88, (content_width - 10 * (columns - 1)) / columns)
         if kind == "hero":
             span = columns
         elif kind == "landscape":
             span = min(2, columns)
         else:
             span = 1
-        card_width = column_width * span + 12 * (span - 1)
+        card_width = column_width * span + 10 * (span - 1)
 
         if kind == "hero":
-            return round(min(360, max(220, card_width / 2)))
+            return round(min(280, max(180, card_width / 2.35)))
         if kind == "landscape":
-            return round(min(300, max(190, card_width * 0.72)))
-        return round(min(320, max(220, card_width * 1.5)))
+            return round(min(230, max(160, card_width * 0.62)))
+        return round(min(270, max(190, card_width * 1.42)))
 
     def _update_genre_model(self) -> None:
         genres = sorted(
@@ -2354,21 +2393,21 @@ class CineShelfWindow:
         child.record = record
 
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=7)
-        card.set_size_request(124, 221)
+        card.set_size_request(108, 197)
         card.set_hexpand(False)
         card.set_halign(Gtk.Align.CENTER)
         card.set_valign(Gtk.Align.START)
         card.add_css_class("poster-grid-card")
-        card.append(self._create_poster_overlay(record, 112, 168))
+        card.append(self._create_poster_overlay(record, 96, 144))
 
         title = Gtk.Label(label=record.title, xalign=0)
         title.set_wrap(True)
         title.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
         title.set_lines(2)
         title.set_ellipsize(Pango.EllipsizeMode.END)
-        title.set_max_width_chars(14)
+        title.set_max_width_chars(12)
         title.set_hexpand(False)
-        title.set_size_request(112, 38)
+        title.set_size_request(96, 38)
         title.set_tooltip_text(record.title)
         title.add_css_class("poster-grid-title")
         card.append(title)
@@ -2454,31 +2493,6 @@ class CineShelfWindow:
         copy.append(metadata)
         return copy
 
-    def _apply_detail_tint(self, record: TitleRecord) -> None:
-        red, green, blue = _hex_to_rgb(record.poster_palette[1])
-        accent = tuple(round(channel * 255) for channel in (red, green, blue))
-        is_dark = self.style_manager.get_dark() if hasattr(self, "style_manager") else True
-        top_alpha = 0.18 if is_dark else 0.09
-
-        css = f"""
-        .detail-tint-surface,
-        .detail-tint-surface > viewport {{
-          background-color: @secondary_sidebar_bg_color;
-          background-image: linear-gradient(
-            to bottom,
-            rgba({accent[0]}, {accent[1]}, {accent[2]}, {top_alpha}),
-            rgba({accent[0]}, {accent[1]}, {accent[2]}, 0.06) 360px,
-            rgba({accent[0]}, {accent[1]}, {accent[2]}, 0.00) 620px
-          );
-        }}
-        .detail-tint-content,
-        .detail-subpage-content,
-        .detail-page {{
-          background-color: transparent;
-        }}
-        """
-        self.detail_tint_provider.load_from_string(css)
-
     def _build_detail_hero(self, record: TitleRecord) -> None:
         self._clear_container(self.detail_poster_host)
         overlay = Gtk.Overlay()
@@ -2500,16 +2514,6 @@ class CineShelfWindow:
         )
         overlay.add_overlay(trailer)
 
-        close_button = Gtk.Button.new_from_icon_name("window-close-symbolic")
-        close_button.set_halign(Gtk.Align.END)
-        close_button.set_valign(Gtk.Align.START)
-        close_button.set_margin_top(8)
-        close_button.set_margin_end(8)
-        close_button.set_tooltip_text("Close details")
-        close_button.add_css_class("circular")
-        close_button.add_css_class("osd")
-        close_button.connect("clicked", self._on_details_close_clicked)
-        overlay.add_overlay(close_button)
         self.detail_poster_host.append(overlay)
 
     def _rating_sources(self, record: TitleRecord) -> tuple[tuple[str, str], ...]:
@@ -2932,7 +2936,6 @@ class CineShelfWindow:
             row.set_tooltip_text(f"Open episode {episode.number}: {episode.title}")
             self.season_episodes_list.append(row)
 
-        self._apply_detail_tint(record)
         if reset_scroll:
             self._scroll_to_top(self.season_details_scroller)
 
@@ -2979,7 +2982,6 @@ class CineShelfWindow:
         self.episode_overview_label.set_label(episode.description)
         self._populate_cast_container(self.episode_cast_box, record)
         self._update_episode_watch_controls(record, season_index, episode)
-        self._apply_detail_tint(record)
         self._scroll_to_top(self.episode_details_scroller)
 
     def _update_episode_watch_controls(
@@ -3148,7 +3150,6 @@ class CineShelfWindow:
         self.detail_record_id = record.id
         self.detail_box.set_visible(True)
         self.detail_poster_host.set_visible(True)
-        self._apply_detail_tint(record)
         self._build_detail_hero(record)
 
         is_completed = record.id in self.completed
@@ -3545,15 +3546,6 @@ class CineShelfWindow:
             else "Episode marked as unwatched"
         )
 
-    def _on_style_scheme_changed(
-        self,
-        _manager: Adw.StyleManager,
-        _parameter: Any,
-    ) -> None:
-        record = self.records_by_id.get(self.selected_id or "")
-        if record is not None:
-            self._apply_detail_tint(record)
-
     def _on_list_selected(
         self,
         _list_box: Gtk.ListBox,
@@ -3616,14 +3608,42 @@ class CineShelfWindow:
         if self.details_open == open_details:
             return
         self.details_open = open_details
-        self.details_surface.set_visible(open_details)
+        self.details_revealer.set_reveal_child(open_details)
         if not open_details:
             self._reset_detail_navigation()
         self._queue_explore_resize()
+        if self._details_resize_source_id:
+            GLib.source_remove(self._details_resize_source_id)
+        self._details_resize_source_id = GLib.timeout_add(
+            self.details_revealer.get_transition_duration() + 60,
+            self._on_details_transition_complete,
+        )
+
+    def _on_details_transition_complete(self) -> bool:
+        self._details_resize_source_id = 0
+        self._queue_explore_resize()
+        return GLib.SOURCE_REMOVE
 
     def _on_details_close_clicked(self, _button: Gtk.Button) -> None:
         self._set_details_open(False)
         self.window.set_focus(None)
+
+    def _on_window_key_pressed(
+        self,
+        _controller: Gtk.EventControllerKey,
+        keyval: int,
+        _keycode: int,
+        _state: Gdk.ModifierType,
+    ) -> bool:
+        if (
+            keyval == Gdk.KEY_Escape
+            and self.details_open
+            and self.detail_navigation.get_visible_page_tag() == "title"
+        ):
+            self._set_details_open(False)
+            self.window.set_focus(None)
+            return True
+        return False
 
     def _on_clear_filters(self, _button: Gtk.Button) -> None:
         self._updating = True
