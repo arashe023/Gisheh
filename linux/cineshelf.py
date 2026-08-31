@@ -13,7 +13,7 @@ import sys
 import threading
 import time
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from getpass import getuser
@@ -633,6 +633,51 @@ def title_records_from_simkl(payload: dict[str, Any]) -> tuple[TitleRecord, ...]
         replace(record, order=max(1, len(sortable) - position))
         for position, (_activity, record) in enumerate(sortable)
     )
+
+
+def simkl_poster_jobs(payload: dict[str, Any]) -> tuple[tuple[str, str], ...]:
+    """Return every unique Simkl poster that is not already cached locally."""
+    jobs: list[tuple[str, str]] = []
+    seen_paths: set[str] = set()
+    for group, object_key in (
+        ("movies", "movie"),
+        ("shows", "show"),
+        ("anime", "show"),
+    ):
+        entries = payload.get(group, ())
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            media = entry.get(object_key)
+            if not isinstance(media, dict):
+                continue
+            ids = media.get("ids") if isinstance(media.get("ids"), dict) else {}
+            simkl_id = ids.get("simkl")
+            poster_path = str(media.get("poster") or "")
+            if not simkl_id or not poster_path or poster_path in seen_paths:
+                continue
+            seen_paths.add(poster_path)
+            if simkl_client.cached_poster(poster_path) is None:
+                jobs.append((f"simkl-{group}-{simkl_id}", poster_path))
+    return tuple(jobs)
+
+
+def should_refresh_simkl_stats(
+    *,
+    has_incremental_state: bool,
+    repairing_metadata: bool,
+    cached_stats: dict[str, Any],
+    activities: dict[str, Any],
+    last_sync: str,
+) -> bool:
+    """Avoid the expensive statistics request when account activity is unchanged."""
+    if not cached_stats:
+        return True
+    if repairing_metadata:
+        return False
+    return not has_incremental_state or activities.get("all") != last_sync
 
 
 def build_explore_layout_plan(
@@ -2435,6 +2480,7 @@ class CineShelfWindow:
         self._app_log("Simkl sync started.")
         self.simkl_button.set_sensitive(False)
         self.simkl_button.set_label("Syncing…")
+        self.simkl_disconnect_button.set_sensitive(False)
         threading.Thread(
             target=self._simkl_sync_worker,
             args=(self.simkl_client_id, self.simkl_token),
@@ -2542,9 +2588,16 @@ class CineShelfWindow:
                 raise simkl_client.SimklError(
                     "Simkl did not return a valid account ID."
                 )
-            if repairing_metadata and cached_stats:
+            refresh_stats = should_refresh_simkl_stats(
+                has_incremental_state=has_incremental_state,
+                repairing_metadata=repairing_metadata,
+                cached_stats=cached_stats,
+                activities=activities,
+                last_sync=last_sync,
+            )
+            if not refresh_stats:
                 stats = cached_stats
-                self._app_log("Metadata repair: watch statistics loaded from cache.")
+                self._app_log("Watch statistics loaded from cache.")
             else:
                 phase_started = time.monotonic()
                 self._app_log("Fetching Simkl watch statistics.")
@@ -2612,37 +2665,10 @@ class CineShelfWindow:
                 group_counts["shows"],
                 group_counts["anime"],
             )
-            poster_paths = []
-            for group, object_key in (
-                ("movies", "movie"),
-                ("shows", "show"),
-                ("anime", "show"),
-            ):
-                for entry in library.get(group, ()):
-                    if not isinstance(entry, dict):
-                        continue
-                    media = entry.get(object_key)
-                    if isinstance(media, dict) and media.get("poster"):
-                        poster_paths.append(str(media["poster"]))
-            poster_paths = list(dict.fromkeys(poster_paths))[:80]
-            phase_started = time.monotonic()
-            self._app_log("Caching up to %d Simkl posters.", len(poster_paths))
-            with ThreadPoolExecutor(max_workers=8) as executor:
-                cached_posters = list(
-                    executor.map(simkl_client.cache_poster, poster_paths)
-                )
-            self._app_log(
-                "Poster cache finished: %d/%d available in %.1fs.",
-                sum(path is not None for path in cached_posters),
-                len(poster_paths),
-                time.monotonic() - phase_started,
-            )
-            user = settings.get("user", {})
-            if isinstance(user, dict):
-                simkl_client.cache_avatar(str(user.get("avatar") or "") or None)
             simkl_client.store_snapshot(settings, stats, library, activities)
             self._app_log("Secure local Simkl snapshot updated.")
             records = title_records_from_simkl(library)
+            poster_jobs = simkl_poster_jobs(library)
         except simkl_client.SimklError as error:
             GLib.idle_add(self._on_simkl_failed, str(error), error.code)
             return
@@ -2658,7 +2684,67 @@ class CineShelfWindow:
                 None,
             )
             return
-        GLib.idle_add(self._apply_simkl_sync, settings, stats, records)
+        GLib.idle_add(
+            self._apply_simkl_sync,
+            settings,
+            stats,
+            records,
+            len(poster_jobs),
+        )
+
+        phase_started = time.monotonic()
+        cached_count = 0
+        completed_count = 0
+        poster_batch: dict[str, str] = {}
+        if poster_jobs:
+            self._app_log(
+                "Library data is ready; caching %d missing posters in the background.",
+                len(poster_jobs),
+            )
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                futures = {
+                    executor.submit(simkl_client.cache_poster, poster_path): record_id
+                    for record_id, poster_path in poster_jobs
+                }
+                for future in as_completed(futures):
+                    completed_count += 1
+                    poster_file = future.result()
+                    if poster_file is not None:
+                        cached_count += 1
+                        poster_batch[futures[future]] = poster_file
+                    if len(poster_batch) >= 12:
+                        GLib.idle_add(
+                            self._apply_simkl_poster_batch,
+                            dict(poster_batch),
+                            completed_count,
+                            len(poster_jobs),
+                        )
+                        poster_batch.clear()
+            if poster_batch:
+                GLib.idle_add(
+                    self._apply_simkl_poster_batch,
+                    dict(poster_batch),
+                    completed_count,
+                    len(poster_jobs),
+                )
+            self._app_log(
+                "Background poster cache finished: %d/%d available in %.1fs.",
+                cached_count,
+                len(poster_jobs),
+                time.monotonic() - phase_started,
+            )
+        else:
+            self._app_log("All Simkl posters are already available locally.")
+
+        user = settings.get("user", {})
+        if isinstance(user, dict):
+            simkl_client.cache_avatar(str(user.get("avatar") or "") or None)
+        GLib.idle_add(
+            self._finish_simkl_sync,
+            len(records),
+            cached_count,
+            len(poster_jobs),
+        )
 
     def _replace_library(self, records: tuple[TitleRecord, ...]) -> None:
         self.records = records
@@ -2683,6 +2769,7 @@ class CineShelfWindow:
         settings: dict[str, Any],
         stats: dict[str, Any],
         records: tuple[TitleRecord, ...],
+        missing_posters: int,
     ) -> bool:
         self.simkl_settings = settings
         self.simkl_stats = stats
@@ -2713,23 +2800,85 @@ class CineShelfWindow:
         self._tmdb_details_loading.clear()
         self._tmdb_details_loaded.clear()
         self._update_profile_identity()
+        self.simkl_button.set_sensitive(False)
+        self.simkl_disconnect_button.set_sensitive(False)
         self._update_sidebar_counts()
         self._update_genre_model()
         self._refresh_results()
         self._refresh_profile()
-        self.simkl_button.set_sensitive(True)
         elapsed = (
             time.monotonic() - self._simkl_sync_started_at
             if self._simkl_sync_started_at
             else 0.0
         )
         self._app_log(
-            "Simkl sync completed: %d titles in %.1fs.",
+            "Simkl library data ready: %d titles in %.1fs.",
             len(records),
             elapsed,
         )
+        self.simkl_button.set_label(
+            "Loading artwork…" if missing_posters else "Finishing…"
+        )
+        self._toast(
+            f"Synced {len(records)} titles — artwork is loading in the background"
+            if missing_posters
+            else f"Synced {len(records)} titles from Simkl"
+        )
+        return GLib.SOURCE_REMOVE
+
+    def _apply_simkl_poster_batch(
+        self,
+        poster_files: dict[str, str],
+        completed: int,
+        total: int,
+    ) -> bool:
+        if not poster_files:
+            return GLib.SOURCE_REMOVE
+        self.records = tuple(
+            replace(
+                record,
+                artwork_file=poster_files[record.id],
+                poster_file=poster_files[record.id],
+            )
+            if record.id in poster_files
+            else record
+            for record in self.records
+        )
+        self.records_by_id.update({record.id: record for record in self.records})
+        if self.active_destination == "library":
+            scroll_position = self.results_scroller.get_vadjustment().get_value()
+            self._refresh_results()
+            self._scroll_to_value(self.results_scroller, scroll_position)
+        elif self.active_destination == "profile":
+            self._refresh_profile()
+        if self.detail_record_id in poster_files:
+            self._update_details()
+        self.simkl_button.set_label(f"Artwork {completed}/{total}")
+        return GLib.SOURCE_REMOVE
+
+    def _finish_simkl_sync(
+        self,
+        title_count: int,
+        cached_posters: int,
+        requested_posters: int,
+    ) -> bool:
+        elapsed = (
+            time.monotonic() - self._simkl_sync_started_at
+            if self._simkl_sync_started_at
+            else 0.0
+        )
+        self._app_log(
+            "Simkl sync completed: %d titles and %d/%d new posters in %.1fs.",
+            title_count,
+            cached_posters,
+            requested_posters,
+            elapsed,
+        )
         self._simkl_sync_started_at = 0.0
-        self._toast(f"Synced {len(records)} titles from Simkl")
+        self._update_profile_identity()
+        self.simkl_disconnect_button.set_sensitive(True)
+        if requested_posters:
+            self._toast(f"Artwork ready for {cached_posters} titles")
         return GLib.SOURCE_REMOVE
 
     def _update_profile_identity(self) -> None:
@@ -2768,6 +2917,7 @@ class CineShelfWindow:
         if not self.simkl_connected:
             self.simkl_button.add_css_class("suggested-action")
         self.simkl_disconnect_button.set_visible(self.simkl_connected)
+        self.simkl_disconnect_button.set_sensitive(True)
         self.simkl_button.set_sensitive(True)
 
     def _on_simkl_failed(self, message: str, code: int | None) -> bool:

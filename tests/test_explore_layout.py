@@ -121,6 +121,44 @@ class SimklMappingTests(unittest.TestCase):
         }
         self.assertEqual(cineshelf.title_records_from_simkl(payload), ())
 
+    def test_all_missing_posters_are_scheduled_without_an_eighty_item_cap(self) -> None:
+        payload = {
+            "movies": [
+                {
+                    "movie": {
+                        "title": f"Movie {index}",
+                        "poster": f"poster/{index}",
+                        "ids": {"simkl": index},
+                    }
+                }
+                for index in range(1, 101)
+            ]
+        }
+        with patch.object(cineshelf.simkl_client, "cached_poster", return_value=None):
+            jobs = cineshelf.simkl_poster_jobs(payload)
+        self.assertEqual(len(jobs), 100)
+        self.assertEqual(jobs[-1], ("simkl-movies-100", "poster/100"))
+
+    def test_stats_refresh_is_skipped_when_activity_is_unchanged(self) -> None:
+        self.assertFalse(
+            cineshelf.should_refresh_simkl_stats(
+                has_incremental_state=True,
+                repairing_metadata=False,
+                cached_stats={"movies": {"completed": 12}},
+                activities={"all": "2026-08-31T10:00:00Z"},
+                last_sync="2026-08-31T10:00:00Z",
+            )
+        )
+        self.assertTrue(
+            cineshelf.should_refresh_simkl_stats(
+                has_incremental_state=True,
+                repairing_metadata=False,
+                cached_stats={"movies": {"completed": 12}},
+                activities={"all": "2026-08-31T10:05:00Z"},
+                last_sync="2026-08-31T10:00:00Z",
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
