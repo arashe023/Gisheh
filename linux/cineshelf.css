@@ -104,7 +104,7 @@
 .explore-pane > scrolledwindow,
 .explore-pane > scrolledwindow > viewport,
 .explore-pane > scrolledwindow > viewport > box {
-  background-color: @headerbar_bg_color;
+  background-color: @window_bg_color;
 }
 
 .explore-grid {
