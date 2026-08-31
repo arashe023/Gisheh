@@ -27,11 +27,6 @@
   background-color: @window_bg_color;
 }
 
-.detail-panel-header {
-  min-height: 46px;
-  background-color: @window_bg_color;
-}
-
 .main-content-pane,
 .main-content-pane scrolledwindow,
 .main-content-pane viewport {

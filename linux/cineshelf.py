@@ -925,24 +925,6 @@ class CineShelfWindow:
         self.details_surface.set_child(None)
         details_layout = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         details_layout.add_css_class("detail-panel-layout")
-
-        details_header = Gtk.CenterBox()
-        details_header.set_margin_start(12)
-        details_header.set_margin_end(8)
-        details_header.add_css_class("detail-panel-header")
-        details_title = Gtk.Label(label="Details")
-        details_title.add_css_class("heading")
-        details_header.set_start_widget(details_title)
-
-        close_button = Gtk.Button.new_from_icon_name("window-close-symbolic")
-        close_button.set_tooltip_text("Close details (Esc)")
-        close_button.add_css_class("flat")
-        close_button.add_css_class("circular")
-        close_button.connect("clicked", self._on_details_close_clicked)
-        details_header.set_end_widget(close_button)
-
-        details_layout.append(details_header)
-        details_layout.append(Gtk.Separator())
         details_layout.append(self.detail_navigation)
         self.details_surface.set_child(details_layout)
         self.details_surface.set_visible(True)
@@ -1617,6 +1599,7 @@ class CineShelfWindow:
         window_key_controller.connect("key-pressed", self._on_window_key_pressed)
         self.window.add_controller(window_key_controller)
 
+        self.window.connect("close-request", self._on_window_close_request)
         self.window.connect("realize", self._on_window_realized)
 
     def _on_window_realized(self, window: Gtk.Window) -> None:
@@ -3607,6 +3590,18 @@ class CineShelfWindow:
     def _set_details_open(self, open_details: bool) -> None:
         if self.details_open == open_details:
             return
+        if (
+            open_details
+            and self.active_destination == "explore"
+            and self.explore_visible_records
+        ):
+            panel_width = max(388, self.details_surface.get_width())
+            target_width = max(280, self.explore_pane.get_width() - panel_width)
+            target_columns = min(4, self._explore_columns_for_width(target_width))
+            if target_columns != self.explore_columns:
+                self.explore_columns = target_columns
+                self._last_explore_layout_width = target_width
+                self._populate_explore_feed()
         self.details_open = open_details
         self.details_revealer.set_reveal_child(open_details)
         if not open_details:
@@ -3624,9 +3619,12 @@ class CineShelfWindow:
         self._queue_explore_resize()
         return GLib.SOURCE_REMOVE
 
-    def _on_details_close_clicked(self, _button: Gtk.Button) -> None:
+    def _on_window_close_request(self, _window: Gtk.Window) -> bool:
+        if not self.details_open:
+            return False
         self._set_details_open(False)
         self.window.set_focus(None)
+        return True
 
     def _on_window_key_pressed(
         self,
