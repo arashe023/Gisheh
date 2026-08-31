@@ -565,6 +565,7 @@ class CineShelfWindow:
         self._updating = False
         self._updating_details = False
         self._updating_season_switcher = False
+        self.details_open = False
         self.detail_record_id: str | None = None
         self.current_season_index = 0
         self.current_episode_index = 0
@@ -577,6 +578,7 @@ class CineShelfWindow:
 
         self._load_css()
         self._bind_objects()
+        self.details_surface.set_visible(False)
         self._build_browser_stack()
         self._configure_accessibility()
         self._build_header_controls()
@@ -1259,7 +1261,9 @@ class CineShelfWindow:
         self.status_list.connect("row-selected", self._on_status_selected)
         self.collections_list.connect("row-activated", self._on_collection_activated)
         self.list_box.connect("row-selected", self._on_list_selected)
+        self.list_box.connect("row-activated", self._on_list_activated)
         self.grid_box.connect("selected-children-changed", self._on_grid_selected)
+        self.grid_box.connect("child-activated", self._on_grid_activated)
         self.seasons_list.connect("row-activated", self._on_season_activated)
         self.season_episodes_list.connect(
             "row-activated",
@@ -1375,12 +1379,13 @@ class CineShelfWindow:
             return GLib.SOURCE_REMOVE
         columns = self._explore_columns_for_width(width)
         columns_changed = columns != self.explore_columns
+        width_changed = abs(width - self._last_explore_layout_width) >= 12
         self._last_explore_layout_width = width
         self.explore_columns = columns
         if (
             self.active_destination == "explore"
             and self.explore_visible_records
-            and columns_changed
+            and (columns_changed or width_changed)
         ):
             scroll_value = self.explore_scroller.get_vadjustment().get_value()
             self._populate_explore_feed()
@@ -1390,6 +1395,31 @@ class CineShelfWindow:
     @staticmethod
     def _explore_columns_for_width(width: int) -> int:
         return 4 if width >= 620 else 3 if width >= 430 else 2
+
+    def _explore_card_height(self, kind: str) -> int:
+        """Size a card from its real grid span instead of its child request."""
+        pane_width = (
+            self._last_explore_layout_width
+            or self.explore_pane.get_width()
+            or self.library_pane.get_width()
+            or 620
+        )
+        content_width = max(280, pane_width - 48)
+        columns = max(2, self.explore_columns)
+        column_width = max(96, (content_width - 12 * (columns - 1)) / columns)
+        if kind == "hero":
+            span = columns
+        elif kind == "landscape":
+            span = min(2, columns)
+        else:
+            span = 1
+        card_width = column_width * span + 12 * (span - 1)
+
+        if kind == "hero":
+            return round(min(360, max(220, card_width / 2)))
+        if kind == "landscape":
+            return round(min(300, max(190, card_width * 0.72)))
+        return round(min(320, max(220, card_width * 1.5)))
 
     def _update_genre_model(self) -> None:
         genres = sorted(
@@ -1702,9 +1732,12 @@ class CineShelfWindow:
         )
 
         overlay = Gtk.Overlay()
-        ratio = 2.0 if kind == "hero" else 4 / 3 if kind == "landscape" else 2 / 3
+        card_height = self._explore_card_height(kind)
+        overlay.set_hexpand(True)
+        overlay.set_vexpand(True)
+        overlay.set_size_request(-1, card_height)
         art_width = 600 if kind == "hero" else 320 if kind == "landscape" else 160
-        art_height = max(1, round(art_width / ratio))
+        art_height = card_height
         artwork = PosterWidget(
             record,
             art_width,
@@ -1765,12 +1798,7 @@ class CineShelfWindow:
             saved.add_css_class("explore-saved-badge")
             overlay.add_overlay(saved)
 
-        aspect = Gtk.AspectFrame()
-        aspect.set_ratio(ratio)
-        aspect.set_obey_child(False)
-        aspect.set_hexpand(True)
-        aspect.set_child(overlay)
-        button.set_child(aspect)
+        button.set_child(overlay)
         button.connect(
             "clicked",
             lambda _button, record_id=record.id: self._on_explore_card_clicked(
@@ -1784,7 +1812,7 @@ class CineShelfWindow:
             selected = record_id == self.explore_selected_id
             button.update_state(
                 [Gtk.AccessibleState.SELECTED],
-                [selected],
+                [int(selected)],
             )
             if selected:
                 button.add_css_class("selected")
@@ -1982,6 +2010,17 @@ class CineShelfWindow:
             lambda _button, title=record.title: self._toast(f"Playing trailer for {title}"),
         )
         overlay.add_overlay(trailer)
+
+        close_button = Gtk.Button.new_from_icon_name("window-close-symbolic")
+        close_button.set_halign(Gtk.Align.END)
+        close_button.set_valign(Gtk.Align.START)
+        close_button.set_margin_top(8)
+        close_button.set_margin_end(8)
+        close_button.set_tooltip_text("Close details")
+        close_button.add_css_class("circular")
+        close_button.add_css_class("detail-hero-button")
+        close_button.connect("clicked", self._on_details_close_clicked)
+        overlay.add_overlay(close_button)
         self.detail_poster_host.append(overlay)
 
     def _rating_sources(self, record: TitleRecord) -> tuple[tuple[str, str], ...]:
@@ -2694,6 +2733,7 @@ class CineShelfWindow:
         media_type = active.title()
         if media_type not in MEDIA_TYPES:
             return
+        self._set_details_open(False)
         self.active_media = media_type
         self._update_sidebar_counts()
         if self.active_destination == "explore":
@@ -2714,6 +2754,7 @@ class CineShelfWindow:
     ) -> None:
         if self._updating or row is None:
             return
+        self._set_details_open(False)
         if row.key == "library":
             if self.active_destination == "library":
                 return
@@ -2746,6 +2787,7 @@ class CineShelfWindow:
     ) -> None:
         if self._updating or row is None:
             return
+        self._set_details_open(False)
         returning_to_library = self.active_destination == "explore"
         previous_status = self.active_status
         if self.active_destination == "explore":
@@ -2864,6 +2906,7 @@ class CineShelfWindow:
         self.selected_id = record_id
         self._sync_explore_selection_style()
         self._update_details()
+        self._set_details_open(True)
 
     def _on_view_changed(self, group: Adw.ToggleGroup, _parameter: Any) -> None:
         if self._updating:
@@ -3024,6 +3067,17 @@ class CineShelfWindow:
             self.grid_box.select_child(grid_child)
         self._updating = False
         self._update_details()
+        self._set_details_open(True)
+
+    def _on_list_activated(
+        self,
+        _list_box: Gtk.ListBox,
+        row: Gtk.ListBoxRow,
+    ) -> None:
+        self.selected_id = row.record.id
+        self.library_selected_id = self.selected_id
+        self._update_details()
+        self._set_details_open(True)
 
     def _on_grid_selected(self, flow_box: Gtk.FlowBox) -> None:
         if self._updating:
@@ -3040,6 +3094,30 @@ class CineShelfWindow:
             self.list_box.select_row(list_row)
         self._updating = False
         self._update_details()
+        self._set_details_open(True)
+
+    def _on_grid_activated(
+        self,
+        _flow_box: Gtk.FlowBox,
+        child: Gtk.FlowBoxChild,
+    ) -> None:
+        self.selected_id = child.record.id
+        self.library_selected_id = self.selected_id
+        self._update_details()
+        self._set_details_open(True)
+
+    def _set_details_open(self, open_details: bool) -> None:
+        if self.details_open == open_details:
+            return
+        self.details_open = open_details
+        self.details_surface.set_visible(open_details)
+        if not open_details:
+            self._reset_detail_navigation()
+        self._queue_explore_resize()
+
+    def _on_details_close_clicked(self, _button: Gtk.Button) -> None:
+        self._set_details_open(False)
+        self.window.set_focus(None)
 
     def _on_clear_filters(self, _button: Gtk.Button) -> None:
         self._updating = True
