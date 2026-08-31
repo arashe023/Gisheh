@@ -398,30 +398,41 @@ def build_explore_layout_plan(
     columns: int,
     seed: int,
 ) -> tuple[tuple[tuple[str, int], ...], ...]:
-    """Build varied mosaic rows which always consume the complete grid width."""
+    """Build varied rows without ever assigning one card the complete width."""
     columns = max(2, columns)
     if columns == 2:
         patterns = (
             (("poster", 1), ("poster", 1)),
-            (("landscape", 2),),
-            (("hero", 2),),
         )
     elif columns == 3:
         patterns = (
             (("poster", 1), ("poster", 1), ("poster", 1)),
-            (("landscape", 2), ("poster", 1)),
-            (("poster", 1), ("landscape", 2)),
-            (("hero", 3),),
+        )
+    elif columns == 4:
+        patterns = (
+            (("poster", 1), ("poster", 1), ("poster", 1), ("poster", 1)),
+            (("landscape", 2), ("landscape", 2)),
+            (("landscape", 2), ("poster", 1), ("poster", 1)),
+            (("poster", 1), ("poster", 1), ("landscape", 2)),
         )
     else:
         patterns = (
             tuple(("poster", 1) for _ in range(columns)),
-            tuple(("landscape", 2) for _ in range(columns // 2))
-            if columns % 2 == 0
-            else (("landscape", 2), *(('poster', 1) for _ in range(columns - 2))),
-            (("landscape", 2), *(('poster', 1) for _ in range(columns - 2))),
-            tuple(("poster", 1) for _ in range(columns - 2)) + (("landscape", 2),),
-            (("hero", columns),),
+            (("hero", 3), ("landscape", 2), *(
+                ("poster", 1) for _ in range(columns - 5)
+            )),
+            (("landscape", 2), ("hero", 3), *(
+                ("poster", 1) for _ in range(columns - 5)
+            )),
+            (("hero", 3), *(
+                ("poster", 1) for _ in range(columns - 3)
+            )),
+            (("landscape", 2), ("landscape", 2), *(
+                ("poster", 1) for _ in range(columns - 4)
+            )),
+            (("landscape", 2), *(
+                ("poster", 1) for _ in range(columns - 2)
+            )),
         )
 
     rng = random.Random(seed)
@@ -430,6 +441,9 @@ def build_explore_layout_plan(
     previous_signature: tuple[str, ...] | None = None
     while remaining:
         candidates = [pattern for pattern in patterns if len(pattern) <= remaining]
+        if not candidates:
+            rows.append(tuple(("poster", 1) for _ in range(remaining)))
+            break
         alternatives = [
             pattern
             for pattern in candidates
@@ -672,6 +686,7 @@ class PosterWidget(Gtk.Overlay):
         super().__init__()
         self.set_size_request(width, height)
         self.set_overflow(Gtk.Overflow.HIDDEN)
+        self.add_css_class("rounded-media")
         self.set_tooltip_text(f"{record.title}, {record.year}")
         self.set_accessible_role(Gtk.AccessibleRole.IMG)
         self.update_property(
@@ -769,6 +784,7 @@ class CineShelfWindow:
         self._explore_layout_seed = random.SystemRandom().randrange(1 << 63)
         self._explore_resize_source_id = 0
         self._details_resize_source_id = 0
+        self._sidebar_resize_source_id = 0
         self._last_explore_layout_width = 0
 
         self.bookmarks = {"hush-girls", "dune-two", "past-lives", "pluto"}
@@ -836,6 +852,8 @@ class CineShelfWindow:
     def _bind_objects(self) -> None:
         names = (
             "toast_overlay",
+            "workspace",
+            "header_bar",
             "media_switcher",
             "main_menu_button",
             "search_button",
@@ -1032,6 +1050,19 @@ class CineShelfWindow:
             print(f"CineShelf could not save user state: {error}", file=sys.stderr)
 
     def _build_header_controls(self) -> None:
+        self.sidebar_toggle_button = Gtk.ToggleButton(
+            icon_name="sidebar-show-symbolic"
+        )
+        self.sidebar_toggle_button.set_active(True)
+        self.sidebar_toggle_button.set_tooltip_text("Hide sidebar (Ctrl+B)")
+        self.sidebar_toggle_button.add_css_class("flat")
+        self.sidebar_toggle_button.add_css_class("circular")
+        self.sidebar_toggle_button.connect(
+            "toggled",
+            self._on_sidebar_toggled,
+        )
+        self.header_bar.pack_start(self.sidebar_toggle_button)
+
         for media_type in MEDIA_TYPES:
             self.media_switcher.add(
                 Adw.Toggle(name=media_type.lower(), label=media_type)
@@ -1590,6 +1621,16 @@ class CineShelfWindow:
         self.window.add_action(search_action)
         application.set_accels_for_action("win.search", ["<primary>k"])
 
+        sidebar_action = Gio.SimpleAction.new("toggle-sidebar", None)
+        sidebar_action.connect(
+            "activate",
+            lambda *_args: self.sidebar_toggle_button.set_active(
+                not self.sidebar_toggle_button.get_active()
+            ),
+        )
+        self.window.add_action(sidebar_action)
+        application.set_accels_for_action("win.toggle-sidebar", ["<primary>b"])
+
         key_controller = Gtk.EventControllerKey()
         key_controller.connect("key-pressed", self._on_search_key_pressed)
         self.search_entry.add_controller(key_controller)
@@ -1648,7 +1689,7 @@ class CineShelfWindow:
     def _explore_columns_for_width(width: int) -> int:
         return 5 if width >= 760 else 4 if width >= 540 else 3 if width >= 390 else 2
 
-    def _explore_card_height(self, kind: str) -> int:
+    def _explore_card_height(self, kind: str, span: int) -> int:
         """Size a card from its real grid span instead of its child request."""
         pane_width = (
             self._last_explore_layout_width
@@ -1659,12 +1700,6 @@ class CineShelfWindow:
         content_width = max(280, pane_width - 48)
         columns = max(2, self.explore_columns)
         column_width = max(88, (content_width - 10 * (columns - 1)) / columns)
-        if kind == "hero":
-            span = columns
-        elif kind == "landscape":
-            span = min(2, columns)
-        else:
-            span = 1
         card_width = column_width * span + 10 * (span - 1)
 
         if kind == "hero":
@@ -2193,7 +2228,7 @@ class CineShelfWindow:
             for kind, span in pattern:
                 record = records[record_index]
                 record_index += 1
-                card = self._create_explore_card(record, kind)
+                card = self._create_explore_card(record, kind, span)
                 self.explore_grid.attach(card, column, row, span, 1)
                 self._explore_card_buttons[record.id] = card
                 column += span
@@ -2221,6 +2256,7 @@ class CineShelfWindow:
         self,
         record: TitleRecord,
         kind: str,
+        span: int,
     ) -> Gtk.Button:
         button = Gtk.Button()
         button.set_hexpand(True)
@@ -2236,11 +2272,11 @@ class CineShelfWindow:
         )
 
         overlay = Gtk.Overlay()
-        card_height = self._explore_card_height(kind)
+        card_height = self._explore_card_height(kind, span)
         overlay.set_hexpand(True)
         overlay.set_vexpand(True)
         overlay.set_size_request(-1, card_height)
-        art_width = 600 if kind == "hero" else 320 if kind == "landscape" else 160
+        art_width = 480 if kind == "hero" else 320 if kind == "landscape" else 160
         art_height = card_height
         preferred_artwork = (
             record.backdrop_file
@@ -3264,6 +3300,27 @@ class CineShelfWindow:
         self._update_explore_genre_model()
         self._refresh_explore()
         self._queue_explore_resize()
+
+    def _on_sidebar_toggled(self, button: Gtk.ToggleButton) -> None:
+        sidebar_visible = button.get_active()
+        if not sidebar_visible:
+            self.workspace.set_show_content(True)
+        self.workspace.set_collapsed(not sidebar_visible)
+        button.set_tooltip_text(
+            "Hide sidebar (Ctrl+B)" if sidebar_visible else "Show sidebar (Ctrl+B)"
+        )
+        self._queue_explore_resize()
+        if self._sidebar_resize_source_id:
+            GLib.source_remove(self._sidebar_resize_source_id)
+        self._sidebar_resize_source_id = GLib.timeout_add(
+            280,
+            self._on_sidebar_transition_complete,
+        )
+
+    def _on_sidebar_transition_complete(self) -> bool:
+        self._sidebar_resize_source_id = 0
+        self._queue_explore_resize()
+        return GLib.SOURCE_REMOVE
 
     def _on_status_selected(
         self,

@@ -121,6 +121,10 @@
   box-shadow: 0 1px 3px alpha(@shade_color, 0.28);
 }
 
+.rounded-media {
+  border-radius: 12px;
+}
+
 .explore-card:hover {
   box-shadow: 0 2px 8px alpha(@shade_color, 0.38);
 }

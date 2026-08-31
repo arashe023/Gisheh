@@ -268,6 +268,7 @@
                       <object class="AdwHeaderBar" id="header_bar">
                         <property name="show-start-title-buttons">false</property>
                         <property name="show-end-title-buttons">true</property>
+                        <property name="show-back-button">false</property>
                         <property name="title-widget">
                           <object class="AdwToggleGroup" id="media_switcher">
                             <property name="homogeneous">true</property>

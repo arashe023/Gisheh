@@ -18,13 +18,19 @@ SPEC.loader.exec_module(cineshelf)
 
 
 class ExploreLayoutTests(unittest.TestCase):
-    def test_every_row_fills_the_grid_without_holes(self) -> None:
+    def test_rows_fill_without_using_a_full_width_card(self) -> None:
         for columns in (2, 3, 4, 5):
             for count in range(1, 24):
                 plan = cineshelf.build_explore_layout_plan(count, columns, seed=91)
                 self.assertEqual(sum(len(row) for row in plan), count)
-                for row in plan:
-                    self.assertEqual(sum(span for _kind, span in row), columns)
+                for row_index, row in enumerate(plan):
+                    used_columns = sum(span for _kind, span in row)
+                    self.assertLessEqual(used_columns, columns)
+                    if row_index < len(plan) - 1:
+                        self.assertEqual(used_columns, columns)
+                    for _kind, span in row:
+                        self.assertLess(span, columns)
+                        self.assertLessEqual(span / columns, 3 / 5)
 
     def test_plan_is_varied_and_stable_for_a_seed(self) -> None:
         first = cineshelf.build_explore_layout_plan(18, 4, seed=2026)
