@@ -38,6 +38,18 @@ class TmdbClientTests(unittest.TestCase):
             ):
                 self.assertEqual(tmdb_client.read_token(), "environment-token")
 
+    def test_store_token_uses_private_permissions(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            token_path = Path(temporary_directory) / "config" / "token"
+            with patch.dict(
+                os.environ,
+                {"TMDB_READ_TOKEN": "", "TMDB_TOKEN_FILE": str(token_path)},
+                clear=False,
+            ):
+                tmdb_client.store_token("stored-token")
+                self.assertEqual(tmdb_client.read_token(), "stored-token")
+            self.assertEqual(token_path.stat().st_mode & 0o777, 0o600)
+
     def test_fetch_explore_uses_expected_endpoints(self) -> None:
         calls: list[tuple[str, dict[str, object]]] = []
 

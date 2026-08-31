@@ -42,6 +42,36 @@ def read_token() -> str | None:
     return stored_token or None
 
 
+def store_token(token: str) -> Path:
+    normalized = token.strip()
+    if not normalized:
+        raise TmdbError("The TMDB read token cannot be empty.")
+
+    destination = token_file()
+    temporary = destination.with_name(f".{destination.name}.tmp")
+    try:
+        parent_was_missing = not destination.parent.exists()
+        destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if parent_was_missing:
+            os.chmod(destination.parent, 0o700)
+        descriptor = os.open(
+            temporary,
+            os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+            0o600,
+        )
+        with os.fdopen(descriptor, "w", encoding="utf-8") as target:
+            target.write(f"{normalized}\n")
+        temporary.replace(destination)
+        os.chmod(destination, 0o600)
+    except OSError as error:
+        try:
+            temporary.unlink()
+        except OSError:
+            pass
+        raise TmdbError(f"Could not save the TMDB token: {error}") from None
+    return destination
+
+
 def cache_dir() -> Path:
     configured = os.environ.get("XDG_CACHE_HOME")
     base = Path(configured).expanduser() if configured else Path.home() / ".cache"

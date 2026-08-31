@@ -1475,9 +1475,7 @@ class CineShelfWindow:
         self.storage_button.connect(
             "clicked", lambda *_args: self._toast("Library storage: 68% used")
         )
-        self.preferences_button.connect(
-            "clicked", lambda *_args: self._toast("Preferences opened")
-        )
+        self.preferences_button.connect("clicked", self._on_preferences_clicked)
         self.more_button.connect("clicked", self._on_more_clicked)
         self.watched_button.connect("clicked", self._on_watched_clicked)
         self.favorite_button.connect("toggled", self._on_favorite_toggled)
@@ -1807,6 +1805,51 @@ class CineShelfWindow:
         print(f"CineShelf TMDB details: {message}", file=sys.stderr)
         return GLib.SOURCE_REMOVE
 
+    def _on_preferences_clicked(self, _button: Gtk.Button) -> None:
+        dialog = Adw.AlertDialog(
+            heading="Connect to TMDB",
+            body=(
+                "Enter a TMDB API Read Access Token to load live titles, "
+                "details and artwork. The token is stored only for this user."
+            ),
+        )
+        entry = Gtk.PasswordEntry()
+        entry.set_show_peek_icon(True)
+        entry.set_tooltip_text("TMDB API Read Access Token")
+        dialog.set_extra_child(entry)
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("save", "Save and connect")
+        dialog.set_default_response("save")
+        dialog.set_close_response("cancel")
+        dialog.set_response_appearance("save", Adw.ResponseAppearance.SUGGESTED)
+        dialog.connect("response", self._on_tmdb_token_response, entry)
+        dialog.present(self.window)
+
+    def _on_tmdb_token_response(
+        self,
+        _dialog: Adw.AlertDialog,
+        response: str,
+        entry: Gtk.PasswordEntry,
+    ) -> None:
+        if response != "save":
+            return
+        token = entry.get_text().strip()
+        if not token:
+            self._toast("Enter a TMDB Read Access Token")
+            return
+        try:
+            tmdb_client.store_token(token)
+        except tmdb_client.TmdbError as error:
+            print(f"CineShelf TMDB token: {error}", file=sys.stderr)
+            self._toast("Could not save the TMDB token")
+            return
+
+        self.tmdb_token = token
+        self._tmdb_details_loading.clear()
+        self._tmdb_details_loaded.clear()
+        self._toast("Connecting to TMDB…")
+        self._load_tmdb_explore_async()
+
     def _effective_status(self, record: TitleRecord) -> str:
         return self.status_overrides.get(record.id, record.status)
 
@@ -2062,6 +2105,15 @@ class CineShelfWindow:
             attribution.add_css_class("caption")
             attribution.add_css_class("dim-label")
             self.explore_feed_box.append(attribution)
+        elif not self.tmdb_token:
+            fallback_notice = Gtk.Label(
+                label="Sample artwork · Configure TMDB in Preferences for live data"
+            )
+            fallback_notice.set_halign(Gtk.Align.START)
+            fallback_notice.set_margin_top(2)
+            fallback_notice.add_css_class("caption")
+            fallback_notice.add_css_class("dim-label")
+            self.explore_feed_box.append(fallback_notice)
         self._sync_explore_selection_style()
 
     def _create_explore_card(
