@@ -98,6 +98,48 @@ class TmdbClientTests(unittest.TestCase):
             params={"language": "en-US", "page": 3},
         )
 
+    def test_search_titles_uses_tmdb_search_and_filters_anime(self) -> None:
+        payload = {
+            "page": 2,
+            "total_pages": 7,
+            "results": [
+                {"id": 1, "name": "Animated", "genre_ids": [16, 18]},
+                {"id": 2, "name": "Live action", "genre_ids": [18]},
+            ],
+        }
+        with patch.object(
+            tmdb_client,
+            "request_json",
+            return_value=payload,
+        ) as requester:
+            result = tmdb_client.search_titles_page(
+                "token",
+                "Anime",
+                "  title  ",
+                2,
+            )
+
+        requester.assert_called_once_with(
+            "/search/tv",
+            token="token",
+            params={
+                "query": "title",
+                "include_adult": "false",
+                "language": "en-US",
+                "page": 2,
+            },
+        )
+        self.assertEqual(result["page"], 2)
+        self.assertEqual(result["total_pages"], 7)
+        self.assertEqual([item["id"] for item in result["results"]], [1])
+
+    def test_empty_tmdb_search_does_not_make_a_request(self) -> None:
+        with patch.object(tmdb_client, "request_json") as requester:
+            result = tmdb_client.search_titles_page("token", "Movies", "   ")
+
+        requester.assert_not_called()
+        self.assertEqual(result, {"page": 1, "total_pages": 0, "results": []})
+
     def test_summary_is_fetched_from_tmdb_and_cached(self) -> None:
         payload = {"id": 42, "title": "TMDB title", "poster_path": "/p.jpg"}
         with tempfile.TemporaryDirectory() as temporary_directory:

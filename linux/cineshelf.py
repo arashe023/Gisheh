@@ -1551,6 +1551,15 @@ class CineShelfWindow:
         self._tmdb_explore_pages = {media_type: 1 for media_type in MEDIA_TYPES}
         self._tmdb_explore_has_more = {media_type: True for media_type in MEDIA_TYPES}
         self._tmdb_explore_pages_loading: set[str] = set()
+        self.explore_search_records: tuple[TitleRecord, ...] = ()
+        self.explore_search_ids: set[str] = set()
+        self._tmdb_search_generation = 0
+        self._tmdb_search_query = ""
+        self._tmdb_search_media = ""
+        self._tmdb_search_page = 0
+        self._tmdb_search_total_pages = 0
+        self._tmdb_search_loading = False
+        self._explore_search_debounce_source_id = 0
         self._tmdb_library_generation = 0
         self._tmdb_library_refresh_source_id = 0
         self._log_dialog: Adw.AlertDialog | None = None
@@ -3191,7 +3200,12 @@ class CineShelfWindow:
         self.records = records
         self.library_ids = {record.id for record in records}
         self.records_by_id = {
-            record.id: record for record in (*records, *self.explore_records)
+            record.id: record
+            for record in (
+                *records,
+                *self.explore_records,
+                *self.explore_search_records,
+            )
         }
         default_record = next(
             (record for record in records if record.status == "Watched"),
@@ -4468,7 +4482,12 @@ class CineShelfWindow:
         self.explore_records = records
         self.explore_ids = {record.id for record in records}
         self.records_by_id = {
-            record.id: record for record in (*self.records, *self.explore_records)
+            record.id: record
+            for record in (
+                *self.records,
+                *self.explore_records,
+                *self.explore_search_records,
+            )
         }
         self.explore_selected_id = None
         self._update_sidebar_counts()
@@ -4480,6 +4499,9 @@ class CineShelfWindow:
         return GLib.SOURCE_REMOVE
 
     def _load_next_tmdb_explore_page(self) -> None:
+        if self.explore_search_entry.get_text().strip():
+            self._load_next_tmdb_search_page()
+            return
         media_type = self.active_media
         if (
             not self.tmdb_token
@@ -4607,6 +4629,257 @@ class CineShelfWindow:
         self._sync_explore_loading_indicator()
         self._app_log("Could not load the next TMDB Explore page: %s", message)
         self._toast("Could not load more titles from TMDB")
+        return GLib.SOURCE_REMOVE
+
+    def _queue_tmdb_explore_search(self) -> None:
+        if self._explore_search_debounce_source_id:
+            GLib.source_remove(self._explore_search_debounce_source_id)
+            self._explore_search_debounce_source_id = 0
+        self._tmdb_search_generation += 1
+        generation = self._tmdb_search_generation
+        query = self.explore_search_entry.get_text().strip()
+        self._tmdb_search_query = query
+        self._tmdb_search_media = self.active_media
+        self._tmdb_search_page = 0
+        self._tmdb_search_total_pages = 0
+        self.explore_search_records = ()
+        self.explore_search_ids = set()
+        self._tmdb_search_loading = bool(query and self.tmdb_token)
+        if not query:
+            self.records_by_id = {
+                record.id: record
+                for record in (*self.records, *self.explore_records)
+            }
+            self._refresh_explore()
+            self._sync_explore_loading_indicator()
+            return
+        self._set_details_open(False)
+        self._refresh_explore()
+        self._sync_explore_loading_indicator()
+        if not self.tmdb_token:
+            self._toast("Connect TMDB to search its catalog")
+            return
+        self._explore_search_debounce_source_id = GLib.timeout_add(
+            350,
+            self._start_tmdb_explore_search,
+            generation,
+            query,
+            self.active_media,
+        )
+
+    def _start_tmdb_explore_search(
+        self,
+        generation: int,
+        query: str,
+        media_type: str,
+    ) -> bool:
+        self._explore_search_debounce_source_id = 0
+        if (
+            generation != self._tmdb_search_generation
+            or query != self.explore_search_entry.get_text().strip()
+            or media_type != self.active_media
+            or not self.tmdb_token
+        ):
+            return GLib.SOURCE_REMOVE
+        threading.Thread(
+            target=self._load_tmdb_search_page_worker,
+            args=(self.tmdb_token, generation, media_type, query, 1),
+            name=f"cineshelf-tmdb-search-{media_type.lower()}",
+            daemon=True,
+        ).start()
+        return GLib.SOURCE_REMOVE
+
+    def _load_next_tmdb_search_page(self) -> None:
+        if (
+            not self.tmdb_token
+            or not self._tmdb_search_query
+            or self._tmdb_search_loading
+            or self._tmdb_search_page >= self._tmdb_search_total_pages
+        ):
+            return
+        page = self._tmdb_search_page + 1
+        self._tmdb_search_loading = True
+        self._sync_explore_loading_indicator()
+        threading.Thread(
+            target=self._load_tmdb_search_page_worker,
+            args=(
+                self.tmdb_token,
+                self._tmdb_search_generation,
+                self.active_media,
+                self._tmdb_search_query,
+                page,
+            ),
+            name=f"cineshelf-tmdb-search-{self.active_media.lower()}-{page}",
+            daemon=True,
+        ).start()
+
+    def _load_tmdb_search_page_worker(
+        self,
+        token: str,
+        generation: int,
+        media_type: str,
+        query: str,
+        page: int,
+    ) -> None:
+        try:
+            payload = tmdb_client.search_titles_page(
+                token,
+                media_type,
+                query,
+                page,
+            )
+            raw_records = payload.get("results", ())
+            records: list[TitleRecord] = []
+            image_work: list[tuple[str, str, str]] = []
+            for position, raw in enumerate(raw_records, start=1):
+                if not isinstance(raw, dict):
+                    continue
+                poster_path = str(raw.get("poster_path") or "")
+                backdrop_path = str(raw.get("backdrop_path") or "")
+                poster_file = tmdb_client.cached_image(poster_path, size="w500")
+                backdrop_file = tmdb_client.cached_image(backdrop_path, size="w780")
+                absolute_position = (page - 1) * 20 + position
+                record = title_record_from_tmdb(
+                    raw,
+                    media_type,
+                    absolute_position,
+                    poster_file,
+                    backdrop_file,
+                )
+                records.append(record)
+                if poster_path and poster_file is None:
+                    image_work.append((record.id, "poster", poster_path))
+                if backdrop_path and backdrop_file is None:
+                    image_work.append((record.id, "backdrop", backdrop_path))
+            total_pages = int(payload.get("total_pages") or page)
+        except tmdb_client.TmdbError as error:
+            GLib.idle_add(
+                self._on_tmdb_search_failed,
+                generation,
+                media_type,
+                query,
+                str(error),
+            )
+            return
+
+        GLib.idle_add(
+            self._apply_tmdb_search_page,
+            generation,
+            media_type,
+            query,
+            page,
+            total_pages,
+            tuple(records),
+        )
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            futures = {
+                executor.submit(
+                    tmdb_client.cache_image,
+                    path,
+                    size="w500" if kind == "poster" else "w780",
+                ): (record_id, kind)
+                for record_id, kind, path in image_work
+            }
+            for future in as_completed(futures):
+                image_file = future.result()
+                if image_file is None:
+                    continue
+                record_id, kind = futures[future]
+                GLib.idle_add(
+                    self._apply_tmdb_search_image,
+                    generation,
+                    record_id,
+                    kind,
+                    image_file,
+                )
+
+    def _apply_tmdb_search_page(
+        self,
+        generation: int,
+        media_type: str,
+        query: str,
+        page: int,
+        total_pages: int,
+        records: tuple[TitleRecord, ...],
+    ) -> bool:
+        if (
+            generation != self._tmdb_search_generation
+            or media_type != self.active_media
+            or query != self.explore_search_entry.get_text().strip()
+        ):
+            return GLib.SOURCE_REMOVE
+        existing_ids = {record.id for record in self.explore_search_records}
+        additions = tuple(record for record in records if record.id not in existing_ids)
+        self.explore_search_records = (
+            additions
+            if page == 1
+            else (*self.explore_search_records, *additions)
+        )
+        self.explore_search_ids = {
+            record.id for record in self.explore_search_records
+        }
+        self.records_by_id.update(
+            {record.id: record for record in self.explore_search_records}
+        )
+        self._tmdb_search_page = page
+        self._tmdb_search_total_pages = total_pages
+        self._tmdb_search_loading = False
+        if self.active_destination == "explore":
+            self._refresh_explore(reset_scroll=page == 1)
+        self._sync_explore_loading_indicator()
+        return GLib.SOURCE_REMOVE
+
+    def _apply_tmdb_search_image(
+        self,
+        generation: int,
+        record_id: str,
+        kind: str,
+        image_file: str,
+    ) -> bool:
+        if generation != self._tmdb_search_generation:
+            return GLib.SOURCE_REMOVE
+        record = self.records_by_id.get(record_id)
+        if record is None or record_id not in self.explore_search_ids:
+            return GLib.SOURCE_REMOVE
+        updated = replace(
+            record,
+            artwork_file=record.artwork_file or image_file,
+            poster_file=image_file if kind == "poster" else record.poster_file,
+            backdrop_file=(
+                image_file if kind == "backdrop" else record.backdrop_file
+            ),
+        )
+        self.explore_search_records = tuple(
+            updated if item.id == record_id else item
+            for item in self.explore_search_records
+        )
+        self.explore_visible_records = tuple(
+            updated if item.id == record_id else item
+            for item in self.explore_visible_records
+        )
+        self.records_by_id[record_id] = updated
+        self._update_explore_card_artwork(updated)
+        if self.detail_record_id == record_id:
+            self._update_details()
+        return GLib.SOURCE_REMOVE
+
+    def _on_tmdb_search_failed(
+        self,
+        generation: int,
+        media_type: str,
+        query: str,
+        message: str,
+    ) -> bool:
+        if (
+            generation != self._tmdb_search_generation
+            or media_type != self.active_media
+            or query != self.explore_search_entry.get_text().strip()
+        ):
+            return GLib.SOURCE_REMOVE
+        self._tmdb_search_loading = False
+        self._sync_explore_loading_indicator()
+        self._app_log("TMDB search failed: %s", message, level=logging.WARNING)
+        self._toast("Could not search TMDB")
         return GLib.SOURCE_REMOVE
 
     def _apply_tmdb_explore_image(
@@ -4991,6 +5264,10 @@ class CineShelfWindow:
             updated if record.id == updated.id else record
             for record in self.explore_records
         )
+        self.explore_search_records = tuple(
+            updated if record.id == updated.id else record
+            for record in self.explore_search_records
+        )
         self.visible_records = tuple(
             updated if record.id == updated.id else record
             for record in self.visible_records
@@ -4999,7 +5276,7 @@ class CineShelfWindow:
             updated if record.id == updated.id else record
             for record in self.explore_visible_records
         )
-        if updated.id in self.explore_ids:
+        if updated.id in self.explore_ids or updated.id in self.explore_search_ids:
             self._update_explore_card_artwork(updated)
         if self.selected_id == updated.id:
             self._update_details()
@@ -5171,22 +5448,26 @@ class CineShelfWindow:
         )
 
     def _filtered_explore_records(self) -> tuple[TitleRecord, ...]:
-        query = self.explore_search_entry.get_text().strip().casefold()
+        query = self.explore_search_entry.get_text().strip()
+        source_records = (
+            self.explore_search_records
+            if query
+            else self.explore_records
+        )
         records = []
-        for record in self.explore_records:
-            haystack = " ".join(
-                (record.title, record.description, record.creator, *record.genres)
-            ).casefold()
+        for record in source_records:
             if record.media_type != self.active_media:
                 continue
-            if query and query not in haystack:
-                continue
             if (
+                not query
+                and
                 self.explore_period == "This month"
                 and record.discover_period != "This month"
             ):
                 continue
             if (
+                not query
+                and
                 self.explore_period == "This year"
                 and record.discover_period not in ("This month", "This year")
             ):
@@ -5198,6 +5479,8 @@ class CineShelfWindow:
                 continue
             records.append(record)
 
+        if query and self.explore_sort_key == "trending":
+            return tuple(records)
         if self.explore_sort_key == "rating":
             key_function = lambda item: (item.rating, item.order)
             reverse = True
@@ -5311,6 +5594,7 @@ class CineShelfWindow:
 
     def _refresh_explore(self, *, reset_scroll: bool = True) -> None:
         scroll_value = self.explore_scroller.get_vadjustment().get_value()
+        query = self.explore_search_entry.get_text().strip()
         self.explore_visible_records = self._filtered_explore_records()
         visible_ids = {record.id for record in self.explore_visible_records}
         if self.explore_selected_id not in visible_ids:
@@ -5322,10 +5606,26 @@ class CineShelfWindow:
         self.selected_id = self.explore_selected_id
 
         self.explore_eyebrow_label.set_label(
-            f"Discover / {self.active_media}"
+            f"{'TMDB Search' if query else 'Discover'} / {self.active_media}"
         )
         self.explore_count_label.set_label(str(len(self.explore_visible_records)))
         self.explore_row.set_count(self._explore_total(self.active_media))
+        if query:
+            self.explore_empty_page.set_icon_name("system-search-symbolic")
+            self.explore_empty_page.set_title(
+                "Searching TMDB…" if self._tmdb_search_loading else "No TMDB matches"
+            )
+            self.explore_empty_page.set_description(
+                f'Searching the complete TMDB catalog for “{query}”.'
+                if self._tmdb_search_loading
+                else f'No {self.active_media.lower()} matched “{query}” on TMDB.'
+            )
+        else:
+            self.explore_empty_page.set_icon_name("system-search-symbolic")
+            self.explore_empty_page.set_title("Nothing new here yet")
+            self.explore_empty_page.set_description(
+                "Try another search, period, or genre."
+            )
         self._populate_explore_feed()
         self._update_details()
         if reset_scroll:
@@ -5390,7 +5690,11 @@ class CineShelfWindow:
     def _sync_explore_loading_indicator(self) -> None:
         if not hasattr(self, "explore_loading_box"):
             return
-        loading = self.active_media in self._tmdb_explore_pages_loading
+        loading = (
+            self._tmdb_search_loading
+            if self.explore_search_entry.get_text().strip()
+            else self.active_media in self._tmdb_explore_pages_loading
+        )
         self.explore_loading_box.set_visible(loading)
         self.explore_loading_spinner.set_spinning(loading)
 
@@ -6549,7 +6853,10 @@ class CineShelfWindow:
         if self.active_destination == "explore":
             self._update_genre_model()
             self._update_explore_genre_model(preserve=False)
-            self._refresh_explore()
+            if self.explore_search_entry.get_text().strip():
+                self._queue_tmdb_explore_search()
+            else:
+                self._refresh_explore()
         else:
             self._updating = True
             self.search_entry.set_text("")
@@ -6692,7 +6999,7 @@ class CineShelfWindow:
 
     def _on_explore_search_changed(self, _entry: Gtk.SearchEntry) -> None:
         if not self._updating and self.active_destination == "explore":
-            self._refresh_explore()
+            self._queue_tmdb_explore_search()
 
     def _on_search_requested(self, *_args: Any) -> None:
         if self.active_destination != "explore":
@@ -6780,7 +7087,7 @@ class CineShelfWindow:
         self._refresh_explore()
 
     def _on_explore_card_clicked(self, record_id: str) -> None:
-        if record_id not in self.explore_ids:
+        if record_id not in self.explore_ids and record_id not in self.explore_search_ids:
             return
         self.explore_selected_id = record_id
         self.selected_id = record_id

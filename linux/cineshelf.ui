@@ -939,21 +939,25 @@
           </object>
         </child>
         <child>
-          <object class="GtkScrolledWindow">
-            <property name="hscrollbar-policy">automatic</property>
-            <property name="vscrollbar-policy">never</property>
-            <property name="propagate-natural-height">true</property>
-            <property name="child">
-              <object class="GtkBox" id="explore_filter_bar">
-                <property name="spacing">6</property>
-                <child>
-                  <object class="GtkSearchEntry" id="explore_search_entry">
-                    <property name="hexpand">true</property>
-                    <property name="width-request">220</property>
-                    <property name="placeholder-text">Search Explore…</property>
-                    <property name="tooltip-text">Search titles in Explore (Ctrl+K)</property>
-                  </object>
-                </child>
+          <object class="AdwWrapBox" id="explore_filter_bar">
+            <property name="child-spacing">6</property>
+            <property name="line-spacing">6</property>
+            <property name="natural-line-length">720</property>
+            <property name="hexpand">true</property>
+            <child>
+              <object class="GtkSearchEntry" id="explore_search_entry">
+                <property name="hexpand">true</property>
+                <property name="width-request">220</property>
+                <property name="placeholder-text">Search TMDB…</property>
+                <property name="tooltip-text">Search all matching titles on TMDB (Ctrl+K)</property>
+              </object>
+            </child>
+            <child>
+              <object class="AdwWrapBox" id="explore_filter_controls">
+                <property name="child-spacing">6</property>
+                <property name="line-spacing">6</property>
+                <property name="natural-line-length">470</property>
+                <property name="width-request">470</property>
                 <child>
                   <object class="GtkDropDown" id="explore_sort_dropdown">
                     <property name="width-request">142</property>
@@ -983,7 +987,7 @@
                   </object>
                 </child>
               </object>
-            </property>
+            </child>
           </object>
         </child>
       </object>

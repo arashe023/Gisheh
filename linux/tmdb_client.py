@@ -222,6 +222,53 @@ def fetch_explore(token: str, *, language: str = "en-US") -> dict[str, list[dict
     }
 
 
+def search_titles_page(
+    token: str,
+    media_type: str,
+    query: str,
+    page: int = 1,
+    *,
+    language: str = "en-US",
+) -> dict[str, Any]:
+    """Search TMDB directly for the active Explore media type."""
+    normalized_query = query.strip()
+    if not normalized_query:
+        return {"page": 1, "total_pages": 0, "results": []}
+    page = max(1, page)
+    if media_type == "Movies":
+        path = "/search/movie"
+    elif media_type in ("Shows", "Anime"):
+        path = "/search/tv"
+    else:
+        raise ValueError(f"Unsupported Explore media type: {media_type}")
+    payload = request_json(
+        path,
+        token=token,
+        params={
+            "query": normalized_query,
+            "include_adult": "false",
+            "language": language,
+            "page": page,
+        },
+    )
+    results = [
+        item
+        for item in payload.get("results", ())
+        if isinstance(item, dict)
+    ]
+    if media_type == "Anime":
+        results = [
+            item
+            for item in results
+            if 16 in item.get("genre_ids", ())
+        ]
+    return {
+        "page": int(payload.get("page") or page),
+        "total_pages": int(payload.get("total_pages") or page),
+        "results": results,
+    }
+
+
 def fetch_details(
     token: str,
     media_type: str,
