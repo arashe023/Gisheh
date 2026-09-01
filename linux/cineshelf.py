@@ -1040,7 +1040,7 @@ class GeneratedPosterWidget(Gtk.DrawingArea):
             context.fill()
 
 
-class PosterWidget(Gtk.Overlay):
+class PosterWidget(Gtk.Widget):
     """Display cached TMDB artwork, falling back to the local poster renderer."""
 
     def __init__(
@@ -1072,7 +1072,7 @@ class PosterWidget(Gtk.Overlay):
             picture.set_can_shrink(True)
             picture.set_hexpand(True)
             picture.set_vexpand(True)
-            self.set_child(picture)
+            self._media_child: Gtk.Widget = picture
         else:
             generated = GeneratedPosterWidget(
                 record,
@@ -1083,7 +1083,8 @@ class PosterWidget(Gtk.Overlay):
             )
             generated.set_hexpand(True)
             generated.set_vexpand(True)
-            self.set_child(generated)
+            self._media_child = generated
+        self._media_child.set_parent(self)
 
     def do_measure(
         self,
@@ -1097,6 +1098,23 @@ class PosterWidget(Gtk.Overlay):
             else self.fixed_height
         )
         return size, size, -1, -1
+
+    def do_size_allocate(
+        self,
+        width: int,
+        height: int,
+        baseline: int,
+    ) -> None:
+        self._media_child.allocate(width, height, baseline, None)
+
+    def do_snapshot(self, snapshot: Gtk.Snapshot) -> None:
+        self.snapshot_child(self._media_child, snapshot)
+
+    def do_dispose(self) -> None:
+        if self._media_child is not None:
+            self._media_child.unparent()
+            self._media_child = None
+        super().do_dispose()
 
 
 class SidebarRow(Gtk.ListBoxRow):
