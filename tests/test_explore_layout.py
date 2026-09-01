@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -48,6 +50,25 @@ class ExploreLayoutTests(unittest.TestCase):
         kinds = {kind for row in first for kind, _span in row}
         self.assertGreaterEqual(len(kinds), 2)
 
+
+class MediaCollectionTests(unittest.TestCase):
+    def test_media_items_keep_primary_first_and_remove_duplicates(self) -> None:
+        records, _explore, _totals = cineshelf.load_catalog()
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            first = Path(temporary_directory) / "first.jpg"
+            second = Path(temporary_directory) / "second.jpg"
+            first.touch()
+            second.touch()
+            record = replace(
+                records[0],
+                poster_file=str(first),
+                gallery_posters=(str(first), str(second), "/missing.jpg"),
+            )
+
+            items = cineshelf.CineShelfWindow._media_items(record, "posters")
+
+        self.assertEqual([path for path, _label in items], [str(first), str(second)])
+        self.assertEqual(items[0][1], f"{record.title} — Poster 1")
 
 class ProfileFormattingTests(unittest.TestCase):
     def test_runtime_minutes_handles_catalog_durations(self) -> None:

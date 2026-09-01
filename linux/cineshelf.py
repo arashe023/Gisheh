@@ -1118,6 +1118,299 @@ class PosterWidget(Gtk.Widget):
         super().do_dispose()
 
 
+class MediaViewer(Gtk.Overlay):
+    """A Tuba-inspired, in-window viewer for a collection of local images."""
+
+    def __init__(self, window: Adw.ApplicationWindow) -> None:
+        super().__init__()
+        self.window = window
+        self.items: tuple[tuple[str, str], ...] = ()
+        self.position = 0
+        self.zoom_level = 1.0
+        self.texture: Gdk.Texture | None = None
+        self._fullscreen_from_viewer = False
+
+        self.set_hexpand(True)
+        self.set_vexpand(True)
+        self.set_halign(Gtk.Align.FILL)
+        self.set_valign(Gtk.Align.FILL)
+        self.set_focusable(True)
+        self.set_visible(False)
+        self.set_can_target(False)
+        self.add_css_class("media-viewer")
+
+        toolbar = Adw.ToolbarView()
+        header = Adw.HeaderBar()
+        header.set_show_start_title_buttons(False)
+        header.set_show_end_title_buttons(False)
+        header.add_css_class("media-viewer-header")
+
+        close_button = Gtk.Button.new_from_icon_name("go-previous-symbolic")
+        close_button.set_tooltip_text("Back to CineShelf")
+        close_button.connect("clicked", lambda *_args: self.close())
+        header.pack_start(close_button)
+
+        self.window_title = Adw.WindowTitle(
+            title="Media Viewer",
+            subtitle="",
+        )
+        header.set_title_widget(self.window_title)
+
+        copy_button = Gtk.Button.new_from_icon_name("edit-copy-symbolic")
+        copy_button.set_tooltip_text("Copy image")
+        copy_button.connect("clicked", self._copy_image)
+        header.pack_end(copy_button)
+
+        self.fullscreen_button = Gtk.Button.new_from_icon_name(
+            "view-fullscreen-symbolic"
+        )
+        self.fullscreen_button.set_tooltip_text("Toggle fullscreen")
+        self.fullscreen_button.connect("clicked", self._toggle_fullscreen)
+        header.pack_end(self.fullscreen_button)
+        toolbar.add_top_bar(header)
+
+        stage = Gtk.Overlay()
+        stage.set_hexpand(True)
+        stage.set_vexpand(True)
+
+        self.scroller = Gtk.ScrolledWindow()
+        self.scroller.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        self.scroller.set_hexpand(True)
+        self.scroller.set_vexpand(True)
+        self.scroller.add_css_class("media-viewer-stage")
+
+        self.picture = Gtk.Picture()
+        self.picture.set_can_shrink(True)
+        self.picture.set_content_fit(Gtk.ContentFit.CONTAIN)
+        self.picture.set_halign(Gtk.Align.CENTER)
+        self.picture.set_valign(Gtk.Align.CENTER)
+        self.picture.add_css_class("media-viewer-picture")
+        self.scroller.set_child(self.picture)
+        stage.set_child(self.scroller)
+
+        page_controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        page_controls.set_halign(Gtk.Align.START)
+        page_controls.set_valign(Gtk.Align.END)
+        page_controls.set_margin_start(18)
+        page_controls.set_margin_bottom(18)
+        page_controls.add_css_class("media-viewer-osd-box")
+        self.previous_button = Gtk.Button.new_from_icon_name("go-previous-symbolic")
+        self.previous_button.set_tooltip_text("Previous image (Left)")
+        self.previous_button.add_css_class("flat")
+        self.previous_button.connect("clicked", lambda *_args: self.previous())
+        page_controls.append(self.previous_button)
+        self.page_label = Gtk.Label(label="1 / 1")
+        self.page_label.add_css_class("numeric")
+        self.page_label.add_css_class("caption")
+        page_controls.append(self.page_label)
+        self.next_button = Gtk.Button.new_from_icon_name("go-next-symbolic")
+        self.next_button.set_tooltip_text("Next image (Right)")
+        self.next_button.add_css_class("flat")
+        self.next_button.connect("clicked", lambda *_args: self.next())
+        page_controls.append(self.next_button)
+        stage.add_overlay(page_controls)
+
+        zoom_controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        zoom_controls.set_halign(Gtk.Align.END)
+        zoom_controls.set_valign(Gtk.Align.END)
+        zoom_controls.set_margin_end(18)
+        zoom_controls.set_margin_bottom(18)
+        zoom_controls.add_css_class("media-viewer-osd-box")
+        zoom_out = Gtk.Button.new_from_icon_name("zoom-out-symbolic")
+        zoom_out.set_tooltip_text("Zoom out (Ctrl+-)")
+        zoom_out.add_css_class("flat")
+        zoom_out.connect("clicked", lambda *_args: self.zoom_out())
+        zoom_controls.append(zoom_out)
+        self.zoom_label = Gtk.Label(label="Fit")
+        self.zoom_label.set_width_chars(6)
+        self.zoom_label.add_css_class("numeric")
+        self.zoom_label.add_css_class("caption")
+        zoom_controls.append(self.zoom_label)
+        zoom_in = Gtk.Button.new_from_icon_name("zoom-in-symbolic")
+        zoom_in.set_tooltip_text("Zoom in (Ctrl++)")
+        zoom_in.add_css_class("flat")
+        zoom_in.connect("clicked", lambda *_args: self.zoom_in())
+        zoom_controls.append(zoom_in)
+        stage.add_overlay(zoom_controls)
+
+        toolbar.set_content(stage)
+        self.set_child(toolbar)
+
+        key_controller = Gtk.EventControllerKey()
+        key_controller.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        key_controller.connect("key-pressed", self._on_key_pressed)
+        self.add_controller(key_controller)
+
+        double_click = Gtk.GestureClick()
+        double_click.set_button(Gdk.BUTTON_PRIMARY)
+        double_click.connect("pressed", self._on_picture_pressed)
+        self.picture.add_controller(double_click)
+
+        scroll = Gtk.EventControllerScroll.new(
+            Gtk.EventControllerScrollFlags.VERTICAL
+            | Gtk.EventControllerScrollFlags.DISCRETE
+        )
+        scroll.connect("scroll", self._on_scroll)
+        self.picture.add_controller(scroll)
+
+    def open(
+        self,
+        items: tuple[tuple[str, str], ...],
+        position: int = 0,
+    ) -> None:
+        valid_items = tuple(
+            (path, label)
+            for path, label in items
+            if path and Path(path).is_file()
+        )
+        if not valid_items:
+            return
+        self.items = valid_items
+        self.position = max(0, min(position, len(valid_items) - 1))
+        self.set_visible(True)
+        self.set_can_target(True)
+        self._show_current()
+        GLib.idle_add(self._focus_viewer)
+
+    def _focus_viewer(self) -> bool:
+        self.grab_focus()
+        return GLib.SOURCE_REMOVE
+
+    def close(self) -> None:
+        if not self.get_visible():
+            return
+        if self._fullscreen_from_viewer and self.window.is_fullscreen():
+            self.window.unfullscreen()
+        self._fullscreen_from_viewer = False
+        self.fullscreen_button.set_icon_name("view-fullscreen-symbolic")
+        self.picture.set_paintable(None)
+        self.texture = None
+        self.items = ()
+        self.set_can_target(False)
+        self.set_visible(False)
+
+    def _show_current(self) -> None:
+        if not self.items:
+            return
+        path, label = self.items[self.position]
+        try:
+            self.texture = Gdk.Texture.new_from_filename(path)
+        except GLib.Error:
+            self.texture = None
+        self.picture.set_paintable(self.texture)
+        self.picture.set_alternative_text(label)
+        self.window_title.set_title(label)
+        self.window_title.set_subtitle(
+            f"Image {self.position + 1} of {len(self.items)}"
+        )
+        self.page_label.set_label(f"{self.position + 1} / {len(self.items)}")
+        self.previous_button.set_sensitive(self.position > 0)
+        self.next_button.set_sensitive(self.position < len(self.items) - 1)
+        self.zoom_level = 1.0
+        self._apply_zoom()
+
+    def previous(self) -> None:
+        if self.position <= 0:
+            return
+        self.position -= 1
+        self._show_current()
+
+    def next(self) -> None:
+        if self.position >= len(self.items) - 1:
+            return
+        self.position += 1
+        self._show_current()
+
+    def zoom_in(self) -> None:
+        self.zoom_level = min(4.0, self.zoom_level + 0.5)
+        self._apply_zoom()
+
+    def zoom_out(self) -> None:
+        self.zoom_level = max(1.0, self.zoom_level - 0.5)
+        self._apply_zoom()
+
+    def _apply_zoom(self) -> None:
+        if self.texture is None or self.zoom_level <= 1.0:
+            self.picture.set_size_request(-1, -1)
+            self.picture.set_hexpand(True)
+            self.picture.set_vexpand(True)
+            self.zoom_label.set_label("Fit")
+            return
+        self.picture.set_hexpand(False)
+        self.picture.set_vexpand(False)
+        self.picture.set_size_request(
+            round(self.texture.get_width() * self.zoom_level),
+            round(self.texture.get_height() * self.zoom_level),
+        )
+        self.zoom_label.set_label(f"{round(self.zoom_level * 100)}%")
+
+    def _on_picture_pressed(
+        self,
+        _gesture: Gtk.GestureClick,
+        press_count: int,
+        _x: float,
+        _y: float,
+    ) -> None:
+        if press_count != 2:
+            return
+        self.zoom_level = 1.0 if self.zoom_level > 1.0 else 2.0
+        self._apply_zoom()
+
+    def _on_scroll(
+        self,
+        controller: Gtk.EventControllerScroll,
+        _dx: float,
+        dy: float,
+    ) -> bool:
+        state = controller.get_current_event_state()
+        if not state & Gdk.ModifierType.CONTROL_MASK:
+            return False
+        if dy < 0:
+            self.zoom_in()
+        else:
+            self.zoom_out()
+        return True
+
+    def _on_key_pressed(
+        self,
+        _controller: Gtk.EventControllerKey,
+        keyval: int,
+        _keycode: int,
+        state: Gdk.ModifierType,
+    ) -> bool:
+        if keyval == Gdk.KEY_Escape:
+            self.close()
+            return True
+        if keyval in (Gdk.KEY_Left, Gdk.KEY_KP_Left):
+            self.previous()
+            return True
+        if keyval in (Gdk.KEY_Right, Gdk.KEY_KP_Right):
+            self.next()
+            return True
+        if state & Gdk.ModifierType.CONTROL_MASK:
+            if keyval in (Gdk.KEY_plus, Gdk.KEY_equal, Gdk.KEY_KP_Add):
+                self.zoom_in()
+                return True
+            if keyval in (Gdk.KEY_minus, Gdk.KEY_KP_Subtract):
+                self.zoom_out()
+                return True
+        return False
+
+    def _toggle_fullscreen(self, _button: Gtk.Button) -> None:
+        if self.window.is_fullscreen():
+            self.window.unfullscreen()
+            self._fullscreen_from_viewer = False
+            self.fullscreen_button.set_icon_name("view-fullscreen-symbolic")
+        else:
+            self.window.fullscreen()
+            self._fullscreen_from_viewer = True
+            self.fullscreen_button.set_icon_name("view-restore-symbolic")
+
+    def _copy_image(self, _button: Gtk.Button) -> None:
+        if self.texture is not None:
+            self.window.get_clipboard().set_texture(self.texture)
+
+
 class SidebarRow(Gtk.ListBoxRow):
     def __init__(
         self,
@@ -1284,6 +1577,7 @@ class CineShelfWindow:
 
         self._load_css()
         self._bind_objects()
+        self._build_media_viewer()
         self._build_browser_stack()
         self._configure_accessibility()
         self._build_header_controls()
@@ -1438,6 +1732,53 @@ class CineShelfWindow:
         self.details_revealer.set_reveal_child(False)
         self.details_revealer.set_child(panel_layout)
         self.main_workspace.append(self.details_revealer)
+
+    def _build_media_viewer(self) -> None:
+        """Layer the media viewer over the existing app without leaving the window."""
+        content = self.toast_overlay.get_child()
+        if content is None:
+            raise RuntimeError("The application has no root content for Media Viewer")
+        self.toast_overlay.set_child(None)
+        self.application_overlay = Gtk.Overlay()
+        self.application_overlay.set_child(content)
+        self.media_viewer = MediaViewer(self.window)
+        self.application_overlay.add_overlay(self.media_viewer)
+        self.toast_overlay.set_child(self.application_overlay)
+
+    @staticmethod
+    def _media_items(
+        record: TitleRecord,
+        mode: str,
+    ) -> tuple[tuple[str, str], ...]:
+        if mode == "posters":
+            candidates = (record.poster_file, *record.gallery_posters)
+            kind = "Poster"
+        else:
+            candidates = (record.backdrop_file, *record.gallery_backdrops)
+            kind = "Backdrop"
+        paths = tuple(
+            dict.fromkeys(
+                path
+                for path in candidates
+                if path is not None and Path(path).is_file()
+            )
+        )
+        return tuple(
+            (path, f"{record.title} — {kind} {index}")
+            for index, path in enumerate(paths, start=1)
+        )
+
+    def _open_record_media(
+        self,
+        record: TitleRecord,
+        mode: str,
+        position: int = 0,
+    ) -> None:
+        items = self._media_items(record, mode)
+        if not items:
+            self._toast(f"No {mode} available for {record.title}")
+            return
+        self.media_viewer.open(items, position)
 
     def _configure_accessibility(self) -> None:
         self.storage_progress.update_property(
@@ -5370,7 +5711,18 @@ class CineShelfWindow:
                 record.backdrop_file or record.poster_file or record.artwork_file
             ),
         )
-        overlay.set_child(PosterWidget(hero_record, 352, 198, show_text=False))
+        artwork_button = Gtk.Button()
+        artwork_button.set_child(
+            PosterWidget(hero_record, 352, 198, show_text=False)
+        )
+        artwork_button.set_tooltip_text(f"Open images for {record.title}")
+        artwork_button.add_css_class("flat")
+        artwork_button.add_css_class("media-thumbnail")
+        artwork_button.connect(
+            "clicked",
+            lambda *_args: self._open_record_media(record, "backdrops"),
+        )
+        overlay.set_child(artwork_button)
 
         trailer_content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         trailer_content.append(Gtk.Image.new_from_icon_name("media-playback-start-symbolic"))
@@ -5975,7 +6327,9 @@ class CineShelfWindow:
                     self._loading_placeholder(width, height, "Loading image")
                 )
             return
-        gallery = record.gallery_posters if is_poster else record.gallery_backdrops
+        mode = "posters" if is_poster else "backdrops"
+        media_items = self._media_items(record, mode)
+        gallery = tuple(path for path, _label in media_items)
         pending_kind = "poster" if is_poster else "backdrop"
         pending_count = self._tmdb_gallery_images_loading.get(record.id, {}).get(
             pending_kind,
@@ -5995,13 +6349,19 @@ class CineShelfWindow:
             )
             button.add_css_class("flat")
             button.add_css_class("detail-media-card")
+            button.add_css_class("media-thumbnail")
             button.set_tooltip_text(
                 f"Open {self.image_mode[:-1]} {index + 1} for {record.title}"
             )
             button.connect(
                 "clicked",
-                lambda _button, image_number=index + 1: self._toast(
-                    f"Opened image {image_number}"
+                (
+                    lambda _button, image_index=index: self.media_viewer.open(
+                        media_items,
+                        image_index,
+                    )
+                    if media_items
+                    else self._toast(f"No {mode} available for {record.title}")
                 ),
             )
             self.images_box.append(button)
