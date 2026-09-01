@@ -72,11 +72,12 @@ EXPLORE_SORT_OPTIONS = (
     ("upcoming", "Coming soon"),
 )
 EXPLORE_PERIODS = ("This month", "This year", "All releases")
-GRID_CARD_WIDTH = 94
+GRID_CARD_WIDTH = 140
+GRID_CARD_HEIGHT = 210
 GRID_COLUMN_GAP = 10
 GRID_HORIZONTAL_PADDING = 24
 GRID_MAX_COLUMNS = 6
-GRID_ROW_HEIGHT = 181
+GRID_ROW_HEIGHT = 226
 
 STATUS_ICONS = {
     "Watching": "media-playback-start-symbolic",
@@ -5226,31 +5227,53 @@ class CineShelfWindow:
     def _create_grid_child(self, record: TitleRecord) -> Gtk.FlowBoxChild:
         child = Gtk.FlowBoxChild()
         child.record = record
-        child.set_size_request(GRID_CARD_WIDTH + 6, 175)
+        child.set_size_request(GRID_CARD_WIDTH + 6, GRID_CARD_HEIGHT + 6)
         child.set_halign(Gtk.Align.CENTER)
         child.set_valign(Gtk.Align.START)
 
-        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=7)
-        card.set_size_request(GRID_CARD_WIDTH, 169)
+        card = Gtk.Overlay()
+        card.set_size_request(GRID_CARD_WIDTH, GRID_CARD_HEIGHT)
         card.set_hexpand(False)
         card.set_halign(Gtk.Align.CENTER)
         card.set_valign(Gtk.Align.START)
+        card.set_overflow(Gtk.Overflow.HIDDEN)
         card.add_css_class("poster-grid-card")
         card.set_tooltip_text(record.title)
-        card.append(self._create_poster_overlay(record, 82, 123))
+        poster_record = replace(record, artwork_file=record.poster_file)
+        card.set_child(
+            PosterWidget(
+                poster_record,
+                GRID_CARD_WIDTH,
+                GRID_CARD_HEIGHT,
+                show_text=False,
+            )
+        )
 
-        title = Gtk.Label(label=record.title, xalign=0.5)
+        caption = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        caption.set_halign(Gtk.Align.FILL)
+        caption.set_valign(Gtk.Align.END)
+        caption.add_css_class("poster-grid-copy")
+        title = Gtk.Label(label=record.title, xalign=0)
         title.set_halign(Gtk.Align.FILL)
-        title.set_justify(Gtk.Justification.CENTER)
+        title.set_justify(Gtk.Justification.LEFT)
         title.set_wrap(True)
         title.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
         title.set_lines(2)
         title.set_ellipsize(Pango.EllipsizeMode.END)
-        title.set_max_width_chars(13)
-        title.set_size_request(82, 34)
+        title.set_max_width_chars(20)
         title.set_tooltip_text(record.title)
         title.add_css_class("poster-grid-title")
-        card.append(title)
+        caption.append(title)
+        card.add_overlay(caption)
+
+        rating = Gtk.Label(label=f"★ {record.rating:.1f}")
+        rating.set_halign(Gtk.Align.END)
+        rating.set_valign(Gtk.Align.START)
+        rating.set_margin_top(7)
+        rating.set_margin_end(7)
+        rating.add_css_class("grid-rating-badge")
+        rating.add_css_class("numeric")
+        card.add_overlay(rating)
         child.set_child(card)
         return child
 

@@ -22,8 +22,9 @@ class ExploreLayoutTests(unittest.TestCase):
     def test_library_grid_columns_follow_real_card_width(self) -> None:
         self.assertEqual(cineshelf.grid_columns_for_width(120), 1)
         self.assertEqual(cineshelf.grid_columns_for_width(320), 2)
-        self.assertEqual(cineshelf.grid_columns_for_width(620), 5)
-        self.assertEqual(cineshelf.grid_columns_for_width(720), 6)
+        self.assertEqual(cineshelf.grid_columns_for_width(620), 4)
+        self.assertEqual(cineshelf.grid_columns_for_width(820), 5)
+        self.assertEqual(cineshelf.grid_columns_for_width(990), 6)
         self.assertEqual(cineshelf.grid_columns_for_width(2000), 6)
 
     def test_rows_fill_without_using_a_full_width_card(self) -> None:
