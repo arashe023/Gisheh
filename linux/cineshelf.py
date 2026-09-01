@@ -72,11 +72,11 @@ EXPLORE_SORT_OPTIONS = (
     ("upcoming", "Coming soon"),
 )
 EXPLORE_PERIODS = ("This month", "This year", "All releases")
-GRID_CARD_WIDTH = 132
-GRID_COLUMN_GAP = 12
+GRID_CARD_WIDTH = 94
+GRID_COLUMN_GAP = 10
 GRID_HORIZONTAL_PADDING = 24
-GRID_MAX_COLUMNS = 8
-GRID_ROW_HEIGHT = 246
+GRID_MAX_COLUMNS = 6
+GRID_ROW_HEIGHT = 181
 
 STATUS_ICONS = {
     "Watching": "media-playback-start-symbolic",
@@ -1053,6 +1053,8 @@ class PosterWidget(Gtk.Overlay):
         show_text: bool = True,
     ) -> None:
         super().__init__()
+        self.fixed_width = width
+        self.fixed_height = height
         self.set_size_request(width, height)
         self.set_overflow(Gtk.Overflow.HIDDEN)
         self.add_css_class("rounded-media")
@@ -1082,6 +1084,19 @@ class PosterWidget(Gtk.Overlay):
             generated.set_hexpand(True)
             generated.set_vexpand(True)
             self.set_child(generated)
+
+    def do_measure(
+        self,
+        orientation: Gtk.Orientation,
+        _for_size: int,
+    ) -> tuple[int, int, int, int]:
+        """Keep cached images from imposing their intrinsic size on card layouts."""
+        size = (
+            self.fixed_width
+            if orientation == Gtk.Orientation.HORIZONTAL
+            else self.fixed_height
+        )
+        return size, size, -1, -1
 
 
 class SidebarRow(Gtk.ListBoxRow):
@@ -1623,9 +1638,9 @@ class CineShelfWindow:
         self.grid_box.set_activate_on_single_click(True)
         self.grid_box.set_homogeneous(True)
         self.grid_box.set_min_children_per_line(1)
-        self.grid_box.set_max_children_per_line(8)
-        self.grid_box.set_row_spacing(16)
-        self.grid_box.set_column_spacing(12)
+        self.grid_box.set_max_children_per_line(GRID_MAX_COLUMNS)
+        self.grid_box.set_row_spacing(10)
+        self.grid_box.set_column_spacing(GRID_COLUMN_GAP)
         self.grid_box.set_hexpand(True)
         self.grid_box.set_halign(Gtk.Align.FILL)
         self.grid_box.set_valign(Gtk.Align.START)
@@ -4936,25 +4951,28 @@ class CineShelfWindow:
     def _create_grid_child(self, record: TitleRecord) -> Gtk.FlowBoxChild:
         child = Gtk.FlowBoxChild()
         child.record = record
-        child.set_halign(Gtk.Align.FILL)
+        child.set_size_request(GRID_CARD_WIDTH + 6, 175)
+        child.set_halign(Gtk.Align.CENTER)
         child.set_valign(Gtk.Align.START)
 
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=7)
-        card.set_size_request(132, 230)
+        card.set_size_request(GRID_CARD_WIDTH, 169)
         card.set_hexpand(False)
         card.set_halign(Gtk.Align.CENTER)
         card.set_valign(Gtk.Align.START)
         card.add_css_class("poster-grid-card")
-        card.append(self._create_poster_overlay(record, 120, 180))
+        card.set_tooltip_text(record.title)
+        card.append(self._create_poster_overlay(record, 82, 123))
 
-        title = Gtk.Label(label=record.title, xalign=0)
+        title = Gtk.Label(label=record.title, xalign=0.5)
+        title.set_halign(Gtk.Align.FILL)
+        title.set_justify(Gtk.Justification.CENTER)
         title.set_wrap(True)
         title.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
         title.set_lines(2)
         title.set_ellipsize(Pango.EllipsizeMode.END)
-        title.set_max_width_chars(15)
-        title.set_hexpand(False)
-        title.set_size_request(120, 38)
+        title.set_max_width_chars(13)
+        title.set_size_request(82, 34)
         title.set_tooltip_text(record.title)
         title.add_css_class("poster-grid-title")
         card.append(title)
@@ -4974,7 +4992,8 @@ class CineShelfWindow:
         overlay.set_valign(Gtk.Align.START)
         poster_record = replace(
             record,
-            artwork_file=record.poster_file or record.artwork_file,
+            # A landscape backdrop must never be used in a portrait poster slot.
+            artwork_file=record.poster_file,
         )
         overlay.set_child(PosterWidget(poster_record, width, height))
 
