@@ -172,33 +172,53 @@ def request_json(
         raise TmdbError(f"Could not reach TMDB: {reason}") from None
 
 
-def fetch_explore(token: str, *, language: str = "en-US") -> dict[str, list[dict[str, Any]]]:
-    common = {"language": language, "page": 1}
-    movies = request_json(
-        "/trending/movie/week",
-        token=token,
-        params=common,
-    ).get("results", [])
-    shows = request_json(
-        "/trending/tv/week",
-        token=token,
-        params=common,
-    ).get("results", [])
-    anime = request_json(
-        "/discover/tv",
-        token=token,
-        params={
+def fetch_explore_page(
+    token: str,
+    media_type: str,
+    page: int,
+    *,
+    language: str = "en-US",
+) -> dict[str, Any]:
+    """Fetch one pageable Explore feed while keeping anime distinct from TV."""
+    page = max(1, page)
+    common: dict[str, str | int | bool] = {
+        "language": language,
+        "page": page,
+    }
+    if media_type == "Movies":
+        path = "/trending/movie/week"
+        params = common
+    elif media_type == "Shows":
+        path = "/trending/tv/week"
+        params = common
+    elif media_type == "Anime":
+        path = "/discover/tv"
+        params = {
             **common,
             "include_adult": "false",
             "sort_by": "popularity.desc",
             "with_genres": 16,
             "with_origin_country": "JP",
-        },
-    ).get("results", [])
+        }
+    else:
+        raise ValueError(f"Unsupported Explore media type: {media_type}")
+    payload = request_json(path, token=token, params=params)
+    results = payload.get("results", [])
     return {
-        "Movies": [item for item in movies if isinstance(item, dict)],
-        "Shows": [item for item in shows if isinstance(item, dict)],
-        "Anime": [item for item in anime if isinstance(item, dict)],
+        "page": int(payload.get("page") or page),
+        "total_pages": int(payload.get("total_pages") or page),
+        "results": [item for item in results if isinstance(item, dict)],
+    }
+
+
+def fetch_explore(token: str, *, language: str = "en-US") -> dict[str, list[dict[str, Any]]]:
+    movies = fetch_explore_page(token, "Movies", 1, language=language)["results"]
+    shows = fetch_explore_page(token, "Shows", 1, language=language)["results"]
+    anime = fetch_explore_page(token, "Anime", 1, language=language)["results"]
+    return {
+        "Movies": movies,
+        "Shows": shows,
+        "Anime": anime,
     }
 
 

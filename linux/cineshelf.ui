@@ -31,12 +31,74 @@
                           </object>
                         </property>
                         <child type="start">
-                          <object class="GtkButton" id="search_button">
-                            <property name="icon-name">system-search-symbolic</property>
-                            <property name="tooltip-text">Search library (Ctrl+K)</property>
-                            <style>
-                              <class name="flat"/>
-                            </style>
+                          <object class="GtkBox">
+                            <property name="spacing">2</property>
+                            <child>
+                              <object class="GtkMenuButton" id="profile_menu_button">
+                                <property name="tooltip-text">Account</property>
+                                <property name="popover">
+                                  <object class="GtkPopover" id="profile_popover">
+                                    <property name="autohide">true</property>
+                                    <property name="child">
+                                      <object class="GtkListBox" id="profile_sidebar_list">
+                                        <property name="selection-mode">none</property>
+                                        <property name="activate-on-single-click">true</property>
+                                        <property name="width-request">260</property>
+                                        <property name="margin-top">6</property>
+                                        <property name="margin-bottom">6</property>
+                                        <property name="margin-start">6</property>
+                                        <property name="margin-end">6</property>
+                                        <style>
+                                          <class name="boxed-list"/>
+                                        </style>
+                                        <child>
+                                          <object class="AdwActionRow" id="profile_sidebar_row">
+                                            <property name="title">User</property>
+                                            <property name="subtitle">Local profile</property>
+                                            <property name="title-lines">1</property>
+                                            <property name="subtitle-lines">1</property>
+                                            <property name="activatable">true</property>
+                                            <property name="tooltip-text">Open profile</property>
+                                            <child type="prefix">
+                                              <object class="AdwAvatar" id="profile_popover_avatar">
+                                                <property name="size">42</property>
+                                                <property name="text">User</property>
+                                                <property name="show-initials">true</property>
+                                              </object>
+                                            </child>
+                                            <child type="suffix">
+                                              <object class="GtkImage">
+                                                <property name="icon-name">go-next-symbolic</property>
+                                              </object>
+                                            </child>
+                                          </object>
+                                        </child>
+                                      </object>
+                                    </property>
+                                  </object>
+                                </property>
+                                <property name="child">
+                                  <object class="AdwAvatar" id="sidebar_profile_avatar">
+                                    <property name="size">28</property>
+                                    <property name="text">User</property>
+                                    <property name="show-initials">true</property>
+                                  </object>
+                                </property>
+                                <style>
+                                  <class name="flat"/>
+                                  <class name="circular"/>
+                                </style>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkButton" id="search_button">
+                                <property name="icon-name">system-search-symbolic</property>
+                                <property name="tooltip-text">Search Explore (Ctrl+K)</property>
+                                <style>
+                                  <class name="flat"/>
+                                </style>
+                              </object>
+                            </child>
                           </object>
                         </child>
                         <child type="end">
@@ -884,6 +946,14 @@
             <property name="child">
               <object class="GtkBox" id="explore_filter_bar">
                 <property name="spacing">6</property>
+                <child>
+                  <object class="GtkSearchEntry" id="explore_search_entry">
+                    <property name="hexpand">true</property>
+                    <property name="width-request">220</property>
+                    <property name="placeholder-text">Search Explore…</property>
+                    <property name="tooltip-text">Search titles in Explore (Ctrl+K)</property>
+                  </object>
+                </child>
                 <child>
                   <object class="GtkDropDown" id="explore_sort_dropdown">
                     <property name="width-request">142</property>

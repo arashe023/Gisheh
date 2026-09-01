@@ -77,6 +77,27 @@ class TmdbClientTests(unittest.TestCase):
         self.assertEqual(len(result["Shows"]), 1)
         self.assertEqual(len(result["Anime"]), 1)
 
+    def test_fetch_explore_page_preserves_tmdb_pagination(self) -> None:
+        with patch.object(
+            tmdb_client,
+            "request_json",
+            return_value={
+                "page": 3,
+                "total_pages": 12,
+                "results": [{"id": 31}, "invalid", {"id": 32}],
+            },
+        ) as requester:
+            result = tmdb_client.fetch_explore_page("token", "Movies", 3)
+
+        self.assertEqual(result["page"], 3)
+        self.assertEqual(result["total_pages"], 12)
+        self.assertEqual(result["results"], [{"id": 31}, {"id": 32}])
+        requester.assert_called_once_with(
+            "/trending/movie/week",
+            token="token",
+            params={"language": "en-US", "page": 3},
+        )
+
     def test_summary_is_fetched_from_tmdb_and_cached(self) -> None:
         payload = {"id": 42, "title": "TMDB title", "poster_path": "/p.jpg"}
         with tempfile.TemporaryDirectory() as temporary_directory:

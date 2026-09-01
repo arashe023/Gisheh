@@ -1233,7 +1233,12 @@ class CineShelfWindow:
         self._tmdb_details_loading: set[str] = set()
         self._tmdb_details_loaded: set[str] = set()
         self._tmdb_detail_generations: dict[str, int] = {}
+        self._tmdb_cast_images_loading: dict[str, set[int]] = {}
+        self._tmdb_gallery_images_loading: dict[str, dict[str, int]] = {}
         self._tmdb_explore_generation = 0
+        self._tmdb_explore_pages = {media_type: 1 for media_type in MEDIA_TYPES}
+        self._tmdb_explore_has_more = {media_type: True for media_type in MEDIA_TYPES}
+        self._tmdb_explore_pages_loading: set[str] = set()
         self._tmdb_library_generation = 0
         self._tmdb_library_refresh_source_id = 0
         self._log_dialog: Adw.AlertDialog | None = None
@@ -1309,6 +1314,12 @@ class CineShelfWindow:
             "destination_list",
             "status_list",
             "collections_list",
+            "profile_menu_button",
+            "profile_popover",
+            "profile_sidebar_list",
+            "profile_sidebar_row",
+            "sidebar_profile_avatar",
+            "profile_popover_avatar",
             "storage_button",
             "storage_progress",
             "preferences_button",
@@ -1360,6 +1371,7 @@ class CineShelfWindow:
             "explore_eyebrow_label",
             "explore_count_label",
             "explore_filter_bar",
+            "explore_search_entry",
             "explore_sort_dropdown",
             "explore_period_dropdown",
             "explore_genre_dropdown",
@@ -1589,15 +1601,8 @@ class CineShelfWindow:
             "find-location-symbolic",
             self._explore_total(self.active_media),
         )
-        self.profile_row = SidebarRow(
-            "profile",
-            "Profile",
-            "avatar-default-symbolic",
-            None,
-        )
         self.destination_list.append(self.library_row)
         self.destination_list.append(self.explore_row)
-        self.destination_list.append(self.profile_row)
 
         for status in STATUSES:
             row = SidebarRow(
@@ -1662,7 +1667,7 @@ class CineShelfWindow:
         self.explore_empty_page = Adw.StatusPage(
             icon_name="system-search-symbolic",
             title="Nothing new here yet",
-            description="Try another period or clear the genre filter.",
+            description="Try another search, period, or genre.",
         )
         self.explore_empty_page.add_css_class("empty-status")
         reset_button = Gtk.Button(label="Reset Explore filters")
@@ -1678,6 +1683,21 @@ class CineShelfWindow:
         self.explore_grid.set_hexpand(True)
         self.explore_grid.set_valign(Gtk.Align.START)
         self.explore_grid.add_css_class("explore-grid")
+
+        self.explore_loading_box = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=8,
+        )
+        self.explore_loading_box.set_halign(Gtk.Align.CENTER)
+        self.explore_loading_box.set_margin_top(8)
+        self.explore_loading_box.set_margin_bottom(8)
+        self.explore_loading_spinner = Gtk.Spinner(spinning=True)
+        self.explore_loading_box.append(self.explore_loading_spinner)
+        loading_label = Gtk.Label(label="Loading more from TMDB…")
+        loading_label.add_css_class("dim-label")
+        loading_label.add_css_class("caption")
+        self.explore_loading_box.append(loading_label)
+        self.explore_loading_box.set_visible(False)
 
         self._update_explore_genre_model()
 
@@ -1803,6 +1823,7 @@ class CineShelfWindow:
         self.profile_stack.add_named(self.profile_statistics_host, "statistics")
         self.profile_stack.add_named(self.profile_watched_host, "watched")
         content.append(self.profile_stack)
+        self._update_profile_identity()
         self.profile_tabs.connect("notify::active-name", self._on_profile_tab_changed)
 
         self.browser_stack.add_named(self.profile_pane, "profile")
@@ -2910,9 +2931,10 @@ class CineShelfWindow:
         if not self.simkl_connected:
             return GLib.SOURCE_REMOVE
         try:
-            self.profile_avatar.set_custom_image(
-                Gdk.Texture.new_from_filename(avatar_file)
-            )
+            texture = Gdk.Texture.new_from_filename(avatar_file)
+            self.profile_avatar.set_custom_image(texture)
+            self.sidebar_profile_avatar.set_custom_image(texture)
+            self.profile_popover_avatar.set_custom_image(texture)
         except GLib.Error:
             pass
         return GLib.SOURCE_REMOVE
@@ -2978,14 +3000,25 @@ class CineShelfWindow:
         )
         self.profile_name_label.set_label(name)
         self.profile_avatar.set_text(name)
+        self.profile_sidebar_row.set_title(name)
+        self.sidebar_profile_avatar.set_text(name)
+        self.profile_popover_avatar.set_text(name)
         cached_avatar = simkl_client.cached_avatar()
         if cached_avatar:
             try:
-                self.profile_avatar.set_custom_image(
-                    Gdk.Texture.new_from_filename(cached_avatar)
-                )
+                texture = Gdk.Texture.new_from_filename(cached_avatar)
+                self.profile_avatar.set_custom_image(texture)
+                self.sidebar_profile_avatar.set_custom_image(texture)
+                self.profile_popover_avatar.set_custom_image(texture)
             except GLib.Error:
                 pass
+        else:
+            self.profile_avatar.set_custom_image(None)
+            self.sidebar_profile_avatar.set_custom_image(None)
+            self.profile_popover_avatar.set_custom_image(None)
+        self.profile_sidebar_row.set_subtitle(
+            f"Simkl · {account_type}" if self.simkl_connected else "Local profile"
+        )
         self.profile_subtitle_label.set_label(
             f"Connected to Simkl · {account_type}"
             if self.simkl_connected
@@ -3544,6 +3577,10 @@ class CineShelfWindow:
         )
 
         self.search_entry.connect("search-changed", self._on_search_changed)
+        self.explore_search_entry.connect(
+            "search-changed",
+            self._on_explore_search_changed,
+        )
         self.sort_dropdown.connect("notify::selected", self._on_sort_changed)
         self.genre_dropdown.connect("notify::selected", self._on_genre_changed)
         self.explore_sort_dropdown.connect(
@@ -3583,6 +3620,10 @@ class CineShelfWindow:
             "clicked", lambda *_args: self._toast("Library storage: 68% used")
         )
         self.preferences_button.connect("clicked", self._on_preferences_clicked)
+        self.profile_sidebar_list.connect(
+            "row-activated",
+            self._on_profile_sidebar_activated,
+        )
         self.more_button.connect("clicked", self._on_more_clicked)
         self.watched_button.connect("clicked", self._on_watched_clicked)
         self.favorite_button.connect("toggled", self._on_favorite_toggled)
@@ -3626,6 +3667,17 @@ class CineShelfWindow:
         key_controller = Gtk.EventControllerKey()
         key_controller.connect("key-pressed", self._on_search_key_pressed)
         self.search_entry.add_controller(key_controller)
+
+        explore_search_key_controller = Gtk.EventControllerKey()
+        explore_search_key_controller.connect(
+            "key-pressed",
+            self._on_explore_search_key_pressed,
+        )
+        self.explore_search_entry.add_controller(explore_search_key_controller)
+
+        explore_adjustment = self.explore_scroller.get_vadjustment()
+        explore_adjustment.connect("value-changed", self._on_explore_scroll_changed)
+        explore_adjustment.connect("changed", self._on_explore_scroll_changed)
 
         window_key_controller = Gtk.EventControllerKey()
         window_key_controller.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
@@ -3941,6 +3993,8 @@ class CineShelfWindow:
             return
         self._tmdb_explore_generation += 1
         generation = self._tmdb_explore_generation
+        self._tmdb_explore_pages_loading.update(MEDIA_TYPES)
+        self._sync_explore_loading_indicator()
         threading.Thread(
             target=self._load_tmdb_explore_worker,
             args=(token, generation, self.active_media),
@@ -3962,7 +4016,7 @@ class CineShelfWindow:
                 (media_type, position, raw)
                 for media_type in MEDIA_TYPES
                 for position, raw in enumerate(
-                    collections.get(media_type, ())[:18],
+                    collections.get(media_type, ()),
                     start=1,
                 )
             ]
@@ -4043,6 +4097,14 @@ class CineShelfWindow:
     ) -> bool:
         if generation != self._tmdb_explore_generation:
             return GLib.SOURCE_REMOVE
+        self._tmdb_explore_pages = {media_type: 1 for media_type in MEDIA_TYPES}
+        self._tmdb_explore_has_more = {
+            media_type: any(
+                record.media_type == media_type for record in records
+            )
+            for media_type in MEDIA_TYPES
+        }
+        self._tmdb_explore_pages_loading.difference_update(MEDIA_TYPES)
         self.explore_records = records
         self.explore_ids = {record.id for record in records}
         self.records_by_id = {
@@ -4053,7 +4115,138 @@ class CineShelfWindow:
         self._update_explore_genre_model(preserve=False)
         if self.active_destination == "explore":
             self._refresh_explore()
+        self._sync_explore_loading_indicator()
         self._toast("Live TMDB data loaded")
+        return GLib.SOURCE_REMOVE
+
+    def _load_next_tmdb_explore_page(self) -> None:
+        media_type = self.active_media
+        if (
+            not self.tmdb_token
+            or media_type in self._tmdb_explore_pages_loading
+            or not self._tmdb_explore_has_more.get(media_type, True)
+        ):
+            return
+        page = self._tmdb_explore_pages.get(media_type, 1) + 1
+        generation = self._tmdb_explore_generation
+        self._tmdb_explore_pages_loading.add(media_type)
+        self._sync_explore_loading_indicator()
+        threading.Thread(
+            target=self._load_next_tmdb_explore_page_worker,
+            args=(self.tmdb_token, generation, media_type, page),
+            name=f"cineshelf-tmdb-explore-{media_type.lower()}-{page}",
+            daemon=True,
+        ).start()
+
+    def _load_next_tmdb_explore_page_worker(
+        self,
+        token: str,
+        generation: int,
+        media_type: str,
+        page: int,
+    ) -> None:
+        try:
+            payload = tmdb_client.fetch_explore_page(token, media_type, page)
+            raw_records = payload.get("results", ())
+            records: list[TitleRecord] = []
+            image_work: list[tuple[str, str, str]] = []
+            for position, raw in enumerate(raw_records, start=1):
+                if not isinstance(raw, dict):
+                    continue
+                poster_path = str(raw.get("poster_path") or "")
+                backdrop_path = str(raw.get("backdrop_path") or "")
+                poster_file = tmdb_client.cached_image(poster_path, size="w500")
+                backdrop_file = tmdb_client.cached_image(backdrop_path, size="w780")
+                absolute_position = (page - 1) * 20 + position
+                record = title_record_from_tmdb(
+                    raw,
+                    media_type,
+                    absolute_position,
+                    poster_file,
+                    backdrop_file,
+                )
+                records.append(record)
+                if poster_path and poster_file is None:
+                    image_work.append((record.id, "poster", poster_path))
+                if backdrop_path and backdrop_file is None:
+                    image_work.append((record.id, "backdrop", backdrop_path))
+            total_pages = int(payload.get("total_pages") or page)
+        except tmdb_client.TmdbError as error:
+            GLib.idle_add(
+                self._on_next_tmdb_explore_page_failed,
+                generation,
+                media_type,
+                str(error),
+            )
+            return
+
+        GLib.idle_add(
+            self._apply_next_tmdb_explore_page,
+            generation,
+            media_type,
+            page,
+            total_pages,
+            tuple(records),
+        )
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            futures = {
+                executor.submit(
+                    tmdb_client.cache_image,
+                    path,
+                    size="w500" if kind == "poster" else "w780",
+                ): (record_id, kind)
+                for record_id, kind, path in image_work
+            }
+            for future in as_completed(futures):
+                image_file = future.result()
+                if image_file is None:
+                    continue
+                record_id, kind = futures[future]
+                GLib.idle_add(
+                    self._apply_tmdb_explore_image,
+                    generation,
+                    record_id,
+                    kind,
+                    image_file,
+                )
+
+    def _apply_next_tmdb_explore_page(
+        self,
+        generation: int,
+        media_type: str,
+        page: int,
+        total_pages: int,
+        records: tuple[TitleRecord, ...],
+    ) -> bool:
+        if generation != self._tmdb_explore_generation:
+            return GLib.SOURCE_REMOVE
+        existing_ids = {record.id for record in self.explore_records}
+        additions = tuple(record for record in records if record.id not in existing_ids)
+        self.explore_records = (*self.explore_records, *additions)
+        self.explore_ids.update(record.id for record in additions)
+        self.records_by_id.update({record.id: record for record in additions})
+        self._tmdb_explore_pages[media_type] = page
+        self._tmdb_explore_has_more[media_type] = bool(records) and page < total_pages
+        self._tmdb_explore_pages_loading.discard(media_type)
+        self._update_sidebar_counts()
+        self._update_explore_genre_model(preserve=True)
+        if self.active_destination == "explore" and self.active_media == media_type:
+            self._refresh_explore(reset_scroll=False)
+        self._sync_explore_loading_indicator()
+        return GLib.SOURCE_REMOVE
+
+    def _on_next_tmdb_explore_page_failed(
+        self,
+        generation: int,
+        media_type: str,
+        message: str,
+    ) -> bool:
+        if generation != self._tmdb_explore_generation:
+            return GLib.SOURCE_REMOVE
+        self._tmdb_explore_pages_loading.discard(media_type)
+        self._sync_explore_loading_indicator()
+        self._app_log("Could not load the next TMDB Explore page: %s", message)
+        self._toast("Could not load more titles from TMDB")
         return GLib.SOURCE_REMOVE
 
     def _apply_tmdb_explore_image(
@@ -4121,6 +4314,8 @@ class CineShelfWindow:
     def _on_tmdb_explore_failed(self, generation: int, message: str) -> bool:
         if generation != self._tmdb_explore_generation:
             return GLib.SOURCE_REMOVE
+        self._tmdb_explore_pages_loading.difference_update(MEDIA_TYPES)
+        self._sync_explore_loading_indicator()
         print(f"CineShelf TMDB: {message}", file=sys.stderr)
         self._toast("TMDB unavailable — showing local sample data")
         return GLib.SOURCE_REMOVE
@@ -4135,6 +4330,8 @@ class CineShelfWindow:
         ):
             return
         self._tmdb_details_loading.add(record.id)
+        if self.selected_id == record.id:
+            self._update_details()
         generation = self._tmdb_detail_generations.get(record.id, 0) + 1
         self._tmdb_detail_generations[record.id] = generation
         threading.Thread(
@@ -4326,7 +4523,31 @@ class CineShelfWindow:
                 str(error),
             )
             return
-        GLib.idle_add(self._apply_tmdb_details, generation, updated)
+        profile_work = [
+            (index, str(item.get("profile_path") or ""))
+            for index, item in enumerate(cast_items)
+            if item.get("profile_path") and cast[index].profile_file is None
+        ]
+        gallery_work = [
+            ("backdrop", str(item["file_path"]), "w500")
+            for item in backdrop_items
+            if tmdb_client.cached_image(str(item["file_path"]), size="w500") is None
+        ] + [
+            ("poster", str(item["file_path"]), "w342")
+            for item in poster_items
+            if tmdb_client.cached_image(str(item["file_path"]), size="w342") is None
+        ]
+        gallery_pending = {
+            kind: sum(work_kind == kind for work_kind, _path, _size in gallery_work)
+            for kind in ("backdrop", "poster")
+        }
+        GLib.idle_add(
+            self._apply_tmdb_details,
+            generation,
+            updated,
+            tuple(index for index, _path in profile_work),
+            gallery_pending,
+        )
 
         main_images = [
             ("poster", poster_path, "w500")
@@ -4354,11 +4575,6 @@ class CineShelfWindow:
                         image_file,
                     )
 
-        profile_work = [
-            (index, str(item.get("profile_path") or ""))
-            for index, item in enumerate(cast_items)
-            if item.get("profile_path") and cast[index].profile_file is None
-        ]
         with ThreadPoolExecutor(max_workers=6) as executor:
             futures = {
                 executor.submit(tmdb_client.cache_image, path, size="w185"): index
@@ -4366,24 +4582,14 @@ class CineShelfWindow:
             }
             for future in as_completed(futures):
                 image_file = future.result()
-                if image_file is not None:
-                    GLib.idle_add(
-                        self._apply_tmdb_cast_artwork,
-                        record.id,
-                        generation,
-                        futures[future],
-                        image_file,
-                    )
+                GLib.idle_add(
+                    self._apply_tmdb_cast_artwork,
+                    record.id,
+                    generation,
+                    futures[future],
+                    image_file,
+                )
 
-        gallery_work = [
-            ("backdrop", str(item["file_path"]), "w500")
-            for item in backdrop_items
-            if tmdb_client.cached_image(str(item["file_path"]), size="w500") is None
-        ] + [
-            ("poster", str(item["file_path"]), "w342")
-            for item in poster_items
-            if tmdb_client.cached_image(str(item["file_path"]), size="w342") is None
-        ]
         with ThreadPoolExecutor(max_workers=6) as executor:
             futures = {
                 executor.submit(tmdb_client.cache_image, path, size=size): kind
@@ -4391,24 +4597,27 @@ class CineShelfWindow:
             }
             for future in as_completed(futures):
                 image_file = future.result()
-                if image_file is not None:
-                    GLib.idle_add(
-                        self._apply_tmdb_gallery_artwork,
-                        record.id,
-                        generation,
-                        futures[future],
-                        image_file,
-                    )
+                GLib.idle_add(
+                    self._apply_tmdb_gallery_artwork,
+                    record.id,
+                    generation,
+                    futures[future],
+                    image_file,
+                )
 
     def _apply_tmdb_details(
         self,
         generation: int,
         updated: TitleRecord,
+        cast_pending: tuple[int, ...],
+        gallery_pending: dict[str, int],
     ) -> bool:
         if self._tmdb_detail_generations.get(updated.id) != generation:
             return GLib.SOURCE_REMOVE
         self._tmdb_details_loading.discard(updated.id)
         self._tmdb_details_loaded.add(updated.id)
+        self._tmdb_cast_images_loading[updated.id] = set(cast_pending)
+        self._tmdb_gallery_images_loading[updated.id] = gallery_pending
         self._store_tmdb_record(updated)
         return GLib.SOURCE_REMOVE
 
@@ -4464,12 +4673,17 @@ class CineShelfWindow:
         record_id: str,
         generation: int,
         index: int,
-        image_file: str,
+        image_file: str | None,
     ) -> bool:
         if self._tmdb_detail_generations.get(record_id) != generation:
             return GLib.SOURCE_REMOVE
         record = self.records_by_id.get(record_id)
         if record is None or index >= len(record.cast):
+            return GLib.SOURCE_REMOVE
+        self._tmdb_cast_images_loading.setdefault(record_id, set()).discard(index)
+        if image_file is None:
+            if self.selected_id == record_id:
+                self._update_details()
             return GLib.SOURCE_REMOVE
         cast = tuple(
             replace(member, profile_file=image_file) if position == index else member
@@ -4483,12 +4697,18 @@ class CineShelfWindow:
         record_id: str,
         generation: int,
         kind: str,
-        image_file: str,
+        image_file: str | None,
     ) -> bool:
         if self._tmdb_detail_generations.get(record_id) != generation:
             return GLib.SOURCE_REMOVE
         record = self.records_by_id.get(record_id)
         if record is None:
+            return GLib.SOURCE_REMOVE
+        pending = self._tmdb_gallery_images_loading.setdefault(record_id, {})
+        pending[kind] = max(0, pending.get(kind, 0) - 1)
+        if image_file is None:
+            if self.selected_id == record_id:
+                self._update_details()
             return GLib.SOURCE_REMOVE
         if kind == "poster":
             gallery = tuple(dict.fromkeys((*record.gallery_posters, image_file)))
@@ -4508,6 +4728,8 @@ class CineShelfWindow:
         if self._tmdb_detail_generations.get(record_id) != generation:
             return GLib.SOURCE_REMOVE
         self._tmdb_details_loading.discard(record_id)
+        self._tmdb_cast_images_loading.pop(record_id, None)
+        self._tmdb_gallery_images_loading.pop(record_id, None)
         print(f"CineShelf TMDB details: {message}", file=sys.stderr)
         return GLib.SOURCE_REMOVE
 
@@ -4553,6 +4775,8 @@ class CineShelfWindow:
         self.tmdb_token = token
         self._tmdb_details_loading.clear()
         self._tmdb_details_loaded.clear()
+        self._tmdb_cast_images_loading.clear()
+        self._tmdb_gallery_images_loading.clear()
         self._toast("Connecting to TMDB…")
         if self.simkl_connected:
             self._load_tmdb_library_async(self.records)
@@ -4587,9 +4811,15 @@ class CineShelfWindow:
         )
 
     def _filtered_explore_records(self) -> tuple[TitleRecord, ...]:
+        query = self.explore_search_entry.get_text().strip().casefold()
         records = []
         for record in self.explore_records:
+            haystack = " ".join(
+                (record.title, record.description, record.creator, *record.genres)
+            ).casefold()
             if record.media_type != self.active_media:
+                continue
+            if query and query not in haystack:
                 continue
             if (
                 self.explore_period == "This month"
@@ -4751,6 +4981,8 @@ class CineShelfWindow:
 
         if not self.explore_visible_records:
             self.explore_feed_box.append(self.explore_empty_page)
+            self.explore_feed_box.append(self.explore_loading_box)
+            self._sync_explore_loading_indicator()
             return
 
         records = list(self.explore_visible_records)
@@ -4791,7 +5023,32 @@ class CineShelfWindow:
             fallback_notice.add_css_class("caption")
             fallback_notice.add_css_class("dim-label")
             self.explore_feed_box.append(fallback_notice)
+        self.explore_feed_box.append(self.explore_loading_box)
+        self._sync_explore_loading_indicator()
         self._sync_explore_selection_style()
+
+    def _sync_explore_loading_indicator(self) -> None:
+        if not hasattr(self, "explore_loading_box"):
+            return
+        loading = self.active_media in self._tmdb_explore_pages_loading
+        self.explore_loading_box.set_visible(loading)
+        self.explore_loading_spinner.set_spinning(loading)
+
+    def _on_explore_scroll_changed(self, adjustment: Gtk.Adjustment) -> None:
+        if self.active_destination != "explore":
+            return
+        if (
+            self.explore_search_entry.get_text().strip()
+            and not self.explore_visible_records
+        ):
+            return
+        remaining = (
+            adjustment.get_upper()
+            - adjustment.get_page_size()
+            - adjustment.get_value()
+        )
+        if remaining <= max(360.0, adjustment.get_page_size() * 0.65):
+            self._load_next_tmdb_explore_page()
 
     def _create_explore_card(
         self,
@@ -5168,7 +5425,13 @@ class CineShelfWindow:
         record: TitleRecord,
     ) -> None:
         self._clear_container(container)
-        for member in self._cast_members(record):
+        if record.id in self._tmdb_details_loading:
+            for _index in range(4):
+                container.append(self._loading_placeholder(82, 104, "Loading cast"))
+            return
+
+        pending_images = self._tmdb_cast_images_loading.get(record.id, set())
+        for index, member in enumerate(self._cast_members(record)):
             card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
             card.set_valign(Gtk.Align.START)
             card.set_size_request(82, -1)
@@ -5184,6 +5447,15 @@ class CineShelfWindow:
                     )
                 except GLib.Error:
                     pass
+
+            avatar_host = Gtk.Overlay()
+            avatar_host.set_child(avatar)
+            if index in pending_images:
+                spinner = Gtk.Spinner(spinning=True)
+                spinner.set_halign(Gtk.Align.CENTER)
+                spinner.set_valign(Gtk.Align.CENTER)
+                spinner.set_tooltip_text(f"Loading photo for {member.name}")
+                avatar_host.add_overlay(spinner)
 
             name = Gtk.Label(label=member.name)
             name.set_wrap(True)
@@ -5203,10 +5475,24 @@ class CineShelfWindow:
             role.add_css_class("caption")
             role.add_css_class("dim-label")
 
-            card.append(avatar)
+            card.append(avatar_host)
             card.append(name)
             card.append(role)
             container.append(card)
+
+    @staticmethod
+    def _loading_placeholder(width: int, height: int, tooltip: str) -> Gtk.Box:
+        placeholder = Gtk.Box()
+        placeholder.set_size_request(width, height)
+        placeholder.set_halign(Gtk.Align.CENTER)
+        placeholder.set_valign(Gtk.Align.CENTER)
+        placeholder.add_css_class("card")
+        placeholder.set_tooltip_text(tooltip)
+        spinner = Gtk.Spinner(spinning=True)
+        spinner.set_halign(Gtk.Align.CENTER)
+        spinner.set_valign(Gtk.Align.CENTER)
+        placeholder.append(spinner)
+        return placeholder
 
     def _series_seasons(self, record: TitleRecord) -> tuple[SeasonInfo, ...]:
         if record.seasons:
@@ -5642,8 +5928,19 @@ class CineShelfWindow:
         self._clear_container(self.images_box)
         is_poster = self.image_mode == "posters"
         width, height = (96, 144) if is_poster else (176, 99)
+        if record.id in self._tmdb_details_loading:
+            for _index in range(3 if is_poster else 2):
+                self.images_box.append(
+                    self._loading_placeholder(width, height, "Loading image")
+                )
+            return
         gallery = record.gallery_posters if is_poster else record.gallery_backdrops
-        fallback_count = 3 if is_poster else 2
+        pending_kind = "poster" if is_poster else "backdrop"
+        pending_count = self._tmdb_gallery_images_loading.get(record.id, {}).get(
+            pending_kind,
+            0,
+        )
+        fallback_count = 0 if pending_count else (3 if is_poster else 2)
         artwork_files = gallery or tuple(None for _index in range(fallback_count))
         for index, artwork_file in enumerate(artwork_files):
             image_record = (
@@ -5667,6 +5964,10 @@ class CineShelfWindow:
                 ),
             )
             self.images_box.append(button)
+        for _index in range(pending_count):
+            self.images_box.append(
+                self._loading_placeholder(width, height, "Loading image")
+            )
 
     def _related_records(self, record: TitleRecord) -> tuple[TitleRecord, ...]:
         related: list[TitleRecord] = []
@@ -5875,20 +6176,6 @@ class CineShelfWindow:
             self._sync_library_filter_selection()
             self._refresh_results()
             return
-        if row.key == "profile":
-            if self.active_destination == "library":
-                self.library_selected_id = self.selected_id
-            elif self.active_destination == "explore":
-                self.explore_selected_id = self.selected_id
-            self.active_destination = "profile"
-            self.media_switcher.set_visible(False)
-            self._updating = True
-            self.status_list.unselect_all()
-            self.collections_list.unselect_all()
-            self._updating = False
-            self.browser_stack.set_visible_child_name("profile")
-            self._refresh_profile()
-            return
         if row.key != "explore":
             return
         if self.active_destination == "library":
@@ -5903,6 +6190,32 @@ class CineShelfWindow:
         self._update_explore_genre_model()
         self._refresh_explore()
         self._queue_explore_resize()
+
+    def _on_profile_sidebar_activated(
+        self,
+        _list_box: Gtk.ListBox,
+        row: Gtk.ListBoxRow,
+    ) -> None:
+        if self._updating or row is not self.profile_sidebar_row:
+            return
+        if self.active_destination == "profile":
+            self.profile_popover.popdown()
+            return
+        self._set_details_open(False)
+        if self.active_destination == "library":
+            self.library_selected_id = self.selected_id
+        elif self.active_destination == "explore":
+            self.explore_selected_id = self.selected_id
+        self.active_destination = "profile"
+        self.media_switcher.set_visible(False)
+        self._updating = True
+        self.destination_list.unselect_all()
+        self.status_list.unselect_all()
+        self.collections_list.unselect_all()
+        self._updating = False
+        self.browser_stack.set_visible_child_name("profile")
+        self.profile_popover.popdown()
+        self._refresh_profile()
 
     def _on_sidebar_toggled(self, button: Gtk.ToggleButton) -> None:
         sidebar_visible = button.get_active()
@@ -5976,13 +6289,18 @@ class CineShelfWindow:
         if not self._updating:
             self._refresh_results()
 
+    def _on_explore_search_changed(self, _entry: Gtk.SearchEntry) -> None:
+        if not self._updating and self.active_destination == "explore":
+            self._refresh_explore()
+
     def _on_search_requested(self, *_args: Any) -> None:
-        if self.active_destination != "library":
-            if self.active_status == "Watchlist":
-                self.collections_list.select_row(self.watchlist_row)
-            else:
-                self.status_list.select_row(self.status_rows[self.active_status])
-        self.search_entry.grab_focus()
+        if self.active_destination != "explore":
+            self.destination_list.select_row(self.explore_row)
+        GLib.idle_add(self._focus_explore_search)
+
+    def _focus_explore_search(self) -> bool:
+        self.explore_search_entry.grab_focus()
+        return GLib.SOURCE_REMOVE
 
     def _on_sort_changed(self, dropdown: Gtk.DropDown, _parameter: Any) -> None:
         if self._updating:
@@ -6357,6 +6675,19 @@ class CineShelfWindow:
         if keyval != Gdk.KEY_Escape:
             return False
         self.search_entry.set_text("")
+        self.window.set_focus(None)
+        return True
+
+    def _on_explore_search_key_pressed(
+        self,
+        _controller: Gtk.EventControllerKey,
+        keyval: int,
+        _keycode: int,
+        _state: Gdk.ModifierType,
+    ) -> bool:
+        if keyval != Gdk.KEY_Escape:
+            return False
+        self.explore_search_entry.set_text("")
         self.window.set_focus(None)
         return True
 
