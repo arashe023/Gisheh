@@ -8,7 +8,7 @@ __pycache__/
 *.local
 
 # Temporary files exported by GNOME Workbench; Builder/Meson is authoritative.
-/jsconfig.json
-/settings
-/workbench.vala
+**/jsconfig.json
+**/settings
+**/workbench.vala
 /linux/

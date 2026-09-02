@@ -2,6 +2,7 @@
 
 ## منتشرنشده
 
+- ثبت launcher پایتون به‌عنوان custom target اجرایی Meson تا GNOME Builder فرمان Run را خودکار پیدا کند و پس از build متوقف نشود
 - مهاجرت ساختار پروژه به الگوی GNOME Builder با Meson، package استاندارد Python، GResource، GSettings، AppStream، gettext و manifest فلت‌پک GNOME 50
 - حذف کامل نمونهٔ قدیمی Vue/Vite و فایل‌های npm و حذف وابستگی اجرای اصلی به پوشهٔ `linux/` و اسکریپت‌های نصب دستی
 - جداسازی منبع داده‌ها: متادیتا، امتیاز عمومی و تمام تصاویر از TMDB؛ وضعیت و امتیاز کاربر از Simkl

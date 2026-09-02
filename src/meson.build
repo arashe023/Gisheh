@@ -24,10 +24,24 @@ python.install_sources(
 launcher_configuration = configuration_data()
 launcher_configuration.set('PYTHON', python.full_path())
 launcher_configuration.set('PYTHON_PACKAGE_ROOT', python.get_install_dir())
-configure_file(
+configured_launcher = configure_file(
   input: 'cineshelf.in',
-  output: 'cineshelf',
+  output: 'cineshelf-configured',
   configuration: launcher_configuration,
+)
+
+cineshelf_launcher = custom_target(
+  'cineshelf',
+  input: configured_launcher,
+  output: 'cineshelf',
+  command: [
+    python,
+    meson.project_source_root() / 'build-aux/prepare-launcher.py',
+    '@INPUT@',
+    '@OUTPUT@',
+  ],
+  build_by_default: true,
+  install: true,
   install_dir: get_option('bindir'),
   install_mode: 'rwxr-xr-x',
 )

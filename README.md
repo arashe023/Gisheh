@@ -58,6 +58,7 @@ Explore در صورت تنظیم `TMDB_READ_TOKEN` از داده‌ها و تص�
 ## اجرا
 
 پروژه را مستقیماً در GNOME Builder باز کنید؛ Builder فایل Meson و manifest فلت‌پک را تشخیص می‌دهد و با دکمهٔ Run آن را build و اجرا می‌کند.
+فایل اجرایی Python در Meson به‌عنوان target نصب‌شوندهٔ `cineshelf` ثبت شده است؛ بنابراین در تنظیمات پروژهٔ Builder، گزینهٔ Run Command باید به‌صورت خودکار `cineshelf` باشد.
 
 برای build و تست روی سیستم میزبان:
 
