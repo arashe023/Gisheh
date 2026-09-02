@@ -50,6 +50,11 @@ glib_compile_resources = find_program('glib-compile-resources')
 cineshelf_resources = custom_target(
   'cineshelf-resources',
   input: 'cineshelf/io.github.cineshelf.CineShelf.gresource.xml',
+  depend_files: files(
+    'cineshelf/ui/window.ui',
+    'cineshelf/style.css',
+    'cineshelf/library.json',
+  ),
   output: 'cineshelf.gresource',
   command: [
     glib_compile_resources,

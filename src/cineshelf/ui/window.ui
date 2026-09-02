@@ -369,41 +369,8 @@
                                                 </style>
                                               </object>
                                             </child>
-                                            <child>
-                                              <object class="GtkLabel" id="section_count">
-                                                <property name="label">94</property>
-                                                <property name="valign">center</property>
-                                                <style>
-                                                  <class name="numeric"/>
-                                                  <class name="count-badge"/>
-                                                </style>
-                                              </object>
-                                            </child>
                                           </object>
                                         </child>
-                                      </object>
-                                    </property>
-                                    <property name="end-widget">
-                                      <object class="GtkButton" id="add_title_button">
-                                        <property name="child">
-                                          <object class="GtkBox">
-                                            <property name="spacing">6</property>
-                                            <child>
-                                              <object class="GtkImage">
-                                                <property name="icon-name">list-add-symbolic</property>
-                                              </object>
-                                            </child>
-                                            <child>
-                                              <object class="GtkLabel">
-                                                <property name="label">Add title</property>
-                                              </object>
-                                            </child>
-                                          </object>
-                                        </property>
-                                        <style>
-                                          <class name="suggested-action"/>
-                                          <class name="pill"/>
-                                        </style>
                                       </object>
                                     </property>
                                   </object>
@@ -454,7 +421,7 @@
                                     <property name="spacing">10</property>
                                     <child>
                                       <object class="GtkLabel" id="result_count">
-                                        <property name="label">All (94)</property>
+                                        <property name="label">All</property>
                                         <style>
                                           <class name="heading"/>
                                         </style>
@@ -770,7 +737,7 @@
                                       </object>
                                     </child>
                                     <child>
-                                      <object class="AdwBin">
+                                      <object class="AdwBin" id="activity_progress_card">
                                         <property name="child">
                                           <object class="GtkBox">
                                             <property name="orientation">vertical</property>
@@ -884,16 +851,6 @@
                 <property name="halign">start</property>
                 <style>
                   <class name="title-1"/>
-                </style>
-              </object>
-            </child>
-            <child>
-              <object class="GtkLabel" id="explore_count_label">
-                <property name="label">0</property>
-                <property name="valign">center</property>
-                <style>
-                  <class name="numeric"/>
-                  <class name="count-badge"/>
                 </style>
               </object>
             </child>

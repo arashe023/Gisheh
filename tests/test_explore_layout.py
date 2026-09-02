@@ -49,6 +49,24 @@ class ExploreLayoutTests(unittest.TestCase):
 
 
 class DetailActionLayoutTests(unittest.TestCase):
+    def test_section_counts_and_redundant_add_button_are_not_in_the_ui(self) -> None:
+        root = ET.parse(cineshelf.UI_FILE).getroot()
+        objects = {
+            item.get("id"): item.get("class")
+            for item in root.iter("object")
+            if item.get("id")
+        }
+
+        self.assertNotIn("section_count", objects)
+        self.assertNotIn("add_title_button", objects)
+        self.assertNotIn("explore_count_label", objects)
+        self.assertEqual(objects["activity_progress_card"], "AdwBin")
+
+    def test_completion_progress_is_only_shown_for_episodic_media(self) -> None:
+        self.assertFalse(cineshelf.should_show_completion_progress("Movies"))
+        self.assertTrue(cineshelf.should_show_completion_progress("Shows"))
+        self.assertTrue(cineshelf.should_show_completion_progress("Anime"))
+
     def test_rating_popover_and_native_secondary_menu_have_no_custom_rows(self) -> None:
         root = ET.parse(cineshelf.UI_FILE).getroot()
         objects = {

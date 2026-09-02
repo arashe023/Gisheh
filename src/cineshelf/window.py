@@ -92,6 +92,11 @@ STATUS_ICONS = {
 
 LISTS = (("Watchlist", "bookmark-new-symbolic"),)
 
+
+def should_show_completion_progress(media_type: str) -> bool:
+    """Return whether episodic completion progress belongs in title details."""
+    return media_type != "Movies"
+
 TMDB_GENRES = {
     12: "Adventure",
     14: "Fantasy",
@@ -1539,7 +1544,6 @@ class SidebarRow(Gtk.ListBoxRow):
         key: str,
         label: str,
         icon_name: str,
-        count: int | None,
     ) -> None:
         super().__init__()
         self.key = key
@@ -1553,19 +1557,10 @@ class SidebarRow(Gtk.ListBoxRow):
         icon = Gtk.Image.new_from_icon_name(icon_name)
         title = Gtk.Label(label=label, xalign=0)
         title.set_hexpand(True)
-        self.count_label = Gtk.Label(label="" if count is None else str(count))
-        self.count_label.add_css_class("caption")
-        self.count_label.add_css_class("numeric")
-        self.count_label.set_visible(count is not None)
 
         content.append(icon)
         content.append(title)
-        content.append(self.count_label)
         self.set_child(content)
-
-    def set_count(self, count: int) -> None:
-        self.count_label.set_label(str(count))
-        self.count_label.set_visible(True)
 
 
 class CineShelfWindow:
@@ -1778,8 +1773,6 @@ class CineShelfWindow:
             "library_pane",
             "eyebrow_label",
             "section_title",
-            "section_count",
-            "add_title_button",
             "search_entry",
             "sort_dropdown",
             "genre_dropdown",
@@ -1811,6 +1804,7 @@ class CineShelfWindow:
             "release_row",
             "country_row",
             "activity_row",
+            "activity_progress_card",
             "activity_status",
             "activity_percentage",
             "activity_progress",
@@ -1820,7 +1814,6 @@ class CineShelfWindow:
             "explore_pane",
             "explore_header",
             "explore_eyebrow_label",
-            "explore_count_label",
             "explore_filter_bar",
             "explore_search_entry",
             "explore_sort_dropdown",
@@ -2111,13 +2104,11 @@ class CineShelfWindow:
             "library",
             "Library",
             "folder-symbolic",
-            self._library_total(self.active_media),
         )
         self.explore_row = SidebarRow(
             "explore",
             "Explore",
             "find-location-symbolic",
-            self._explore_total(self.active_media),
         )
         self.destination_list.append(self.library_row)
         self.destination_list.append(self.explore_row)
@@ -2127,7 +2118,6 @@ class CineShelfWindow:
                 status,
                 status,
                 STATUS_ICONS[status],
-                self._status_total(self.active_media, status),
             )
             self.status_rows[status] = row
             self.status_list.append(row)
@@ -2143,7 +2133,6 @@ class CineShelfWindow:
                 label,
                 label,
                 icon_name,
-                self._status_total(self.active_media, label),
             )
             self.list_rows[label] = row
             self.collections_list.append(row)
@@ -3421,7 +3410,6 @@ class CineShelfWindow:
         self._update_profile_identity()
         self.simkl_button.set_sensitive(False)
         self.simkl_disconnect_button.set_sensitive(False)
-        self._update_sidebar_counts()
         self._update_genre_model()
         self._refresh_results()
         self._refresh_profile()
@@ -3666,7 +3654,6 @@ class CineShelfWindow:
         }
         self._save_user_state()
         self._update_profile_identity()
-        self._update_sidebar_counts()
         self._update_genre_model()
         self._refresh_results()
         self._refresh_profile()
@@ -4142,12 +4129,6 @@ class CineShelfWindow:
         self.search_button.connect("clicked", self._on_search_requested)
         self.add_sidebar_button.connect(
             "clicked", lambda *_args: self._toast("Add dialog opened")
-        )
-        self.add_title_button.connect(
-            "clicked",
-            lambda *_args: self._toast(
-                f"Add {self.active_media.lower()} to {self.active_status.lower()}"
-            ),
         )
         self.storage_button.connect(
             "clicked", lambda *_args: self._toast("Library storage: 68% used")
@@ -4644,7 +4625,6 @@ class CineShelfWindow:
             )
         }
         self.explore_selected_id = None
-        self._update_sidebar_counts()
         self._update_explore_genre_model(preserve=False)
         if self.active_destination == "explore":
             self._refresh_explore()
@@ -4764,7 +4744,6 @@ class CineShelfWindow:
         self._tmdb_explore_pages[media_type] = page
         self._tmdb_explore_has_more[media_type] = bool(records) and page < total_pages
         self._tmdb_explore_pages_loading.discard(media_type)
-        self._update_sidebar_counts()
         self._update_explore_genre_model(preserve=True)
         if self.active_destination == "explore" and self.active_media == media_type:
             self._refresh_explore(reset_scroll=False)
@@ -5976,7 +5955,6 @@ class CineShelfWindow:
                 self.grid_box.select_child(grid_children[self.selected_id])
         self._updating = False
 
-        total = self._status_total(self.active_media, self.active_status)
         sample_count = len(self.visible_records)
         has_filters = bool(self.search_entry.get_text().strip()) or self.genre != "All genres"
         if has_filters:
@@ -5986,8 +5964,7 @@ class CineShelfWindow:
 
         self.eyebrow_label.set_label(f"My library / {self.active_media}")
         self.section_title.set_label(self.active_status)
-        self.section_count.set_label(str(total))
-        self.result_count.set_label(f"All ({total})")
+        self.result_count.set_label("All")
         self.result_description.set_label(description)
         self.search_entry.set_placeholder_text(
             f"Search {self.active_media.lower()}…"
@@ -6011,8 +5988,6 @@ class CineShelfWindow:
         self.explore_eyebrow_label.set_label(
             f"{'TMDB Search' if query else 'Discover'} / {self.active_media}"
         )
-        self.explore_count_label.set_label(str(len(self.explore_visible_records)))
-        self.explore_row.set_count(self._explore_total(self.active_media))
         if query:
             self.explore_empty_page.set_icon_name("system-search-symbolic")
             self.explore_empty_page.set_title(
@@ -7203,6 +7178,9 @@ class CineShelfWindow:
         self.activity_status.set_label("Completed" if is_completed else "Not watched yet")
         self.activity_percentage.set_label("100%" if is_completed else "0%")
         self.activity_progress.set_fraction(1.0 if is_completed else 0.0)
+        self.activity_progress_card.set_visible(
+            should_show_completion_progress(record.media_type)
+        )
 
         self._updating_details = True
         self.bookmark_button.set_visible(not is_explore_view)
@@ -7221,14 +7199,6 @@ class CineShelfWindow:
         self._populate_detail_sections(record)
         if record_changed:
             self._scroll_to_top(self.details_scroller)
-
-    def _update_sidebar_counts(self) -> None:
-        for status, row in self.status_rows.items():
-            row.set_count(self._status_total(self.active_media, status))
-        for list_name, row in self.list_rows.items():
-            row.set_count(self._status_total(self.active_media, list_name))
-        self.library_row.set_count(self._library_total(self.active_media))
-        self.explore_row.set_count(self._explore_total(self.active_media))
 
     def _sync_library_filter_selection(self) -> None:
         was_updating = self._updating
@@ -7267,7 +7237,6 @@ class CineShelfWindow:
             return
         self._set_details_open(False)
         self.active_media = media_type
-        self._update_sidebar_counts()
         if self.active_destination == "explore":
             self._update_genre_model()
             self._update_explore_genre_model(preserve=False)
@@ -7946,7 +7915,6 @@ class CineShelfWindow:
                     self.status_overrides.pop(record.id, None)
                     self.completed.discard(record.id)
                 self._save_user_state()
-                self._update_sidebar_counts()
                 self._refresh_explore(reset_scroll=False)
 
             self._write_simkl_list_change(
@@ -7969,7 +7937,6 @@ class CineShelfWindow:
             if self.status_overrides[record.id] == record.status:
                 self.status_overrides.pop(record.id)
             self._save_user_state()
-            self._update_sidebar_counts()
             if self.active_destination == "profile":
                 self._refresh_profile()
             else:
@@ -8010,7 +7977,6 @@ class CineShelfWindow:
                     self.library_ids.discard(record.id)
                     self.records_by_id.pop(record.id, None)
             self._save_user_state()
-            self._update_sidebar_counts()
             if self.active_destination == "explore":
                 self._refresh_explore(reset_scroll=False)
             else:

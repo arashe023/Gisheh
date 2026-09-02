@@ -41,18 +41,12 @@
   color: @success_color;
 }
 
-.count-badge,
 .row-rating,
 .watched-badge,
 .rating-badge,
 .status-pill {
   border-radius: 999px;
   padding: 3px 7px;
-}
-
-.count-badge {
-  min-width: 20px;
-  background-color: alpha(@window_fg_color, 0.10);
 }
 
 .row-rating {
