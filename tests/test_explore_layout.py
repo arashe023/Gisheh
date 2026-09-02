@@ -86,6 +86,64 @@ class DetailActionLayoutTests(unittest.TestCase):
         self.assertNotIn("profile_sidebar_row", objects)
 
 
+class SeasonProgressTests(unittest.TestCase):
+    @staticmethod
+    def _record_with_seasons(
+        seasons: tuple[cineshelf.SeasonInfo, ...],
+    ) -> cineshelf.TitleRecord:
+        records, _explore, _totals = cineshelf.load_catalog()
+        base = next(record for record in records if record.media_type == "Shows")
+        return replace(base, seasons=seasons)
+
+    @staticmethod
+    def _controller() -> cineshelf.CineShelfWindow:
+        controller = object.__new__(cineshelf.CineShelfWindow)
+        controller.completed = set()
+        controller.episode_status_overrides = {}
+        return controller
+
+    def test_specials_are_excluded_from_regular_next_and_last_episode(self) -> None:
+        special = cineshelf.SeasonInfo("specials", 0, "Specials", 0, 2)
+        regular = cineshelf.SeasonInfo("s1", 1, "Season 1", 2, 2)
+        record = self._record_with_seasons((special, regular))
+        controller = self._controller()
+
+        next_item, last_item = controller._episode_progress_items(record)
+
+        self.assertEqual(cineshelf.main_progress_season_indexes(record.seasons), (1,))
+        self.assertIsNone(next_item)
+        self.assertIsNotNone(last_item)
+        assert last_item is not None
+        self.assertEqual(controller._episode_code(record, *last_item), "S1E2")
+
+    def test_specials_only_catalog_is_used_as_progress_fallback(self) -> None:
+        special = cineshelf.SeasonInfo("specials", 0, "Specials", 0, 2)
+        record = self._record_with_seasons((special,))
+        controller = self._controller()
+
+        next_item, last_item = controller._episode_progress_items(record)
+
+        self.assertEqual(cineshelf.main_progress_season_indexes(record.seasons), (0,))
+        self.assertIsNone(last_item)
+        self.assertIsNotNone(next_item)
+        assert next_item is not None
+        self.assertEqual(controller._episode_code(record, *next_item), "S0E1")
+
+    def test_watched_special_does_not_move_regular_series_progress(self) -> None:
+        special = cineshelf.SeasonInfo("specials", 0, "Specials", 0, 1)
+        regular = cineshelf.SeasonInfo("s1", 1, "Season 1", 0, 2)
+        record = self._record_with_seasons((special, regular))
+        controller = self._controller()
+        controller.episode_status_overrides[f"{record.id}/specials/e1"] = True
+
+        next_item, last_item = controller._episode_progress_items(record)
+
+        self.assertIsNone(last_item)
+        self.assertIsNotNone(next_item)
+        assert next_item is not None
+        self.assertEqual(controller._episode_code(record, *next_item), "S1E1")
+
+
 class MediaCollectionTests(unittest.TestCase):
     def test_media_items_keep_primary_first_and_remove_duplicates(self) -> None:
         records, _explore, _totals = cineshelf.load_catalog()

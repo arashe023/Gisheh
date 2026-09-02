@@ -320,6 +320,14 @@ class SeasonInfo:
     episode_items: tuple[EpisodeInfo, ...] = ()
 
 
+def main_progress_season_indexes(seasons: tuple[SeasonInfo, ...]) -> tuple[int, ...]:
+    """Use regular seasons for progress, falling back to Specials-only catalogs."""
+    regular_indexes = tuple(
+        index for index, season in enumerate(seasons) if season.number > 0
+    )
+    return regular_indexes or tuple(range(len(seasons)))
+
+
 @dataclass(frozen=True, slots=True)
 class TitleRecord:
     id: str
@@ -2315,7 +2323,8 @@ class CineShelfWindow:
             if record.media_type == "Movies":
                 continue
             watched_for_record = 0
-            for season_index, season in enumerate(self._series_seasons(record)):
+            seasons = self._series_seasons(record)
+            for season_index in main_progress_season_indexes(seasons):
                 watched_for_record += self._season_watched_count(
                     record,
                     season_index,
@@ -5115,7 +5124,10 @@ class CineShelfWindow:
                     if isinstance(item, dict) and item.get("name")
                 ]
                 creator = ", ".join(creators[:2]) or record.creator
-                total_watched = sum(season.watched for season in record.seasons)
+                progress_indexes = main_progress_season_indexes(record.seasons)
+                total_watched = sum(
+                    record.seasons[index].watched for index in progress_indexes
+                )
                 season_rows = [
                     item
                     for item in payload.get("seasons", ())
@@ -6327,6 +6339,24 @@ class CineShelfWindow:
             for episode in self._episodes_for_season(record, season_index)
         )
 
+    def _episode_progress_items(
+        self,
+        record: TitleRecord,
+    ) -> tuple[
+        tuple[int, EpisodeInfo] | None,
+        tuple[int, EpisodeInfo] | None,
+    ]:
+        seasons = self._series_seasons(record)
+        next_item: tuple[int, EpisodeInfo] | None = None
+        last_item: tuple[int, EpisodeInfo] | None = None
+        for season_index in main_progress_season_indexes(seasons):
+            for episode in self._episodes_for_season(record, season_index):
+                if self._episode_is_watched(record, season_index, episode):
+                    last_item = (season_index, episode)
+                elif next_item is None:
+                    next_item = (season_index, episode)
+        return next_item, last_item
+
     def _episode_artwork(
         self,
         record: TitleRecord,
@@ -6383,14 +6413,7 @@ class CineShelfWindow:
         self._clear_container(self.episode_cards_box)
         self._clear_container(self.seasons_list)
 
-        next_item: tuple[int, EpisodeInfo] | None = None
-        last_item: tuple[int, EpisodeInfo] | None = None
-        for season_index, _season in enumerate(seasons):
-            for episode in self._episodes_for_season(record, season_index):
-                if self._episode_is_watched(record, season_index, episode):
-                    last_item = (season_index, episode)
-                elif next_item is None:
-                    next_item = (season_index, episode)
+        next_item, last_item = self._episode_progress_items(record)
 
         if next_item is None:
             next_episode = "Up to date"
