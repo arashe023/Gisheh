@@ -1723,13 +1723,17 @@ class CineShelfWindow:
             "community_rating",
             "detail_ratings_host",
             "watched_button",
-            "favorite_button",
+            "rating_button",
             "bookmark_button",
             "more_button",
+            "rating_popover",
+            "detail_more_popover",
+            "comments_button",
+            "check_in_button",
+            "note_button",
             "runtime_label",
             "genres_label",
             "overview_label",
-            "quick_actions_host",
             "creator_row",
             "release_row",
             "country_row",
@@ -4050,10 +4054,23 @@ class CineShelfWindow:
             "row-activated",
             self._on_profile_sidebar_activated,
         )
-        self.more_button.connect("clicked", self._on_more_clicked)
         self.watched_button.connect("clicked", self._on_watched_clicked)
-        self.favorite_button.connect("toggled", self._on_favorite_toggled)
         self.bookmark_button.connect("toggled", self._on_bookmark_toggled)
+        self.comments_button.connect(
+            "clicked",
+            self._on_secondary_detail_action,
+            "Comments",
+        )
+        self.check_in_button.connect(
+            "clicked",
+            self._on_secondary_detail_action,
+            "Check in",
+        )
+        self.note_button.connect(
+            "clicked",
+            self._on_secondary_detail_action,
+            "Add note",
+        )
         self.season_watched_button.connect(
             "clicked",
             self._on_season_watched_clicked,
@@ -6124,36 +6141,6 @@ class CineShelfWindow:
             chip.append(source_label)
             self.detail_ratings_host.append(chip)
 
-    def _populate_quick_actions(self, record: TitleRecord) -> None:
-        self._clear_container(self.quick_actions_host)
-        fourth_action = "Check in" if record.media_type == "Movies" else "Drop"
-        actions = (
-            ("starred-symbolic", "Rate"),
-            ("mail-unread-symbolic", "Comments"),
-            ("document-edit-symbolic", "Note"),
-            ("media-playback-stop-symbolic", fourth_action),
-        )
-        for icon_name, label in actions:
-            content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-            content.append(Gtk.Image.new_from_icon_name(icon_name))
-            caption = Gtk.Label(label=label)
-            caption.set_wrap(True)
-            caption.add_css_class("caption")
-            content.append(caption)
-
-            button = Gtk.Button()
-            button.set_child(content)
-            button.add_css_class("flat")
-            button.add_css_class("detail-action-button")
-            button.set_tooltip_text(f"{label}: {record.title}")
-            button.connect(
-                "clicked",
-                lambda _button, action=label, title=record.title: self._toast(
-                    f"{action} for {title}"
-                ),
-            )
-            self.quick_actions_host.append(button)
-
     @staticmethod
     def _cast_members(record: TitleRecord) -> tuple[CastMember, ...]:
         if record.cast:
@@ -6775,7 +6762,6 @@ class CineShelfWindow:
 
     def _populate_detail_sections(self, record: TitleRecord) -> None:
         self._populate_detail_ratings(record)
-        self._populate_quick_actions(record)
         self._populate_cast(record)
         self._populate_series(record)
         self._populate_videos(record)
@@ -6844,13 +6830,18 @@ class CineShelfWindow:
         self.activity_progress.set_fraction(1.0 if is_completed else 0.0)
 
         self._updating_details = True
-        self.favorite_button.set_active(record.id in self.favorites)
         self.bookmark_button.set_visible(not is_explore_view)
         self.bookmark_button.set_active(record.id in self.bookmarks)
         score = self.ratings.get(record.id)
         for value, button in self.rating_buttons.items():
             button.set_active(value == score)
         self.rating_value.set_label("Not rated" if score is None else f"{score}/10")
+        self.rating_button.set_icon_name(
+            "non-starred-symbolic" if score is None else "starred-symbolic"
+        )
+        self.rating_button.set_tooltip_text(
+            "Rate this title" if score is None else f"Your rating: {score}/10"
+        )
         self._updating_details = False
         self._populate_detail_sections(record)
         if record_changed:
@@ -7623,18 +7614,6 @@ class CineShelfWindow:
             "Marked as watched" if watched else "Marked as unwatched",
         )
 
-    def _on_favorite_toggled(self, button: Gtk.ToggleButton) -> None:
-        if self._updating_details or self.selected_id is None:
-            return
-        if button.get_active():
-            self.favorites.add(self.selected_id)
-            message = "Added to favorites"
-        else:
-            self.favorites.discard(self.selected_id)
-            message = "Removed from favorites"
-        self._save_user_state()
-        self._toast(message)
-
     def _on_bookmark_toggled(self, button: Gtk.ToggleButton) -> None:
         if self._updating_details or self.selected_id is None:
             return
@@ -7669,10 +7648,15 @@ class CineShelfWindow:
             on_success=apply_bookmark,
         )
 
-    def _on_more_clicked(self, _button: Gtk.Button) -> None:
+    def _on_secondary_detail_action(
+        self,
+        _button: Gtk.Button,
+        action: str,
+    ) -> None:
+        self.detail_more_popover.popdown()
         record = self.records_by_id.get(self.selected_id or "")
         if record is not None:
-            self._toast(f"More options for {record.title}")
+            self._toast(f"{action} for {record.title}")
 
     def _on_rating_button_toggled(
         self,
@@ -7681,6 +7665,7 @@ class CineShelfWindow:
     ) -> None:
         if self._updating_details or self.selected_id is None or not button.get_active():
             return
+        self.rating_popover.popdown()
         record = self.records_by_id[self.selected_id]
 
         def apply_rating() -> None:

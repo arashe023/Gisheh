@@ -6,6 +6,7 @@ import importlib.util
 import sys
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
@@ -49,6 +50,26 @@ class ExploreLayoutTests(unittest.TestCase):
         self.assertEqual(first, second)
         kinds = {kind for row in first for kind, _span in row}
         self.assertGreaterEqual(len(kinds), 2)
+
+
+class DetailActionLayoutTests(unittest.TestCase):
+    def test_rating_and_secondary_actions_live_in_popovers(self) -> None:
+        root = ET.parse(cineshelf.UI_FILE).getroot()
+        objects = {
+            item.get("id"): item.get("class")
+            for item in root.iter("object")
+            if item.get("id")
+        }
+
+        self.assertEqual(objects["rating_button"], "GtkMenuButton")
+        self.assertEqual(objects["rating_popover"], "GtkPopover")
+        self.assertEqual(objects["more_button"], "GtkMenuButton")
+        self.assertEqual(objects["detail_more_popover"], "GtkPopover")
+        self.assertEqual(objects["comments_button"], "GtkButton")
+        self.assertEqual(objects["check_in_button"], "GtkButton")
+        self.assertEqual(objects["note_button"], "GtkButton")
+        self.assertNotIn("quick_actions_host", objects)
+        self.assertNotIn("favorite_button", objects)
 
 
 class MediaCollectionTests(unittest.TestCase):
