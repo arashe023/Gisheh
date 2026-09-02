@@ -47,7 +47,6 @@
 - `data/`: Desktop Entry، AppStream، GSettings و آیکن‌های hicolor
 - `build-aux/flatpak/`: manifest قابل‌شناسایی توسط GNOME Builder و Flatpak Builder
 - `po/`: زیرساخت gettext و فهرست منابع قابل‌ترجمه
-- `prototype/`: نمونهٔ قدیمی Vue/Vite که دیگر ورودی اصلی برنامه نیست
 
 تم، رنگ accent و حالت high contrast مستقیماً توسط GTK و libadwaita اعمال می‌شوند و به پل یا لایهٔ نمایش جداگانه‌ای نیاز ندارند.
 Bookmark، Watched و امتیاز شخصی از طریق Sync API در Simkl ثبت می‌شوند و state محلی فقط کش رابط و fallback است. Favorite فعلاً محلی است، چون به فهرست سفارشی Simkl متصل نشده است.
@@ -104,6 +103,5 @@ flatpak-builder --user --install --force-clean flatpak-build \
 │       ├── ui/window.ui
 │       ├── style.css
 │       └── library.json
-├── tests/
-└── prototype/
+└── tests/
 ```
