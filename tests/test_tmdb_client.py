@@ -133,6 +133,22 @@ class TmdbClientTests(unittest.TestCase):
         self.assertEqual(result["total_pages"], 7)
         self.assertEqual([item["id"] for item in result["results"]], [1])
 
+    def test_details_request_includes_the_correct_certification_resource(self) -> None:
+        with patch.object(
+            tmdb_client,
+            "request_json",
+            return_value={},
+        ) as requester:
+            tmdb_client.fetch_details("token", "movie", 10)
+            tmdb_client.fetch_details("token", "tv", 20)
+
+        movie_params = requester.call_args_list[0].kwargs["params"]
+        tv_params = requester.call_args_list[1].kwargs["params"]
+        self.assertIn("release_dates", movie_params["append_to_response"])
+        self.assertNotIn("content_ratings", movie_params["append_to_response"])
+        self.assertIn("content_ratings", tv_params["append_to_response"])
+        self.assertNotIn("release_dates", tv_params["append_to_response"])
+
     def test_empty_tmdb_search_does_not_make_a_request(self) -> None:
         with patch.object(tmdb_client, "request_json") as requester:
             result = tmdb_client.search_titles_page("token", "Movies", "   ")

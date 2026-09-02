@@ -277,12 +277,17 @@ def fetch_details(
     language: str = "en-US",
 ) -> dict[str, Any]:
     namespace = "movie" if media_type == "movie" else "tv"
+    rating_resource = (
+        "release_dates" if namespace == "movie" else "content_ratings"
+    )
     return request_json(
         f"/{namespace}/{tmdb_id}",
         token=token,
         params={
             "language": language,
-            "append_to_response": "credits,videos,images,recommendations",
+            "append_to_response": (
+                f"credits,videos,images,recommendations,{rating_resource}"
+            ),
             "include_image_language": "en,null",
         },
     )

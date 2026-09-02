@@ -319,6 +319,59 @@ class SimklMappingTests(unittest.TestCase):
         add.assert_not_called()
 
 
+class TmdbCertificationTests(unittest.TestCase):
+    def test_movie_certification_prefers_us_theatrical_rating(self) -> None:
+        payload = {
+            "production_countries": [{"iso_3166_1": "FR", "name": "France"}],
+            "release_dates": {
+                "results": [
+                    {
+                        "iso_3166_1": "FR",
+                        "release_dates": [{"certification": "U", "type": 3}],
+                    },
+                    {
+                        "iso_3166_1": "US",
+                        "release_dates": [
+                            {"certification": "PG-13", "type": 4},
+                            {"certification": "PG-13", "type": 3},
+                        ],
+                    },
+                ]
+            },
+        }
+
+        self.assertEqual(
+            cineshelf.certification_from_tmdb(payload, "movie"),
+            "PG-13",
+        )
+
+    def test_tv_certification_uses_origin_then_any_available_region(self) -> None:
+        origin_payload = {
+            "origin_country": ["JP"],
+            "content_ratings": {
+                "results": [
+                    {"iso_3166_1": "DE", "rating": "16"},
+                    {"iso_3166_1": "JP", "rating": "G"},
+                ]
+            },
+        }
+        fallback_payload = {
+            "content_ratings": {
+                "results": [{"iso_3166_1": "DE", "rating": "12"}]
+            }
+        }
+
+        self.assertEqual(
+            cineshelf.certification_from_tmdb(origin_payload, "tv"),
+            "G",
+        )
+        self.assertEqual(
+            cineshelf.certification_from_tmdb(fallback_payload, "tv"),
+            "12",
+        )
+        self.assertEqual(cineshelf.certification_from_tmdb({}, "movie"), "Unrated")
+
+
 class TmdbProgressiveLoadingTests(unittest.TestCase):
     def test_detail_backdrop_does_not_replace_portrait_card_artwork(self) -> None:
         controller = object.__new__(cineshelf.CineShelfWindow)

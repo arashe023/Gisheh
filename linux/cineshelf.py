@@ -90,15 +90,6 @@ STATUS_ICONS = {
 
 LISTS = (("Watchlist", "bookmark-new-symbolic"),)
 
-LANGUAGE_BY_COUNTRY = {
-    "Algeria": "AR",
-    "Germany": "DE",
-    "Iran": "FA",
-    "Japan": "JA",
-    "United Kingdom": "EN",
-    "United States": "EN",
-}
-
 TMDB_GENRES = {
     12: "Adventure",
     14: "Fantasy",
@@ -127,6 +118,65 @@ TMDB_GENRES = {
     10767: "Talk",
     10768: "War & Politics",
 }
+
+
+def certification_from_tmdb(payload: dict[str, Any], media_type: str) -> str:
+    """Return the best available regional certification from TMDB details."""
+    namespace = "movie" if media_type == "movie" else "tv"
+    resource = "release_dates" if namespace == "movie" else "content_ratings"
+    result_items = payload.get(resource, {}).get("results", ())
+    results = [item for item in result_items if isinstance(item, dict)]
+
+    origin_codes = [
+        str(code).upper()
+        for code in payload.get("origin_country", ())
+        if code
+    ]
+    origin_codes.extend(
+        str(item.get("iso_3166_1") or "").upper()
+        for item in payload.get("production_countries", ())
+        if isinstance(item, dict) and item.get("iso_3166_1")
+    )
+    preferred_regions = tuple(
+        dict.fromkeys(("US", *origin_codes, "GB", "CA", "AU"))
+    )
+
+    def value_for(item: dict[str, Any]) -> str:
+        if namespace == "tv":
+            return str(item.get("rating") or "").strip()
+        release_items = [
+            release
+            for release in item.get("release_dates", ())
+            if isinstance(release, dict)
+            and str(release.get("certification") or "").strip()
+        ]
+        release_priority = {3: 0, 2: 1, 4: 2, 5: 3, 6: 4, 1: 5}
+        release_items.sort(
+            key=lambda release: release_priority.get(
+                int(release.get("type") or 0),
+                9,
+            )
+        )
+        return (
+            str(release_items[0].get("certification") or "").strip()
+            if release_items
+            else ""
+        )
+
+    by_region = {
+        str(item.get("iso_3166_1") or "").upper(): item
+        for item in results
+        if item.get("iso_3166_1")
+    }
+    for region in preferred_regions:
+        certification = value_for(by_region.get(region, {}))
+        if certification:
+            return certification
+    for item in results:
+        certification = value_for(item)
+        if certification:
+            return certification
+    return "Unrated"
 
 
 def application_log_file() -> Path:
@@ -382,10 +432,8 @@ class TitleRecord:
             poster_palette=tuple(str(value) for value in raw["posterPalette"]),
             poster_variant=int(raw["posterVariant"]),
             order=order,
-            certification=str(
-                raw.get("certification", "TV-MA" if media_type != "Movies" else "NR")
-            ),
-            language=str(raw.get("language", LANGUAGE_BY_COUNTRY.get(country, "—"))),
+            certification=str(raw.get("certification", "Unrated")),
+            language=str(raw.get("language", "—")),
             availability=str(
                 raw.get(
                     "availability",
@@ -504,7 +552,7 @@ def title_record_from_tmdb(
         poster_palette=_tmdb_palette(tmdb_id),
         poster_variant=tmdb_id % 6 + 1,
         order=max(1, 1000 - position),
-        certification="NR",
+        certification="Loading…",
         language=str(raw.get("original_language") or "—").upper(),
         availability="Released" if media_type == "Movies" else "Airing",
         network="TMDB",
@@ -606,6 +654,10 @@ def enrich_record_from_tmdb(
         country=", ".join(countries[:2]) or record.country,
         creator=", ".join(creators[:2]) or "TMDB",
         description=str(payload.get("overview") or record.description),
+        certification=certification_from_tmdb(
+            payload,
+            record.tmdb_media_type or "movie",
+        ),
         language=str(payload.get("original_language") or record.language).upper(),
         availability=str(payload.get("status") or record.availability),
         network=", ".join(networks[:2]) or "TMDB",
@@ -705,7 +757,7 @@ def title_records_from_simkl(payload: dict[str, Any]) -> tuple[TitleRecord, ...]
                 poster_palette=_tmdb_palette(numeric_simkl_id),
                 poster_variant=numeric_simkl_id % 6 + 1,
                 order=max(1, 100000 - position),
-                certification="NR",
+                certification="Loading…",
                 language="—",
                 availability=str(entry.get("status") or "Synced")
                 .replace("plantowatch", "Plan to watch")
