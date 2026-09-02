@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="cineshelf">
+  <schema id="io.github.cineshelf.CineShelf" path="/io/github/cineshelf/CineShelf/">
+    <key name="window-width" type="i">
+      <default>1360</default>
+      <summary>Window width</summary>
+    </key>
+    <key name="window-height" type="i">
+      <default>820</default>
+      <summary>Window height</summary>
+    </key>
+    <key name="window-maximized" type="b">
+      <default>false</default>
+      <summary>Whether the window is maximized</summary>
+    </key>
+    <key name="view-mode" type="s">
+      <choices>
+        <choice value="list"/>
+        <choice value="grid"/>
+      </choices>
+      <default>'list'</default>
+      <summary>Library presentation mode</summary>
+    </key>
+  </schema>
+</schemalist>

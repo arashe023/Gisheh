@@ -13,7 +13,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-import image_http
+from . import image_http
 
 
 APP_ID = "io.github.cineshelf.CineShelf"

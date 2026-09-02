@@ -39,48 +39,71 @@
 
 ## معماری بومی
 
-- `linux/cineshelf.ui`: ساختار پنجره در قالب XML با `AdwNavigationSplitView`، دو HeaderBar و صفحهٔ Explore مستقل
-- `linux/cineshelf.py`: بارگذاری رابط با `Gtk.Builder`، مدیریت داده‌ها و اتصال رویدادها
-- `linux/tmdb_client.py`: منبع متادیتا، امتیاز عمومی، جزئیات و تمام تصاویر فیلم و سریال
-- `linux/simkl_client.py`: منبع وضعیت کاربر، امتیاز شخصی، فهرست‌ها و آمار حساب
-- `linux/image_http.py`: connection pool و retry مشترک برای همهٔ تصاویر شبکه
-- `linux/cineshelf.css`: استایل‌های محدود و تکمیلی روی رنگ‌ها و حالت‌های استاندارد تم
-- `linux/library.json`: داده‌های محلی کتابخانه و کاتالوگ نمونهٔ Explore
+- `src/cineshelf/application.py`: چرخهٔ استاندارد `Adw.Application` و actionهای عمومی
+- `src/cineshelf/window.py`: کنترلر پنجره، نماها و رویدادهای رابط
+- `src/cineshelf/ui/window.ui`: رابط GtkBuilder با `AdwNavigationSplitView`
+- `src/cineshelf/services/`: کلاینت‌های مستقل TMDB، Simkl و انتقال تصاویر
+- `src/cineshelf/io.github.cineshelf.CineShelf.gresource.xml`: بسته‌بندی UI، CSS و دادهٔ نمونه در GResource
+- `data/`: Desktop Entry، AppStream، GSettings و آیکن‌های hicolor
+- `build-aux/flatpak/`: manifest قابل‌شناسایی توسط GNOME Builder و Flatpak Builder
+- `po/`: زیرساخت gettext و فهرست منابع قابل‌ترجمه
+- `prototype/`: نمونهٔ قدیمی Vue/Vite که دیگر ورودی اصلی برنامه نیست
 
 تم، رنگ accent و حالت high contrast مستقیماً توسط GTK و libadwaita اعمال می‌شوند و به پل یا لایهٔ نمایش جداگانه‌ای نیاز ندارند.
 Bookmark، Watched و امتیاز شخصی از طریق Sync API در Simkl ثبت می‌شوند و state محلی فقط کش رابط و fallback است. Favorite فعلاً محلی است، چون به فهرست سفارشی Simkl متصل نشده است.
-Explore در صورت تنظیم `TMDB_READ_TOKEN` از داده‌ها و تصاویر زندهٔ TMDB استفاده می‌کند و در نبود شبکه یا توکن به دادهٔ نمونهٔ داخلی برمی‌گردد. روش تنظیم امن توکن در `linux/README.md` آمده است.
+Explore در صورت تنظیم `TMDB_READ_TOKEN` از داده‌ها و تصاویر زندهٔ TMDB استفاده می‌کند و در نبود شبکه یا توکن به دادهٔ نمونهٔ داخلی برمی‌گردد.
 اتصال Simkl از صفحهٔ Profile انجام می‌شود. Simkl عضویت عنوان‌ها در فهرست‌ها، وضعیت تماشا و امتیاز شخصی را مشخص می‌کند؛ اطلاعات نمایشی و کاورها با شناسهٔ TMDB همان عنوان دریافت می‌شوند.
 
 اندازهٔ پیش‌فرض پنجره `1360×820` و حداقل اندازهٔ دسکتاپ `1120×640` است.
 
 ## اجرا
 
-```bash
-./linux/run-linux.sh
-```
+پروژه را مستقیماً در GNOME Builder باز کنید؛ Builder فایل Meson و manifest فلت‌پک را تشخیص می‌دهد و با دکمهٔ Run آن را build و اجرا می‌کند.
 
-برای افزودن CineShelf به منوی برنامه‌های کاربر فعلی:
+برای build و تست روی سیستم میزبان:
 
 ```bash
-./linux/install-local.sh
+meson setup build --prefix="$PWD/_install"
+meson compile -C build
+meson test -C build --print-errorlogs
+meson install -C build
+./_install/bin/cineshelf
 ```
 
-جزئیات وابستگی‌ها و حذف برنامه در `linux/README.md` آمده است.
+پس از اولین setup، برای buildهای بعدی فقط `meson compile -C build` لازم است. برای ساخت Flatpak:
+
+```bash
+flatpak-builder --user --install --force-clean flatpak-build \
+  build-aux/flatpak/io.github.cineshelf.CineShelf.json
+```
+
+توکن TMDB را می‌توان با `TMDB_READ_TOKEN` یا فایل خصوصی `tmdb-read-token` در پوشهٔ تنظیمات برنامه ارائه کرد. Client ID و Access Token سرویس Simkl نیز از صفحهٔ Profile یا متغیرهای `SIMKL_CLIENT_ID` و `SIMKL_ACCESS_TOKEN` قابل‌ارائه‌اند؛ توکن‌ها عمداً در GSettings قرار نمی‌گیرند.
 
 ## ساختار اصلی
 
 ```text
-linux/
-├── cineshelf.py
-├── simkl_client.py
-├── image_http.py
-├── cineshelf.ui
-├── cineshelf.css
-├── library.json
-├── run-linux.sh
-├── install-local.sh
-├── uninstall-local.sh
-├── io.github.cineshelf.CineShelf.desktop.in
-└── io.github.cineshelf.CineShelf.svg
+.
+├── meson.build
+├── meson_options.txt
+├── build-aux/flatpak/io.github.cineshelf.CineShelf.json
+├── data/
+│   ├── meson.build
+│   ├── io.github.cineshelf.CineShelf.desktop.in
+│   ├── io.github.cineshelf.CineShelf.metainfo.xml.in
+│   ├── io.github.cineshelf.CineShelf.gschema.xml
+│   └── icons/hicolor/
+├── po/
+├── src/
+│   ├── meson.build
+│   ├── cineshelf.in
+│   └── cineshelf/
+│       ├── application.py
+│       ├── main.py
+│       ├── window.py
+│       ├── services/
+│       ├── ui/window.ui
+│       ├── style.css
+│       └── library.json
+├── tests/
+└── prototype/
 ```

@@ -12,9 +12,9 @@ from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
 
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "linux"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-import simkl_client
+from cineshelf.services import simkl_client
 
 
 class SimklClientTests(unittest.TestCase):

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib.util
 import sys
 import tempfile
 import unittest
@@ -12,13 +11,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 
-LINUX_DIR = Path(__file__).resolve().parents[1] / "linux"
-sys.path.insert(0, str(LINUX_DIR))
-SPEC = importlib.util.spec_from_file_location("cineshelf", LINUX_DIR / "cineshelf.py")
-assert SPEC and SPEC.loader
-cineshelf = importlib.util.module_from_spec(SPEC)
-sys.modules[SPEC.name] = cineshelf
-SPEC.loader.exec_module(cineshelf)
+SOURCE_DIR = Path(__file__).resolve().parents[1] / "src"
+sys.path.insert(0, str(SOURCE_DIR))
+
+from cineshelf import window as cineshelf
 
 
 class ExploreLayoutTests(unittest.TestCase):

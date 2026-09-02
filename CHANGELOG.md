@@ -2,6 +2,8 @@
 
 ## منتشرنشده
 
+- مهاجرت ساختار پروژه به الگوی GNOME Builder با Meson، package استاندارد Python، GResource، GSettings، AppStream، gettext و manifest فلت‌پک GNOME 50
+- انتقال نمونهٔ قدیمی Vue/Vite به `prototype/` و حذف وابستگی اجرای اصلی به پوشهٔ `linux/` و اسکریپت‌های نصب دستی
 - جداسازی منبع داده‌ها: متادیتا، امتیاز عمومی و تمام تصاویر از TMDB؛ وضعیت و امتیاز کاربر از Simkl
 - افزودن کش خلاصهٔ متادیتای TMDB و enrichment تدریجی کتابخانه بر اساس شناسهٔ TMDB
 - افزودن connection pool و Keep-Alive مشترک HTTPX برای تصاویر TMDB و Avatar

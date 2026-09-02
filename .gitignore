@@ -1,5 +1,9 @@
 node_modules/
 dist/
+build/
+flatpak-build/
+_install/
+.flatpak-builder/
 __pycache__/
 *.py[cod]
 .DS_Store

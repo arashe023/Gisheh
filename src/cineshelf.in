@@ -1,0 +1,8 @@
+#!@PYTHON@
+import sys
+
+sys.path.insert(0, "@PYTHON_PACKAGE_ROOT@")
+
+from cineshelf.main import main
+
+raise SystemExit(main())
