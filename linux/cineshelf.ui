@@ -719,62 +719,6 @@
                                           <object class="GtkMenuButton" id="more_button">
                                             <property name="icon-name">view-more-symbolic</property>
                                             <property name="tooltip-text">More options</property>
-                                            <property name="popover">
-                                              <object class="GtkPopover" id="detail_more_popover">
-                                                <property name="child">
-                                                  <object class="GtkBox">
-                                                    <property name="orientation">vertical</property>
-                                                    <property name="spacing">4</property>
-                                                    <property name="margin-top">6</property>
-                                                    <property name="margin-bottom">6</property>
-                                                    <property name="margin-start">6</property>
-                                                    <property name="margin-end">6</property>
-                                                    <child>
-                                                      <object class="GtkButton" id="comments_button">
-                                                        <property name="halign">fill</property>
-                                                        <property name="child">
-                                                          <object class="AdwButtonContent">
-                                                            <property name="label">Comments</property>
-                                                            <property name="icon-name">mail-unread-symbolic</property>
-                                                          </object>
-                                                        </property>
-                                                        <style>
-                                                          <class name="flat"/>
-                                                        </style>
-                                                      </object>
-                                                    </child>
-                                                    <child>
-                                                      <object class="GtkButton" id="check_in_button">
-                                                        <property name="halign">fill</property>
-                                                        <property name="child">
-                                                          <object class="AdwButtonContent">
-                                                            <property name="label">Check in</property>
-                                                            <property name="icon-name">emblem-ok-symbolic</property>
-                                                          </object>
-                                                        </property>
-                                                        <style>
-                                                          <class name="flat"/>
-                                                        </style>
-                                                      </object>
-                                                    </child>
-                                                    <child>
-                                                      <object class="GtkButton" id="note_button">
-                                                        <property name="halign">fill</property>
-                                                        <property name="child">
-                                                          <object class="AdwButtonContent">
-                                                            <property name="label">Add note</property>
-                                                            <property name="icon-name">document-edit-symbolic</property>
-                                                          </object>
-                                                        </property>
-                                                        <style>
-                                                          <class name="flat"/>
-                                                        </style>
-                                                      </object>
-                                                    </child>
-                                                  </object>
-                                                </property>
-                                              </object>
-                                            </property>
                                           </object>
                                         </child>
                                       </object>

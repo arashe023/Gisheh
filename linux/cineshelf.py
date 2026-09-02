@@ -1727,10 +1727,6 @@ class CineShelfWindow:
             "bookmark_button",
             "more_button",
             "rating_popover",
-            "detail_more_popover",
-            "comments_button",
-            "check_in_button",
-            "note_button",
             "runtime_label",
             "genres_label",
             "overview_label",
@@ -2012,6 +2008,25 @@ class CineShelfWindow:
         menu.append("About CineShelf", "app.about")
         menu.append("Quit", "app.quit")
         self.main_menu_button.set_menu_model(menu)
+
+        detail_menu = Gio.Menu()
+        engagement_section = Gio.Menu()
+        engagement_section.append("Comments", "win.detail-comments")
+        engagement_section.append("Check in", "win.detail-check-in")
+        note_section = Gio.Menu()
+        note_section.append("Add note", "win.detail-add-note")
+        detail_menu.append_section(None, engagement_section)
+        detail_menu.append_section(None, note_section)
+        self.more_button.set_menu_model(detail_menu)
+
+        for action_name, label in (
+            ("detail-comments", "Comments"),
+            ("detail-check-in", "Check in"),
+            ("detail-add-note", "Add note"),
+        ):
+            action = Gio.SimpleAction.new(action_name, None)
+            action.connect("activate", self._on_secondary_detail_action, label)
+            self.window.add_action(action)
 
     def _build_sidebar(self) -> None:
         self.library_row = SidebarRow(
@@ -4056,21 +4071,6 @@ class CineShelfWindow:
         )
         self.watched_button.connect("clicked", self._on_watched_clicked)
         self.bookmark_button.connect("toggled", self._on_bookmark_toggled)
-        self.comments_button.connect(
-            "clicked",
-            self._on_secondary_detail_action,
-            "Comments",
-        )
-        self.check_in_button.connect(
-            "clicked",
-            self._on_secondary_detail_action,
-            "Check in",
-        )
-        self.note_button.connect(
-            "clicked",
-            self._on_secondary_detail_action,
-            "Add note",
-        )
         self.season_watched_button.connect(
             "clicked",
             self._on_season_watched_clicked,
@@ -7650,10 +7650,10 @@ class CineShelfWindow:
 
     def _on_secondary_detail_action(
         self,
-        _button: Gtk.Button,
+        _action: Gio.SimpleAction,
+        _parameter: GLib.Variant | None,
         action: str,
     ) -> None:
-        self.detail_more_popover.popdown()
         record = self.records_by_id.get(self.selected_id or "")
         if record is not None:
             self._toast(f"{action} for {record.title}")

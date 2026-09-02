@@ -53,7 +53,7 @@ class ExploreLayoutTests(unittest.TestCase):
 
 
 class DetailActionLayoutTests(unittest.TestCase):
-    def test_rating_and_secondary_actions_live_in_popovers(self) -> None:
+    def test_rating_popover_and_native_secondary_menu_have_no_custom_rows(self) -> None:
         root = ET.parse(cineshelf.UI_FILE).getroot()
         objects = {
             item.get("id"): item.get("class")
@@ -64,10 +64,10 @@ class DetailActionLayoutTests(unittest.TestCase):
         self.assertEqual(objects["rating_button"], "GtkMenuButton")
         self.assertEqual(objects["rating_popover"], "GtkPopover")
         self.assertEqual(objects["more_button"], "GtkMenuButton")
-        self.assertEqual(objects["detail_more_popover"], "GtkPopover")
-        self.assertEqual(objects["comments_button"], "GtkButton")
-        self.assertEqual(objects["check_in_button"], "GtkButton")
-        self.assertEqual(objects["note_button"], "GtkButton")
+        self.assertNotIn("detail_more_popover", objects)
+        self.assertNotIn("comments_button", objects)
+        self.assertNotIn("check_in_button", objects)
+        self.assertNotIn("note_button", objects)
         self.assertNotIn("quick_actions_host", objects)
         self.assertNotIn("favorite_button", objects)
 
