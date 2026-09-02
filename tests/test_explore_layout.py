@@ -71,6 +71,20 @@ class DetailActionLayoutTests(unittest.TestCase):
         self.assertNotIn("quick_actions_host", objects)
         self.assertNotIn("favorite_button", objects)
 
+    def test_profile_avatar_is_a_direct_navigation_button(self) -> None:
+        root = ET.parse(cineshelf.UI_FILE).getroot()
+        objects = {
+            item.get("id"): item.get("class")
+            for item in root.iter("object")
+            if item.get("id")
+        }
+
+        self.assertEqual(objects["profile_button"], "GtkButton")
+        self.assertNotIn("profile_menu_button", objects)
+        self.assertNotIn("profile_popover", objects)
+        self.assertNotIn("profile_sidebar_list", objects)
+        self.assertNotIn("profile_sidebar_row", objects)
+
 
 class MediaCollectionTests(unittest.TestCase):
     def test_media_items_keep_primary_first_and_remove_duplicates(self) -> None:

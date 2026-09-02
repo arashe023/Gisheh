@@ -1688,12 +1688,8 @@ class CineShelfWindow:
             "destination_list",
             "status_list",
             "collections_list",
-            "profile_menu_button",
-            "profile_popover",
-            "profile_sidebar_list",
-            "profile_sidebar_row",
+            "profile_button",
             "sidebar_profile_avatar",
-            "profile_popover_avatar",
             "storage_button",
             "storage_progress",
             "preferences_button",
@@ -3379,7 +3375,6 @@ class CineShelfWindow:
             texture = Gdk.Texture.new_from_filename(avatar_file)
             self.profile_avatar.set_custom_image(texture)
             self.sidebar_profile_avatar.set_custom_image(texture)
-            self.profile_popover_avatar.set_custom_image(texture)
         except GLib.Error:
             pass
         return GLib.SOURCE_REMOVE
@@ -3445,25 +3440,18 @@ class CineShelfWindow:
         )
         self.profile_name_label.set_label(name)
         self.profile_avatar.set_text(name)
-        self.profile_sidebar_row.set_title(name)
         self.sidebar_profile_avatar.set_text(name)
-        self.profile_popover_avatar.set_text(name)
         cached_avatar = simkl_client.cached_avatar()
         if cached_avatar:
             try:
                 texture = Gdk.Texture.new_from_filename(cached_avatar)
                 self.profile_avatar.set_custom_image(texture)
                 self.sidebar_profile_avatar.set_custom_image(texture)
-                self.profile_popover_avatar.set_custom_image(texture)
             except GLib.Error:
                 pass
         else:
             self.profile_avatar.set_custom_image(None)
             self.sidebar_profile_avatar.set_custom_image(None)
-            self.profile_popover_avatar.set_custom_image(None)
-        self.profile_sidebar_row.set_subtitle(
-            f"Simkl · {account_type}" if self.simkl_connected else "Local profile"
-        )
         self.profile_subtitle_label.set_label(
             f"Connected to Simkl · {account_type}"
             if self.simkl_connected
@@ -4065,10 +4053,7 @@ class CineShelfWindow:
             "clicked", lambda *_args: self._toast("Library storage: 68% used")
         )
         self.preferences_button.connect("clicked", self._on_preferences_clicked)
-        self.profile_sidebar_list.connect(
-            "row-activated",
-            self._on_profile_sidebar_activated,
-        )
+        self.profile_button.connect("clicked", self._on_profile_clicked)
         self.watched_button.connect("clicked", self._on_watched_clicked)
         self.bookmark_button.connect("toggled", self._on_bookmark_toggled)
         self.season_watched_button.connect(
@@ -6942,15 +6927,10 @@ class CineShelfWindow:
         self._refresh_explore()
         self._queue_explore_resize()
 
-    def _on_profile_sidebar_activated(
-        self,
-        _list_box: Gtk.ListBox,
-        row: Gtk.ListBoxRow,
-    ) -> None:
-        if self._updating or row is not self.profile_sidebar_row:
+    def _on_profile_clicked(self, _button: Gtk.Button) -> None:
+        if self._updating:
             return
         if self.active_destination == "profile":
-            self.profile_popover.popdown()
             return
         self._set_details_open(False)
         if self.active_destination == "library":
@@ -6965,7 +6945,6 @@ class CineShelfWindow:
         self.collections_list.unselect_all()
         self._updating = False
         self.browser_stack.set_visible_child_name("profile")
-        self.profile_popover.popdown()
         self._refresh_profile()
 
     def _on_sidebar_toggled(self, button: Gtk.ToggleButton) -> None:
