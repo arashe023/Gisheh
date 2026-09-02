@@ -293,6 +293,22 @@ def fetch_details(
     )
 
 
+def fetch_episode_details(
+    token: str,
+    series_id: int,
+    season_number: int,
+    episode_number: int,
+    *,
+    language: str = "en-US",
+) -> dict[str, Any]:
+    """Fetch metadata belonging to one TV episode, including its still image."""
+    return request_json(
+        f"/tv/{series_id}/season/{season_number}/episode/{episode_number}",
+        token=token,
+        params={"language": language},
+    )
+
+
 def fetch_summary(
     token: str,
     media_type: str,

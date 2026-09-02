@@ -25,6 +25,12 @@ LIBRARY_GROUPS = {
     "anime": "show",
 }
 
+EPISODE_SYNC_PARAMS = {
+    "extended": "full_anime_seasons",
+    "include_all_episodes": "yes",
+    "episode_watched_at": "yes",
+}
+
 
 class SimklError(RuntimeError):
     """Safe error that never contains an access token."""
@@ -376,6 +382,7 @@ def fetch_library(client_id: str, token: str) -> dict[str, Any]:
         "/sync/all-items",
         client_id=client_id,
         token=token,
+        params=EPISODE_SYNC_PARAMS,
         timeout=60,
     )
     return {
@@ -395,7 +402,7 @@ def fetch_library_delta(
         "/sync/all-items",
         client_id=client_id,
         token=token,
-        params={"date_from": date_from},
+        params={**EPISODE_SYNC_PARAMS, "date_from": date_from},
         timeout=60,
     )
 
@@ -474,6 +481,38 @@ def library_has_user_state(payload: dict[str, Any]) -> bool:
             if not isinstance(ids, dict) or ids.get("simkl") is None:
                 return False
             if not str(entry.get("status") or "").strip():
+                return False
+    return True
+
+
+def library_has_episode_history(payload: dict[str, Any]) -> bool:
+    """Return whether episodic entries contain the rich per-episode sync rows."""
+    for group, object_key in (("shows", "show"), ("anime", "show")):
+        items = payload.get(group)
+        if not isinstance(items, list):
+            return False
+        for entry in items:
+            if not isinstance(entry, dict):
+                return False
+            try:
+                total = int(entry.get("total_episodes_count") or 0)
+                watched = int(entry.get("watched_episodes_count") or 0)
+            except (TypeError, ValueError):
+                return False
+            seasons = entry.get("seasons")
+            if total > 0 and not isinstance(seasons, list):
+                return False
+            if watched > 0 and isinstance(seasons, list):
+                episode_rows = sum(
+                    len(season.get("episodes", ()))
+                    for season in seasons
+                    if isinstance(season, dict)
+                    and isinstance(season.get("episodes"), list)
+                )
+                if episode_rows == 0:
+                    return False
+            media = entry.get(object_key)
+            if not isinstance(media, dict):
                 return False
     return True
 

@@ -126,8 +126,33 @@ class SimklClientTests(unittest.TestCase):
             [path for path, _kwargs in calls],
             ["/sync/all-items"],
         )
-        self.assertNotIn("params", calls[0][1])
+        self.assertEqual(
+            calls[0][1]["params"],
+            {
+                "extended": "full_anime_seasons",
+                "include_all_episodes": "yes",
+                "episode_watched_at": "yes",
+            },
+        )
         self.assertEqual(library["anime"], [{"group": "anime"}])
+
+    def test_incremental_library_keeps_rich_episode_parameters(self) -> None:
+        with patch.object(simkl_client, "_request_json", return_value={}) as request:
+            simkl_client.fetch_library_delta(
+                "client-id",
+                "access-token",
+                "2026-08-30T00:00:00Z",
+            )
+
+        self.assertEqual(
+            request.call_args.kwargs["params"],
+            {
+                "extended": "full_anime_seasons",
+                "include_all_episodes": "yes",
+                "episode_watched_at": "yes",
+                "date_from": "2026-08-30T00:00:00Z",
+            },
+        )
 
     def test_state_validation_does_not_require_simkl_catalog_metadata(self) -> None:
         state_only = {
@@ -160,6 +185,34 @@ class SimklClientTests(unittest.TestCase):
                 {"movies": [], "shows": [], "anime": []}
             )
         )
+
+    def test_episode_history_validation_forces_legacy_snapshot_repair(self) -> None:
+        legacy = {
+            "movies": [],
+            "shows": [
+                {
+                    "status": "watching",
+                    "watched_episodes_count": 2,
+                    "total_episodes_count": 10,
+                    "show": {"ids": {"simkl": 12}},
+                }
+            ],
+            "anime": [],
+        }
+        rich = {
+            **legacy,
+            "shows": [
+                {
+                    **legacy["shows"][0],
+                    "seasons": [
+                        {"number": 1, "episodes": [{"number": 1}, {"number": 2}]}
+                    ],
+                }
+            ],
+        }
+
+        self.assertFalse(simkl_client.library_has_episode_history(legacy))
+        self.assertTrue(simkl_client.library_has_episode_history(rich))
 
     def test_delta_merge_updates_and_reconciles_removed_items(self) -> None:
         movie = lambda simkl_id, title: {

@@ -308,6 +308,16 @@ class EpisodeInfo:
     description: str
     watched: bool | None
     image_variant: int
+    artwork_file: str | None = None
+    runtime: str = ""
+    cast: tuple[CastMember, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class EpisodeWatch:
+    season: int
+    episode: int
+    watched_at: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -367,6 +377,8 @@ class TitleRecord:
     gallery_backdrops: tuple[str, ...] = ()
     gallery_posters: tuple[str, ...] = ()
     video_titles: tuple[str, ...] = ()
+    episode_history: tuple[EpisodeWatch, ...] = ()
+    episode_history_loaded: bool = False
 
     @classmethod
     def from_mapping(cls, raw: dict[str, Any]) -> "TitleRecord":
@@ -734,6 +746,45 @@ def title_records_from_simkl(payload: dict[str, Any]) -> tuple[TitleRecord, ...]
             status = status_map[raw_status]
             watched_count = int(entry.get("watched_episodes_count") or 0)
             total_count = int(entry.get("total_episodes_count") or 0)
+            raw_seasons = entry.get("seasons")
+            episode_history: list[EpisodeWatch] = []
+            if isinstance(raw_seasons, list):
+                for raw_season in raw_seasons:
+                    if not isinstance(raw_season, dict):
+                        continue
+                    try:
+                        season_number = int(raw_season.get("number") or 0)
+                    except (TypeError, ValueError):
+                        continue
+                    raw_episodes = raw_season.get("episodes")
+                    if not isinstance(raw_episodes, list):
+                        continue
+                    for raw_episode in raw_episodes:
+                        if not isinstance(raw_episode, dict):
+                            continue
+                        mapping = raw_episode.get("tvdb")
+                        mapped_season = season_number
+                        mapped_episode = raw_episode.get("number")
+                        if isinstance(mapping, dict):
+                            mapped_season = mapping.get("season", mapped_season)
+                            mapped_episode = mapping.get("episode", mapped_episode)
+                        try:
+                            mapped_season = int(mapped_season)
+                            mapped_episode = int(mapped_episode)
+                        except (TypeError, ValueError):
+                            continue
+                        watched_value = raw_episode.get("watched")
+                        if mapped_episode <= 0 or (
+                            watched_value is not None and not bool(watched_value)
+                        ):
+                            continue
+                        episode_history.append(
+                            EpisodeWatch(
+                                season=mapped_season,
+                                episode=mapped_episode,
+                                watched_at=str(raw_episode.get("watched_at") or ""),
+                            )
+                        )
             last_activity = str(
                 entry.get("last_watched_at")
                 or entry.get("added_to_watchlist_at")
@@ -798,6 +849,8 @@ def title_records_from_simkl(payload: dict[str, Any]) -> tuple[TitleRecord, ...]
                 discover_layout="poster",
                 tmdb_id=tmdb_id,
                 tmdb_media_type=tmdb_namespace if tmdb_id is not None else None,
+                episode_history=tuple(episode_history),
+                episode_history_loaded=isinstance(raw_seasons, list),
             )
             sortable.append((last_activity, record))
     sortable.sort(key=lambda item: (item[0], item[1].id), reverse=True)
@@ -1533,6 +1586,8 @@ class CineShelfWindow:
                 if simkl_client.library_has_user_state(library_payload):
                     simkl_records = title_records_from_simkl(library_payload)
                     self.records = enrich_records_from_tmdb_cache(simkl_records)
+                    if not simkl_client.library_has_episode_history(library_payload):
+                        self.simkl_snapshot_needs_repair = True
                 else:
                     self.simkl_snapshot_needs_repair = True
                 self.simkl_settings = (
@@ -1600,13 +1655,20 @@ class CineShelfWindow:
         }
         self.status_overrides: dict[str, str] = {}
         self.episode_status_overrides: dict[str, bool] = {}
-        self.episode_watched_at: dict[str, str] = {}
+        self.episode_watched_at: dict[str, str] = {
+            f"{record.id}/s{item.season}/e{item.episode}": item.watched_at
+            for record in self.records
+            for item in record.episode_history
+            if self.simkl_connected and item.watched_at
+        }
         self.title_watched_at: dict[str, str] = {}
         self._tmdb_details_loading: set[str] = set()
         self._tmdb_details_loaded: set[str] = set()
         self._tmdb_detail_generations: dict[str, int] = {}
         self._tmdb_cast_images_loading: dict[str, set[int]] = {}
         self._tmdb_gallery_images_loading: dict[str, dict[str, int]] = {}
+        self._tmdb_episode_details_loading: set[str] = set()
+        self._tmdb_episode_details_loaded: set[str] = set()
         self._tmdb_explore_generation = 0
         self._tmdb_explore_pages = {media_type: 1 for media_type in MEDIA_TYPES}
         self._tmdb_explore_has_more = {media_type: True for media_type in MEDIA_TYPES}
@@ -1898,18 +1960,19 @@ class CineShelfWindow:
             for record_id, status in payload.get("statusOverrides", {}).items()
             if is_valid_id(record_id) and status in LIBRARY_FILTERS
         }
-        self.episode_status_overrides = {
-            str(key): value
-            for key, value in payload.get("episodeStatusOverrides", {}).items()
-            if isinstance(value, bool)
-            and is_valid_id(str(key).split("/", 1)[0])
-        }
-        self.episode_watched_at = {
-            str(key): str(value)
-            for key, value in payload.get("episodeWatchedAt", {}).items()
-            if isinstance(value, str)
-            and is_valid_id(str(key).split("/", 1)[0])
-        }
+        if not self.simkl_connected:
+            self.episode_status_overrides = {
+                str(key): value
+                for key, value in payload.get("episodeStatusOverrides", {}).items()
+                if isinstance(value, bool)
+                and is_valid_id(str(key).split("/", 1)[0])
+            }
+            self.episode_watched_at = {
+                str(key): str(value)
+                for key, value in payload.get("episodeWatchedAt", {}).items()
+                if isinstance(value, str)
+                and is_valid_id(str(key).split("/", 1)[0])
+            }
         self.title_watched_at = {
             str(key): str(value)
             for key, value in payload.get("titleWatchedAt", {}).items()
@@ -3096,9 +3159,13 @@ class CineShelfWindow:
                 else {}
             )
             last_sync = str(cached_activities.get("all") or "")
-            state_is_valid = (
+            user_state_is_valid = (
                 cached_library is not None
                 and simkl_client.library_has_user_state(cached_library)
+            )
+            state_is_valid = (
+                user_state_is_valid
+                and simkl_client.library_has_episode_history(cached_library)
             )
             has_incremental_state = state_is_valid and bool(last_sync)
             repairing_metadata = (
@@ -3235,6 +3302,10 @@ class CineShelfWindow:
                 raise simkl_client.SimklError(
                     "Simkl returned an incomplete user-state response."
                 )
+            if not simkl_client.library_has_episode_history(library):
+                raise simkl_client.SimklError(
+                    "Simkl returned an incomplete episode-history response."
+                )
             group_counts = {
                 group: len(library.get(group, ()))
                 for group in ("movies", "shows", "anime")
@@ -3323,12 +3394,19 @@ class CineShelfWindow:
             if record.status == "Watched"
             and parse_watched_date(record.date) is not None
         }
-        self.episode_watched_at = {}
+        self.episode_watched_at = {
+            f"{record.id}/s{item.season}/e{item.episode}": item.watched_at
+            for record in records
+            for item in record.episode_history
+            if item.watched_at
+        }
         self.episode_status_overrides = {}
         self.favorites.intersection_update(self.library_ids)
         self._save_user_state()
         self._tmdb_details_loading.clear()
         self._tmdb_details_loaded.clear()
+        self._tmdb_episode_details_loading.clear()
+        self._tmdb_episode_details_loaded.clear()
         self._update_profile_identity()
         self.simkl_button.set_sensitive(False)
         self.simkl_disconnect_button.set_sensitive(False)
@@ -3567,6 +3645,8 @@ class CineShelfWindow:
         self.status_overrides = {}
         self.episode_status_overrides = {}
         self.episode_watched_at = {}
+        self._tmdb_episode_details_loading.clear()
+        self._tmdb_episode_details_loaded.clear()
         self.title_watched_at = {
             record.id: record.date
             for record in records
@@ -5133,6 +5213,11 @@ class CineShelfWindow:
                     for item in payload.get("seasons", ())
                     if isinstance(item, dict)
                 ]
+                existing_episode_items = {
+                    season.number: season.episode_items
+                    for season in record.seasons
+                    if season.episode_items
+                }
                 watched_by_number: dict[int, int] = {}
                 remaining_watched = total_watched
                 for item in sorted(
@@ -5159,6 +5244,10 @@ class CineShelfWindow:
                             0,
                         ),
                         episodes=int(item.get("episode_count") or 0),
+                        episode_items=existing_episode_items.get(
+                            int(item.get("season_number", position)),
+                            (),
+                        ),
                     )
                     for position, item in enumerate(season_rows, start=1)
                 )
@@ -5320,7 +5409,12 @@ class CineShelfWindow:
         self._store_tmdb_record(updated)
         return GLib.SOURCE_REMOVE
 
-    def _store_tmdb_record(self, updated: TitleRecord) -> None:
+    def _store_tmdb_record(
+        self,
+        updated: TitleRecord,
+        *,
+        refresh_details: bool = True,
+    ) -> None:
         self.records_by_id[updated.id] = updated
         self.records = tuple(
             updated if record.id == updated.id else record
@@ -5344,8 +5438,238 @@ class CineShelfWindow:
         )
         if updated.id in self.explore_ids or updated.id in self.explore_search_ids:
             self._update_explore_card_artwork(updated)
-        if self.selected_id == updated.id:
+        if refresh_details and self.selected_id == updated.id:
             self._update_details()
+
+    def _replace_episode_info(
+        self,
+        record_id: str,
+        season_number: int,
+        episode_number: int,
+        transform: Any,
+    ) -> TitleRecord | None:
+        record = self.records_by_id.get(record_id)
+        if record is None:
+            return None
+        seasons = self._series_seasons(record)
+        season_index = next(
+            (
+                index
+                for index, season in enumerate(seasons)
+                if season.number == season_number
+            ),
+            None,
+        )
+        if season_index is None:
+            return None
+        episodes = self._episodes_for_season(record, season_index)
+        if not any(episode.number == episode_number for episode in episodes):
+            return None
+        episodes = tuple(
+            transform(episode) if episode.number == episode_number else episode
+            for episode in episodes
+        )
+        updated_season = replace(seasons[season_index], episode_items=episodes)
+        updated_seasons = tuple(
+            updated_season if index == season_index else season
+            for index, season in enumerate(seasons)
+        )
+        return replace(record, seasons=updated_seasons)
+
+    def _load_tmdb_episode_details_async(
+        self,
+        record: TitleRecord,
+        season_index: int,
+        episode_index: int,
+    ) -> None:
+        seasons = self._series_seasons(record)
+        if not seasons or not self.tmdb_token or record.tmdb_id is None:
+            return
+        season = seasons[max(0, min(season_index, len(seasons) - 1))]
+        episodes = self._episodes_for_season(record, season_index)
+        if not episodes:
+            return
+        episode = episodes[max(0, min(episode_index, len(episodes) - 1))]
+        key = f"{record.id}:s{season.number}:e{episode.number}"
+        if (
+            key in self._tmdb_episode_details_loading
+            or key in self._tmdb_episode_details_loaded
+        ):
+            return
+        self._tmdb_episode_details_loading.add(key)
+        token = self.tmdb_token
+        assert token is not None
+        threading.Thread(
+            target=self._load_tmdb_episode_details_worker,
+            args=(
+                record.id,
+                token,
+                record.tmdb_id,
+                season.number,
+                episode.number,
+                key,
+            ),
+            name=f"cineshelf-tmdb-episode-{record.tmdb_id}-{season.number}-{episode.number}",
+            daemon=True,
+        ).start()
+
+    def _load_tmdb_episode_details_worker(
+        self,
+        record_id: str,
+        token: str,
+        tmdb_id: int,
+        season_number: int,
+        episode_number: int,
+        key: str,
+    ) -> None:
+        try:
+            payload = tmdb_client.fetch_episode_details(
+                token,
+                tmdb_id,
+                season_number,
+                episode_number,
+            )
+            runtime_value = int(payload.get("runtime") or 0)
+            runtime = format_watch_time(runtime_value) if runtime_value else ""
+            guest_stars = payload.get("guest_stars")
+            if not isinstance(guest_stars, list):
+                guest_stars = []
+            cast = tuple(
+                CastMember(
+                    name=str(item.get("name") or "Unknown"),
+                    role=str(item.get("character") or "Guest star"),
+                    profile_file=tmdb_client.cached_image(
+                        str(item.get("profile_path") or ""),
+                        size="w185",
+                    ),
+                )
+                for item in guest_stars[:12]
+                if isinstance(item, dict)
+            )
+            still_path = str(payload.get("still_path") or "")
+            cached_still = tmdb_client.cached_image(still_path, size="w780")
+            GLib.idle_add(
+                self._apply_tmdb_episode_details,
+                record_id,
+                season_number,
+                episode_number,
+                key,
+                str(payload.get("name") or f"Episode {episode_number}"),
+                str(payload.get("air_date") or "Air date unavailable"),
+                str(payload.get("overview") or "No episode overview is available."),
+                runtime,
+                cast,
+                cached_still,
+            )
+            if still_path and cached_still is None:
+                image_file = tmdb_client.cache_image(still_path, size="w780")
+                if image_file:
+                    GLib.idle_add(
+                        self._apply_tmdb_episode_artwork,
+                        record_id,
+                        season_number,
+                        episode_number,
+                        image_file,
+                    )
+        except (tmdb_client.TmdbError, TypeError, ValueError) as error:
+            GLib.idle_add(self._on_tmdb_episode_details_failed, key, str(error))
+
+    def _apply_tmdb_episode_details(
+        self,
+        record_id: str,
+        season_number: int,
+        episode_number: int,
+        key: str,
+        title: str,
+        date_value: str,
+        description: str,
+        runtime: str,
+        cast: tuple[CastMember, ...],
+        artwork_file: str | None,
+    ) -> bool:
+        self._tmdb_episode_details_loading.discard(key)
+        updated = self._replace_episode_info(
+            record_id,
+            season_number,
+            episode_number,
+            lambda episode: replace(
+                episode,
+                title=title,
+                date=date_value,
+                description=description,
+                runtime=runtime,
+                cast=cast,
+                artwork_file=artwork_file or episode.artwork_file,
+            ),
+        )
+        if updated is not None:
+            self._tmdb_episode_details_loaded.add(key)
+            self._store_tmdb_record(updated, refresh_details=False)
+            self._refresh_visible_episode_page(updated, season_number, episode_number)
+        return GLib.SOURCE_REMOVE
+
+    def _apply_tmdb_episode_artwork(
+        self,
+        record_id: str,
+        season_number: int,
+        episode_number: int,
+        image_file: str,
+    ) -> bool:
+        updated = self._replace_episode_info(
+            record_id,
+            season_number,
+            episode_number,
+            lambda episode: replace(episode, artwork_file=image_file),
+        )
+        if updated is not None:
+            self._store_tmdb_record(updated, refresh_details=False)
+            self._refresh_visible_episode_page(updated, season_number, episode_number)
+        return GLib.SOURCE_REMOVE
+
+    def _refresh_visible_episode_page(
+        self,
+        record: TitleRecord,
+        season_number: int,
+        episode_number: int,
+    ) -> None:
+        if (
+            self.detail_record_id != record.id
+            or self.detail_navigation.get_visible_page_tag() != "episode"
+        ):
+            return
+        seasons = self._series_seasons(record)
+        season_index = next(
+            (
+                index
+                for index, season in enumerate(seasons)
+                if season.number == season_number
+            ),
+            None,
+        )
+        if season_index is None:
+            return
+        episodes = self._episodes_for_season(record, season_index)
+        episode_index = next(
+            (
+                index
+                for index, episode in enumerate(episodes)
+                if episode.number == episode_number
+            ),
+            None,
+        )
+        if episode_index is not None:
+            self._populate_episode_page(
+                record,
+                season_index,
+                episode_index,
+                reset_scroll=False,
+            )
+
+    def _on_tmdb_episode_details_failed(self, key: str, message: str) -> bool:
+        self._tmdb_episode_details_loading.discard(key)
+        self._app_log("TMDB episode details failed: %s", message, level=logging.WARNING)
+        self._toast("Episode details could not be loaded from TMDB")
+        return GLib.SOURCE_REMOVE
 
     def _apply_tmdb_detail_artwork(
         self,
@@ -5478,6 +5802,8 @@ class CineShelfWindow:
         self.tmdb_token = token
         self._tmdb_details_loading.clear()
         self._tmdb_details_loaded.clear()
+        self._tmdb_episode_details_loading.clear()
+        self._tmdb_episode_details_loaded.clear()
         self._tmdb_cast_images_loading.clear()
         self._tmdb_gallery_images_loading.clear()
         self._toast("Connecting to TMDB…")
@@ -6156,6 +6482,8 @@ class CineShelfWindow:
         self,
         container: Gtk.Box,
         record: TitleRecord,
+        *,
+        allow_fallback: bool = True,
     ) -> None:
         self._clear_container(container)
         if record.id in self._tmdb_details_loading:
@@ -6163,8 +6491,15 @@ class CineShelfWindow:
                 container.append(self._loading_placeholder(82, 104, "Loading cast"))
             return
 
+        members = self._cast_members(record) if allow_fallback else record.cast[:12]
+        if not members:
+            empty = Gtk.Label(label="No guest cast information is available.")
+            empty.add_css_class("dim-label")
+            empty.add_css_class("caption")
+            container.append(empty)
+            return
         pending_images = self._tmdb_cast_images_loading.get(record.id, set())
-        for index, member in enumerate(self._cast_members(record)):
+        for index, member in enumerate(members):
             card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
             card.set_valign(Gtk.Align.START)
             card.set_size_request(82, -1)
@@ -6326,6 +6661,11 @@ class CineShelfWindow:
             return self.episode_status_overrides[key]
         seasons = self._series_seasons(record)
         season = seasons[season_index]
+        if record.episode_history_loaded:
+            return any(
+                item.season == season.number and item.episode == episode.number
+                for item in record.episode_history
+            )
         default = episode.watched
         return episode.number <= season.watched if default is None else default
 
@@ -6365,9 +6705,15 @@ class CineShelfWindow:
         height: int,
     ) -> Gtk.Overlay:
         overlay = Gtk.Overlay()
+        artwork_record = replace(
+            record,
+            artwork_file=episode.artwork_file,
+            poster_file=None,
+            backdrop_file=episode.artwork_file,
+        )
         overlay.set_child(
             PosterWidget(
-                record,
+                artwork_record,
                 width,
                 height,
                 variant_offset=episode.image_variant,
@@ -6550,6 +6896,8 @@ class CineShelfWindow:
         record: TitleRecord,
         season_index: int,
         episode_index: int,
+        *,
+        reset_scroll: bool = True,
     ) -> None:
         seasons = self._series_seasons(record)
         if not seasons:
@@ -6584,11 +6932,19 @@ class CineShelfWindow:
             self._episode_artwork(record, episode, 352, 198)
         )
         self.episode_title_label.set_label(episode.title)
-        self.episode_date_label.set_label(episode.date)
+        episode_metadata = " · ".join(
+            value for value in (episode.date, episode.runtime) if value
+        )
+        self.episode_date_label.set_label(episode_metadata)
         self.episode_overview_label.set_label(episode.description)
-        self._populate_cast_container(self.episode_cast_box, record)
+        self._populate_cast_container(
+            self.episode_cast_box,
+            replace(record, cast=episode.cast),
+            allow_fallback=False,
+        )
         self._update_episode_watch_controls(record, season_index, episode)
-        self._scroll_to_top(self.episode_details_scroller)
+        if reset_scroll:
+            self._scroll_to_top(self.episode_details_scroller)
 
     def _update_episode_watch_controls(
         self,
@@ -7226,6 +7582,11 @@ class CineShelfWindow:
             int(episode_index),
         )
         self.detail_navigation.push_by_tag("episode")
+        self._load_tmdb_episode_details_async(
+            record,
+            int(season_index),
+            int(episode_index),
+        )
 
     def _on_season_watched_clicked(self, _button: Gtk.Button) -> None:
         record = self.records_by_id.get(self.detail_record_id or "")

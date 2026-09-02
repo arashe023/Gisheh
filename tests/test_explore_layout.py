@@ -143,6 +143,76 @@ class SeasonProgressTests(unittest.TestCase):
         assert next_item is not None
         self.assertEqual(controller._episode_code(record, *next_item), "S1E1")
 
+    def test_exact_simkl_history_preserves_a_gap_between_watched_episodes(self) -> None:
+        payload = {
+            "movies": [],
+            "shows": [
+                {
+                    "status": "watching",
+                    "watched_episodes_count": 9,
+                    "total_episodes_count": 10,
+                    "show": {"ids": {"simkl": 42, "tmdb": 84}},
+                    "seasons": [
+                        {
+                            "number": 1,
+                            "episodes": [
+                                {"number": number, "watched_at": "2026-09-01T12:00:00Z"}
+                                for number in (*range(1, 6), *range(7, 11))
+                            ],
+                        }
+                    ],
+                }
+            ],
+            "anime": [],
+        }
+        record = cineshelf.title_records_from_simkl(payload)[0]
+        record = replace(
+            record,
+            seasons=(cineshelf.SeasonInfo("s1", 1, "Season 1", 9, 10),),
+        )
+        controller = self._controller()
+
+        next_item, last_item = controller._episode_progress_items(record)
+
+        self.assertTrue(record.episode_history_loaded)
+        self.assertEqual(len(record.episode_history), 9)
+        assert next_item is not None
+        assert last_item is not None
+        self.assertEqual(controller._episode_code(record, *next_item), "S1E6")
+        self.assertEqual(controller._episode_code(record, *last_item), "S1E10")
+
+    def test_anime_episode_history_uses_tvdb_season_mapping(self) -> None:
+        payload = {
+            "movies": [],
+            "shows": [],
+            "anime": [
+                {
+                    "status": "watching",
+                    "watched_episodes_count": 1,
+                    "total_episodes_count": 12,
+                    "show": {"ids": {"simkl": 50, "tmdb": 100}},
+                    "seasons": [
+                        {
+                            "number": 1,
+                            "episodes": [
+                                {
+                                    "number": 13,
+                                    "tvdb": {"season": 2, "episode": 1},
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+
+        record = cineshelf.title_records_from_simkl(payload)[0]
+
+        self.assertEqual(
+            record.episode_history,
+            (cineshelf.EpisodeWatch(season=2, episode=1),),
+        )
+
 
 class MediaCollectionTests(unittest.TestCase):
     def test_media_items_keep_primary_first_and_remove_duplicates(self) -> None:
