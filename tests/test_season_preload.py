@@ -1,0 +1,323 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import sys
+import threading
+import unittest
+from dataclasses import replace
+from pathlib import Path
+from unittest.mock import patch
+
+SOURCE_DIR = Path(__file__).resolve().parents[1] / "src"
+sys.path.insert(0, str(SOURCE_DIR))
+
+from cineshelf import window as cineshelf
+from cineshelf.services import tmdb_client
+
+
+def _base_record() -> cineshelf.TitleRecord:
+    records, _explore, _totals = cineshelf.load_catalog()
+    base = next(record for record in records if record.media_type == "Shows")
+    return base
+
+
+def _episodes(*numbers: int) -> tuple[cineshelf.EpisodeInfo, ...]:
+    return tuple(
+        cineshelf.EpisodeInfo(
+            id=f"e{number}",
+            number=number,
+            title=f"Placeholder {number}",
+            date="2026",
+            description="Placeholder overview",
+            watched=None,
+            image_variant=number,
+        )
+        for number in numbers
+    )
+
+
+def _controller_for(record: cineshelf.TitleRecord, token: str | None = "token"):
+    controller = object.__new__(cineshelf.CineShelfWindow)
+    controller.tmdb_token = token
+    controller.completed = set()
+    controller.episode_status_overrides = {}
+    controller._tmdb_episode_details_loading = set()
+    controller._tmdb_episode_details_loaded = set()
+    controller._tmdb_season_details_loading = set()
+    controller._tmdb_season_details_loaded = set()
+    controller.records_by_id = {record.id: record}
+    return controller
+
+
+class SeasonMergeTests(unittest.TestCase):
+    def test_episodes_matched_by_number_despite_order(self) -> None:
+        episodes = _episodes(1, 2, 3)
+        payload = [
+            {"episode_number": 3, "name": "Third", "air_date": "2026-03-01",
+             "overview": "Third overview", "runtime": 45, "guest_stars": [],
+             "still_path": ""},
+            {"episode_number": 1, "name": "First", "air_date": "2026-01-01",
+             "overview": "First overview", "runtime": 50, "guest_stars": [],
+             "still_path": ""},
+            {"episode_number": 2, "name": "Second", "air_date": "2026-02-01",
+             "overview": "Second overview", "runtime": 55, "guest_stars": [],
+             "still_path": ""},
+        ]
+        merged = cineshelf.merge_tmdb_season_episodes(episodes, payload)
+        by_number = {episode.number: episode for episode in merged}
+        self.assertEqual(by_number[1].title, "First")
+        self.assertEqual(by_number[2].title, "Second")
+        self.assertEqual(by_number[3].title, "Third")
+
+    def test_empty_tmdb_values_preserve_existing(self) -> None:
+        existing = cineshelf.EpisodeInfo(
+            id="e1", number=1, title="Kept title", date="2026-01-01",
+            description="Kept overview", watched=True, image_variant=3,
+            artwork_file="/cache/kept.jpg", runtime="45m",
+            cast=(cineshelf.CastMember("Actor", "Lead"),),
+        )
+        payload = [
+            {"episode_number": 1, "name": "", "air_date": "",
+             "overview": "", "runtime": 0, "guest_stars": [],
+             "still_path": ""},
+            {"episode_number": 1, "name": "Ignored duplicate",
+             "air_date": "", "overview": "", "runtime": 0,
+             "guest_stars": [], "still_path": ""},
+            "malformed",
+            {"no_number": True},
+        ]
+        with patch.object(
+            tmdb_client, "cached_image", return_value=None
+        ):
+            merged = cineshelf.merge_tmdb_season_episodes((existing,), payload)
+        self.assertEqual(merged[0].title, "Kept title")
+        self.assertEqual(merged[0].date, "2026-01-01")
+        self.assertEqual(merged[0].description, "Kept overview")
+        self.assertEqual(merged[0].runtime, "45m")
+        self.assertEqual(
+            merged[0].cast, (cineshelf.CastMember("Actor", "Lead"),)
+        )
+        self.assertEqual(merged[0].artwork_file, "/cache/kept.jpg")
+
+    def test_runtime_uses_format_watch_time(self) -> None:
+        episodes = _episodes(4)
+        payload = [
+            {"episode_number": 4, "name": "Runtime", "air_date": "2026-04-01",
+             "overview": "Overview", "runtime": 125, "guest_stars": [],
+             "still_path": ""},
+        ]
+        merged = cineshelf.merge_tmdb_season_episodes(episodes, payload)
+        self.assertEqual(
+            merged[0].runtime, cineshelf.format_watch_time(125)
+        )
+
+    def test_specials_season_zero_uses_real_number(self) -> None:
+        self.assertEqual(
+            cineshelf.CineShelfWindow._tmdb_season_cache_key("rec", 0),
+            "rec:s0",
+        )
+        self.assertNotEqual(
+            cineshelf.CineShelfWindow._tmdb_season_cache_key("rec", 0),
+            cineshelf.CineShelfWindow._tmdb_season_cache_key("rec", 1),
+        )
+        episodes = _episodes(1)
+        payload = [
+            {"episode_number": 1, "name": "Special One",
+             "air_date": "2026-01-01", "overview": "Special overview",
+             "runtime": 30, "guest_stars": [], "still_path": ""},
+        ]
+        merged = cineshelf.merge_tmdb_season_episodes(episodes, payload)
+        self.assertEqual(merged[0].title, "Special One")
+
+    def test_watched_state_and_identity_preserved(self) -> None:
+        existing = cineshelf.EpisodeInfo(
+            id="local-e7", number=7, title="Old", date="2026",
+            description="Old", watched=True, image_variant=9,
+            artwork_file="/cache/old.jpg",
+        )
+        payload = [
+            {"episode_number": 7, "name": "New", "air_date": "2026-07-01",
+             "overview": "New overview", "runtime": 42,
+             "guest_stars": [{"name": "Guest", "character": "Visitor",
+                              "profile_path": ""}],
+             "still_path": ""},
+        ]
+        with patch.object(
+            tmdb_client, "cached_image", return_value=None
+        ):
+            merged = cineshelf.merge_tmdb_season_episodes((existing,), payload)
+        self.assertEqual(merged[0].id, "local-e7")
+        self.assertTrue(merged[0].watched)
+        self.assertEqual(merged[0].image_variant, 9)
+        self.assertEqual(merged[0].title, "New")
+        self.assertEqual(len(merged[0].cast), 1)
+        self.assertEqual(merged[0].cast[0].name, "Guest")
+
+
+class SeasonRequestTests(unittest.TestCase):
+    def _record(self, season_number: int = 1) -> cineshelf.TitleRecord:
+        base = _base_record()
+        season = cineshelf.SeasonInfo(
+            id="specials" if season_number == 0 else f"s{season_number}",
+            number=season_number,
+            title="Specials" if season_number == 0 else f"Season {season_number}",
+            watched=0,
+            episodes=3,
+            episode_items=_episodes(1, 2, 3),
+        )
+        other = cineshelf.SeasonInfo(
+            id="s2" if season_number != 2 else "s1",
+            number=2 if season_number != 2 else 1,
+            title="Season 2",
+            watched=0,
+            episodes=2,
+        )
+        return replace(
+            base, id="test-title", tmdb_id=20, seasons=(season, other)
+        )
+
+    def test_loading_request_is_deduplicated(self) -> None:
+        record = self._record()
+        controller = _controller_for(record)
+        controller._tmdb_season_details_loading.add("test-title:s1")
+        with patch.object(threading, "Thread") as thread:
+            controller._load_tmdb_season_details_async(record, 0)
+        thread.assert_not_called()
+
+    def test_loaded_season_is_not_fetched_again(self) -> None:
+        record = self._record()
+        controller = _controller_for(record)
+        controller._tmdb_season_details_loaded.add("test-title:s1")
+        with patch.object(threading, "Thread") as thread:
+            controller._load_tmdb_season_details_async(record, 0)
+        thread.assert_not_called()
+
+    def test_different_seasons_use_different_keys(self) -> None:
+        record = self._record(season_number=1)
+        controller = _controller_for(record)
+        started: list[str] = []
+        real_thread = threading.Thread
+
+        def fake_thread(*args, **kwargs):
+            started.append(kwargs.get("name", ""))
+            raise AssertionError("stop")
+
+        with patch.object(threading, "Thread", side_effect=fake_thread):
+            with self.assertRaises(AssertionError):
+                controller._load_tmdb_season_details_async(record, 0)
+            key_one = next(iter(controller._tmdb_season_details_loading))
+            controller._tmdb_season_details_loading.clear()
+            controller._tmdb_season_details_loaded.add(key_one)
+            with self.assertRaises(AssertionError):
+                controller._load_tmdb_season_details_async(record, 1)
+            key_two = next(
+                key
+                for key in controller._tmdb_season_details_loading
+            )
+        self.assertNotEqual(key_one, key_two)
+        self.assertIn(":s1", key_one)
+        self.assertIn(":s2", key_two)
+        self.assertNotIn("stop", str(real_thread))
+
+    def test_missing_token_or_tmdb_id_starts_no_request(self) -> None:
+        record = self._record()
+        no_token = _controller_for(record, token=None)
+        with patch.object(threading, "Thread") as thread:
+            no_token._load_tmdb_season_details_async(record, 0)
+        thread.assert_not_called()
+        no_id_record = replace(record, tmdb_id=None)
+        no_id = _controller_for(no_id_record, token="token")
+        with patch.object(threading, "Thread") as thread:
+            no_id._load_tmdb_season_details_async(no_id_record, 0)
+        thread.assert_not_called()
+
+    def test_episode_loader_skipped_after_season_loaded_or_loading(self) -> None:
+        record = self._record()
+        controller = _controller_for(record)
+        controller._tmdb_season_details_loaded.add("test-title:s1")
+        with patch.object(threading, "Thread") as thread:
+            controller._load_tmdb_episode_details_async(record, 0, 0)
+        thread.assert_not_called()
+        controller._tmdb_season_details_loaded.clear()
+        controller._tmdb_season_details_loading.add("test-title:s1")
+        with patch.object(threading, "Thread") as thread:
+            controller._load_tmdb_episode_details_async(record, 0, 0)
+        thread.assert_not_called()
+
+    def test_season_preload_starts_from_both_season_entry_points(self) -> None:
+        source = Path(cineshelf.__file__).read_text(encoding="utf-8")
+        season_activated = source.split("def _on_season_activated")[1].split(
+            "def _on_season_switch_changed"
+        )[0]
+        switch_changed = source.split("def _on_season_switch_changed")[1].split(
+            "def _on_episode_activated"
+        )[0]
+        self.assertIn("_load_tmdb_season_details_async", season_activated)
+        self.assertIn("_load_tmdb_season_details_async", switch_changed)
+
+    def test_apply_marks_episode_keys_loaded(self) -> None:
+        record = self._record()
+        controller = _controller_for(record)
+        controller._store_tmdb_record = lambda updated, refresh_details=True: (
+            controller.records_by_id.__setitem__(updated.id, updated)
+        )
+        controller._refresh_visible_season_page = lambda *args: None
+        controller._refresh_visible_episode_for_season = lambda *args: None
+        updates = (
+            (1, "One", "2026-01-01", "Overview one", "45m", (), None),
+            (2, "Two", "2026-01-02", "Overview two", "45m", (), None),
+        )
+        result = controller._apply_tmdb_season_details(
+            record.id, 1, "test-title:s1", updates
+        )
+        self.assertFalse(result)
+        self.assertIn("test-title:s1", controller._tmdb_season_details_loaded)
+        self.assertIn("test-title:s1:e1", controller._tmdb_episode_details_loaded)
+        self.assertIn("test-title:s1:e2", controller._tmdb_episode_details_loaded)
+        stored = controller.records_by_id[record.id]
+        titles = {
+            episode.number: episode.title
+            for episode in stored.seasons[0].episode_items
+        }
+        self.assertEqual(titles[1], "One")
+        self.assertEqual(titles[2], "Two")
+
+
+class EpisodePositionRemovalTests(unittest.TestCase):
+    @staticmethod
+    def _source() -> str:
+        return Path(cineshelf.__file__).read_text(encoding="utf-8")
+
+    def test_position_widgets_and_update_logic_removed(self) -> None:
+        source = self._source()
+        self.assertNotIn("episode_position_label", source)
+        self.assertNotIn("episode_position_dots", source)
+        # Header must still carry the episode number.
+        self.assertIn(
+            'self.episode_header_title.set_title(f"Episode {episode.number}")',
+            source,
+        )
+
+    def test_detail_layout_starts_with_hero_artwork(self) -> None:
+        source = self._source()
+        builder = source.split("def _build_episode_navigation_pages")[1].split(
+            "def _detail_navigation_action"
+        )[0]
+        self.assertNotIn("episode_position", builder)
+        self.assertNotIn("CenterBox", builder.split("self.episode_hero_host")[1].split(
+            "self.episode_detail_box = Gtk.Box")[0] if "self.episode_detail_box = Gtk.Box" in builder else builder)
+        first_append = None
+        for line in builder.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("self.episode_detail_box.append("):
+                first_append = stripped
+                break
+        self.assertEqual(
+            first_append,
+            "self.episode_detail_box.append(self.episode_hero_host)",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

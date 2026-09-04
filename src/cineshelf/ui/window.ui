@@ -4,15 +4,14 @@
   <requires lib="Adw" version="1.9"/>
   <object class="AdwApplicationWindow" id="window">
     <property name="title">CineShelf</property>
-    <property name="default-width">1360</property>
-    <property name="default-height">820</property>
+    <property name="default-width">1100</property>
+    <property name="default-height">700</property>
     <property name="content">
       <object class="AdwToastOverlay" id="toast_overlay">
         <property name="child">
-          <object class="AdwNavigationSplitView" id="workspace">
-            <property name="min-sidebar-width">248</property>
-            <property name="max-sidebar-width">300</property>
+          <object class="AdwOverlaySplitView" id="workspace">
             <property name="sidebar-width-fraction">0.23</property>
+            <property name="show-sidebar">true</property>
             <property name="sidebar">
               <object class="AdwNavigationPage" id="sidebar_page">
                 <property name="title">CineShelf</property>
@@ -61,26 +60,12 @@
                           </object>
                         </child>
                         <child type="end">
-                          <object class="GtkBox">
-                            <property name="spacing">2</property>
-                            <child>
-                              <object class="GtkButton" id="add_sidebar_button">
-                                <property name="icon-name">list-add-symbolic</property>
-                                <property name="tooltip-text">Add to library</property>
-                                <style>
-                                  <class name="flat"/>
-                                </style>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="GtkMenuButton" id="main_menu_button">
-                                <property name="icon-name">open-menu-symbolic</property>
-                                <property name="tooltip-text">Main menu</property>
-                                <style>
-                                  <class name="flat"/>
-                                </style>
-                              </object>
-                            </child>
+                          <object class="GtkMenuButton" id="main_menu_button">
+                            <property name="icon-name">open-menu-symbolic</property>
+                            <property name="tooltip-text">Main menu</property>
+                            <style>
+                              <class name="flat"/>
+                            </style>
                           </object>
                         </child>
                         <style>
@@ -193,60 +178,6 @@
                             <property name="margin-start">8</property>
                             <property name="margin-end">8</property>
                             <property name="spacing">4</property>
-                            <child>
-                              <object class="GtkButton" id="storage_button">
-                                <property name="tooltip-text">Local library storage</property>
-                                <property name="child">
-                                  <object class="GtkBox">
-                                    <property name="orientation">vertical</property>
-                                    <property name="spacing">6</property>
-                                    <property name="margin-top">7</property>
-                                    <property name="margin-bottom">7</property>
-                                    <property name="margin-start">8</property>
-                                    <property name="margin-end">8</property>
-                                    <child>
-                                      <object class="GtkCenterBox">
-                                        <property name="start-widget">
-                                          <object class="GtkBox">
-                                            <property name="spacing">7</property>
-                                            <child>
-                                              <object class="GtkImage">
-                                                <property name="icon-name">folder-symbolic</property>
-                                              </object>
-                                            </child>
-                                            <child>
-                                              <object class="GtkLabel">
-                                                <property name="label">Local library</property>
-                                                <style>
-                                                  <class name="heading"/>
-                                                </style>
-                                              </object>
-                                            </child>
-                                          </object>
-                                        </property>
-                                        <property name="end-widget">
-                                          <object class="GtkLabel">
-                                            <property name="label">12.4 / 18 GB</property>
-                                            <style>
-                                              <class name="dim-label"/>
-                                              <class name="caption"/>
-                                            </style>
-                                          </object>
-                                        </property>
-                                      </object>
-                                    </child>
-                                    <child>
-                                      <object class="GtkProgressBar" id="storage_progress">
-                                        <property name="fraction">0.68</property>
-                                      </object>
-                                    </child>
-                                  </object>
-                                </property>
-                                <style>
-                                  <class name="card"/>
-                                </style>
-                              </object>
-                            </child>
                             <child>
                               <object class="GtkButton" id="preferences_button">
                                 <property name="halign">fill</property>
@@ -376,8 +307,9 @@
                                   </object>
                                 </child>
                                 <child>
-                                  <object class="GtkBox">
-                                    <property name="spacing">6</property>
+                                  <object class="AdwWrapBox">
+                                    <property name="child-spacing">6</property>
+                                    <property name="line-spacing">6</property>
                                     <child>
                                       <object class="GtkSearchEntry" id="search_entry">
                                         <property name="hexpand">true</property>
@@ -468,7 +400,6 @@
                         </child>
                         <child>
                           <object class="AdwBin" id="details_surface">
-                            <property name="width-request">388</property>
                             <property name="hexpand">false</property>
                             <property name="vexpand">true</property>
                             <style>
@@ -487,8 +418,6 @@
                                     <property name="can-pop">false</property>
                                     <property name="child">
                                       <object class="GtkScrolledWindow" id="details_scroller">
-                                        <property name="min-content-width">388</property>
-                                        <property name="max-content-width">388</property>
                                         <property name="propagate-natural-width">false</property>
                                         <property name="hscrollbar-policy">never</property>
                                         <property name="vexpand">true</property>
@@ -531,9 +460,11 @@
                                         <property name="orientation">vertical</property>
                                         <property name="spacing">3</property>
                                         <child>
-                                          <object class="GtkLabel" id="detail_overline">
-                                            <property name="label">2013 · Iran</property>
-                                            <property name="halign">start</property>
+                                              <object class="GtkLabel" id="detail_overline">
+                                                <property name="label">2013 · Iran</property>
+                                                <property name="halign">start</property>
+                                                <property name="wrap">true</property>
+                                                <property name="max-width-chars">40</property>
                                             <style>
                                               <class name="dim-label"/>
                                               <class name="caption"/>
@@ -570,19 +501,20 @@
                                       </object>
                                     </child>
                                     <child>
-                                      <object class="GtkBox" id="detail_ratings_host">
-                                        <property name="homogeneous">true</property>
-                                        <property name="spacing">6</property>
+                                      <object class="AdwWrapBox" id="detail_ratings_host">
+                                        <property name="child-spacing">6</property>
+                                        <property name="line-spacing">6</property>
+                                        <property name="natural-line-length">360</property>
                                       </object>
                                     </child>
                                     <child>
-                                      <object class="GtkBox">
-                                        <property name="spacing">7</property>
+                                      <object class="AdwWrapBox">
+                                        <property name="child-spacing">7</property>
+                                        <property name="line-spacing">7</property>
                                         <child>
                                           <object class="GtkButton" id="watched_button">
                                             <property name="label">Watched</property>
                                             <property name="icon-name">object-select-symbolic</property>
-                                            <property name="hexpand">true</property>
                                             <style>
                                               <class name="suggested-action"/>
                                             </style>
@@ -639,12 +571,6 @@
                                           <object class="GtkToggleButton" id="bookmark_button">
                                             <property name="icon-name">bookmark-new-symbolic</property>
                                             <property name="tooltip-text">Bookmark</property>
-                                          </object>
-                                        </child>
-                                        <child>
-                                          <object class="GtkMenuButton" id="more_button">
-                                            <property name="icon-name">view-more-symbolic</property>
-                                            <property name="tooltip-text">More options</property>
                                           </object>
                                         </child>
                                       </object>
@@ -875,7 +801,6 @@
                 <property name="child-spacing">6</property>
                 <property name="line-spacing">6</property>
                 <property name="natural-line-length">470</property>
-                <property name="width-request">470</property>
                 <child>
                   <object class="GtkDropDown" id="explore_sort_dropdown">
                     <property name="width-request">142</property>

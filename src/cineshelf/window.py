@@ -267,14 +267,102 @@ def runtime_minutes(value: str) -> int:
     return 0
 
 
-def parse_watched_date(value: str) -> date | None:
+def parse_watched_datetime(value: str) -> datetime | None:
+    """Parse canonical ISO 8601 or legacy watched timestamps."""
+    text = value.strip()
+    if not text:
+        return None
     try:
-        return datetime.strptime(value, "%b %d, %Y at %I:%M %p").date()
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError:
+        parsed = None
+    if parsed is None:
         try:
-            return datetime.fromisoformat(value.replace("Z", "+00:00")).date()
+            parsed = datetime.strptime(text, "%b %d, %Y at %I:%M %p")
         except ValueError:
             return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(
+            tzinfo=datetime.now().astimezone().tzinfo
+        )
+    return parsed
+
+
+def parse_watched_date(value: str) -> date | None:
+    parsed = parse_watched_datetime(value)
+    return parsed.date() if parsed is not None else None
+
+
+def watched_now_iso() -> str:
+    """Return the current local time as a canonical ISO 8601 timestamp."""
+    return datetime.now().astimezone().replace(microsecond=0).isoformat()
+
+
+def watched_datetime_from_parts(
+    year: int,
+    month: int,
+    day: int,
+    hour: int,
+    minute: int,
+    *,
+    hour_is_12h: bool = False,
+    is_pm: bool = False,
+) -> datetime | None:
+    """Build a timezone-aware local datetime from dialog controls."""
+    try:
+        year, month, day, hour, minute = (
+            int(year),
+            int(month),
+            int(day),
+            int(hour),
+            int(minute),
+        )
+    except (TypeError, ValueError):
+        return None
+    if hour_is_12h:
+        if not 1 <= hour <= 12:
+            return None
+        hour = (hour % 12) + (12 if is_pm else 0)
+    elif not 0 <= hour <= 23:
+        return None
+    if not 0 <= minute <= 59:
+        return None
+    try:
+        moment = datetime(year, month, day, hour, minute)
+    except ValueError:
+        return None
+    return moment.replace(tzinfo=datetime.now().astimezone().tzinfo)
+
+
+def validate_watched_iso(
+    value: str,
+    *,
+    now: datetime | None = None,
+) -> str | None:
+    """Return an error message for an invalid watched timestamp, else None."""
+    parsed = parse_watched_datetime(value)
+    if parsed is None:
+        return "The selected date and time are not valid."
+    reference = now if now is not None else datetime.now().astimezone()
+    if reference.tzinfo is None:
+        reference = reference.replace(
+            tzinfo=datetime.now().astimezone().tzinfo
+        )
+    if parsed > reference:
+        return "The watched time cannot be in the future."
+    return None
+
+
+def format_watched_iso(value: str) -> str:
+    """Format a canonical or legacy watched timestamp for display."""
+    parsed = parse_watched_datetime(value)
+    if parsed is None:
+        return value
+    hour = parsed.strftime("%I").lstrip("0") or "12"
+    return (
+        f"{parsed.strftime('%b')} {parsed.day}, {parsed.year} at "
+        f"{hour}:{parsed.strftime('%M %p')}"
+    )
 
 
 def format_watch_time(minutes: int) -> str:
@@ -290,6 +378,114 @@ def format_watch_time(minutes: int) -> str:
     return " ".join(parts)
 
 
+def merge_tmdb_season_episodes(
+    episodes: tuple[EpisodeInfo, ...],
+    tmdb_episodes: Any,
+    *,
+    cached_image_lookup: Any = None,
+) -> tuple[EpisodeInfo, ...]:
+    """Merge one TMDB season response into existing episodes by episode number.
+
+    Matching uses ``episode_number`` (not list position) so specials and
+    unusual orders stay correct. Empty TMDB values never replace useful
+    existing values. Malformed items are skipped without affecting valid ones.
+    """
+    if not isinstance(tmdb_episodes, (list, tuple)):
+        return episodes
+    by_number: dict[int, dict[str, Any]] = {}
+    for item in tmdb_episodes:
+        if not isinstance(item, dict):
+            continue
+        try:
+            number = int(item.get("episode_number"))
+        except (TypeError, ValueError):
+            continue
+        if number not in by_number:
+            by_number[number] = item
+
+    def resolve_artwork(still_path: str) -> str | None:
+        if cached_image_lookup is not None:
+            try:
+                return cached_image_lookup(still_path)
+            except Exception:
+                return None
+        try:
+            return tmdb_client.cached_image(still_path, size="w780")
+        except Exception:
+            return None
+
+    merged: list[EpisodeInfo] = []
+    for episode in episodes:
+        payload = by_number.get(episode.number)
+        if payload is None:
+            merged.append(episode)
+            continue
+        try:
+            title_value = str(payload.get("name") or "").strip()
+            title = title_value if title_value else episode.title
+            date_value = str(payload.get("air_date") or "").strip()
+            date = date_value if date_value else episode.date
+            description_value = str(payload.get("overview") or "").strip()
+            description = (
+                description_value if description_value else episode.description
+            )
+            try:
+                runtime_value = int(payload.get("runtime") or 0)
+            except (TypeError, ValueError):
+                runtime_value = 0
+            runtime = (
+                format_watch_time(runtime_value)
+                if runtime_value > 0
+                else episode.runtime
+            )
+            guest_stars = payload.get("guest_stars")
+            if isinstance(guest_stars, list) and guest_stars:
+                cast_items: list[CastMember] = []
+                for member in guest_stars[:12]:
+                    if not isinstance(member, dict):
+                        continue
+                    profile_path = str(member.get("profile_path") or "")
+                    try:
+                        profile_file = (
+                            tmdb_client.cached_image(profile_path, size="w185")
+                            if profile_path
+                            else None
+                        )
+                    except Exception:
+                        profile_file = None
+                    cast_items.append(
+                        CastMember(
+                            name=str(member.get("name") or "Unknown"),
+                            role=str(member.get("character") or "Guest star"),
+                            profile_file=profile_file,
+                        )
+                    )
+                cast: tuple[CastMember, ...] = (
+                    tuple(cast_items) if cast_items else episode.cast
+                )
+            else:
+                cast = episode.cast
+            still_path = str(payload.get("still_path") or "").strip()
+            if still_path:
+                artwork_file = resolve_artwork(still_path) or episode.artwork_file
+            else:
+                artwork_file = episode.artwork_file
+            merged.append(
+                replace(
+                    episode,
+                    title=title,
+                    date=date,
+                    description=description,
+                    runtime=runtime,
+                    cast=cast,
+                    artwork_file=artwork_file,
+                )
+            )
+        except Exception:
+            merged.append(episode)
+    return tuple(merged)
+
+
 def grid_columns_for_width(width: int) -> int:
     """Return the FlowBox column count implied by the card's real minimum width."""
     content_width = max(1, width - GRID_HORIZONTAL_PADDING)
@@ -297,6 +493,65 @@ def grid_columns_for_width(width: int) -> int:
         GRID_CARD_WIDTH + GRID_COLUMN_GAP
     )
     return max(1, min(GRID_MAX_COLUMNS, columns))
+
+
+SIDEBAR_EXPANDED = "expanded"
+SIDEBAR_HIDDEN = "hidden"
+
+DETAILS_INLINE = "inline"
+DETAILS_OVERLAY = "overlay"
+DETAILS_NAVIGATION = "navigation"
+
+RESPONSIVE_WIDE_WIDTH = 1200
+RESPONSIVE_MEDIUM_WIDTH = 980
+RESPONSIVE_NARROW_WIDTH = 720
+
+SIDEBAR_EXPANDED_MIN_WIDTH = 248
+SIDEBAR_EXPANDED_MAX_WIDTH = 300
+
+DETAILS_INLINE_WIDTH = 384
+DETAILS_OVERLAY_MAX_WIDTH = 388
+DETAILS_OVERLAY_MIN_WIDTH = 280
+DETAILS_NARROW_SAFE_MARGIN = 48
+
+
+@dataclass(frozen=True, slots=True)
+class ResponsiveLayout:
+    sidebar_mode: str
+    details_mode: str
+
+
+def responsive_layout_for_width(
+    width: int,
+    *,
+    details_open: bool = False,
+) -> ResponsiveLayout:
+    """Map allocated window width to an explicit responsive layout decision.
+
+    The result depends only on its inputs so layout states stay deterministic
+    and unit-testable without GTK widgets.
+    """
+    normalized = max(0, int(width))
+    if normalized >= RESPONSIVE_WIDE_WIDTH:
+        return ResponsiveLayout(SIDEBAR_EXPANDED, DETAILS_INLINE)
+    if normalized >= RESPONSIVE_MEDIUM_WIDTH:
+        return ResponsiveLayout(SIDEBAR_HIDDEN, DETAILS_INLINE)
+    if normalized >= RESPONSIVE_NARROW_WIDTH:
+        return ResponsiveLayout(SIDEBAR_HIDDEN, DETAILS_OVERLAY)
+    return ResponsiveLayout(SIDEBAR_HIDDEN, DETAILS_NAVIGATION)
+
+
+def details_back_action(inner_tag: str) -> str:
+    """Map the visible inner details page to its Back behavior.
+
+    Returns ``"pop-season"`` (episode → season), ``"pop-title"``
+    (season → title), or ``"close"`` (title → content).
+    """
+    if inner_tag == "episode":
+        return "pop-season"
+    if inner_tag == "season":
+        return "pop-title"
+    return "close"
 
 
 @dataclass(frozen=True, slots=True)
@@ -605,6 +860,79 @@ def title_record_from_tmdb(
         poster_file=poster_file,
         backdrop_file=backdrop_file,
     )
+
+
+def recommendation_records_from_tmdb(
+    items: Any,
+    parent: TitleRecord,
+    *,
+    start_position: int = 1,
+) -> tuple[TitleRecord, ...]:
+    """Normalize TMDB recommendation results into openable title records.
+
+    Matches the shared ``title_record_from_tmdb()`` path used by Explore and
+    search results. Skips the parent title and duplicate TMDB IDs, preserves
+    TMDB order, and caps the result at 12 entries.
+    """
+    if not isinstance(items, (list, tuple)):
+        return ()
+    parent_ids = {parent.tmdb_id} if parent.tmdb_id is not None else set()
+    seen: set[int] = set(parent_ids)
+    records: list[TitleRecord] = []
+    position = max(1, start_position)
+    for item in items:
+        if len(records) >= 12:
+            break
+        if not isinstance(item, dict):
+            continue
+        try:
+            tmdb_id = int(item["id"])
+        except (TypeError, ValueError, KeyError):
+            continue
+        if tmdb_id in seen:
+            continue
+        seen.add(tmdb_id)
+        kind = str(item.get("media_type") or "").lower()
+        if kind == "movie":
+            media_type = "Movies"
+        elif kind == "tv":
+            media_type = (
+                parent.media_type
+                if parent.media_type in ("Shows", "Anime")
+                else "Shows"
+            )
+        elif parent.media_type in ("Movies", "Shows", "Anime"):
+            media_type = parent.media_type
+        elif (parent.tmdb_media_type or "movie") == "movie":
+            media_type = "Movies"
+        else:
+            media_type = "Shows"
+        try:
+            poster_file = tmdb_client.cached_image(
+                str(item.get("poster_path") or ""),
+                size="w342",
+            )
+            backdrop_file = tmdb_client.cached_image(
+                str(item.get("backdrop_path") or ""),
+                size="w780",
+            )
+        except Exception:
+            poster_file, backdrop_file = None, None
+        try:
+            record = title_record_from_tmdb(
+                item,
+                media_type,
+                position,
+                poster_file,
+                backdrop_file,
+            )
+        except (TypeError, ValueError, KeyError):
+            continue
+        if record.id == parent.id:
+            continue
+        records.append(record)
+        position += 1
+    return tuple(records)
 
 
 def enrich_record_from_tmdb(
@@ -986,14 +1314,16 @@ class GeneratedPosterWidget(Gtk.DrawingArea):
         *,
         variant_offset: int = 0,
         show_text: bool = True,
+        fixed_size: bool = True,
     ) -> None:
         super().__init__()
         self.record = record
         self.variant_offset = variant_offset
         self.show_text = show_text
-        self.set_content_width(width)
-        self.set_content_height(height)
-        self.set_size_request(width, height)
+        if fixed_size:
+            self.set_content_width(width)
+            self.set_content_height(height)
+            self.set_size_request(width, height)
         self.set_tooltip_text(f"{record.title}, {record.year}")
         self.set_accessible_role(Gtk.AccessibleRole.IMG)
         self.update_property(
@@ -1179,11 +1509,16 @@ class PosterWidget(Gtk.Widget):
         *,
         variant_offset: int = 0,
         show_text: bool = True,
+        flexible_width: bool = False,
     ) -> None:
         super().__init__()
         self.fixed_width = width
         self.fixed_height = height
-        self.set_size_request(width, height)
+        self.flexible_width = flexible_width
+        if flexible_width:
+            self.set_size_request(-1, height)
+        else:
+            self.set_size_request(width, height)
         self.set_overflow(Gtk.Overflow.HIDDEN)
         self.add_css_class("rounded-media")
         self.set_tooltip_text(f"{record.title}, {record.year}")
@@ -1208,6 +1543,7 @@ class PosterWidget(Gtk.Widget):
                 height,
                 variant_offset=variant_offset,
                 show_text=show_text,
+                fixed_size=not flexible_width,
             )
             generated.set_hexpand(True)
             generated.set_vexpand(True)
@@ -1220,12 +1556,11 @@ class PosterWidget(Gtk.Widget):
         _for_size: int,
     ) -> tuple[int, int, int, int]:
         """Keep cached images from imposing their intrinsic size on card layouts."""
-        size = (
-            self.fixed_width
-            if orientation == Gtk.Orientation.HORIZONTAL
-            else self.fixed_height
-        )
-        return size, size, -1, -1
+        if orientation == Gtk.Orientation.HORIZONTAL:
+            if self.flexible_width:
+                return 0, self.fixed_width, -1, -1
+            return self.fixed_width, self.fixed_width, -1, -1
+        return self.fixed_height, self.fixed_height, -1, -1
 
     def do_size_allocate(
         self,
@@ -1667,8 +2002,11 @@ class CineShelfWindow:
         self._tmdb_detail_generations: dict[str, int] = {}
         self._tmdb_cast_images_loading: dict[str, set[int]] = {}
         self._tmdb_gallery_images_loading: dict[str, dict[str, int]] = {}
+        self._tmdb_recommendations: dict[str, tuple[str, ...]] = {}
         self._tmdb_episode_details_loading: set[str] = set()
         self._tmdb_episode_details_loaded: set[str] = set()
+        self._tmdb_season_details_loading: set[str] = set()
+        self._tmdb_season_details_loaded: set[str] = set()
         self._tmdb_explore_generation = 0
         self._tmdb_explore_pages = {media_type: 1 for media_type in MEDIA_TYPES}
         self._tmdb_explore_has_more = {media_type: True for media_type in MEDIA_TYPES}
@@ -1695,11 +2033,26 @@ class CineShelfWindow:
         self._updating = False
         self._updating_details = False
         self._updating_season_switcher = False
+        self._updating_sidebar_toggle = False
+        self._applying_responsive = False
         self.details_open = False
         self.detail_record_id: str | None = None
         self.current_season_index = 0
         self.current_episode_index = 0
         self.status_rows: dict[str, SidebarRow] = {}
+        self._sidebar_docked = True
+        self.effective_details_mode = DETAILS_INLINE
+        self._responsive_layout_source_id = 0
+        self._details_reset_source_id = 0
+        self._details_return_focus: Gtk.Widget | None = None
+        self.details_overlay_close: Gtk.Button | None = None
+        self.content_navigation: Adw.NavigationView | None = None
+        self.main_browser_page: Adw.NavigationPage | None = None
+        self.mobile_details_page: Adw.NavigationPage | None = None
+        self.mobile_details_host: Gtk.Box | None = None
+        self.mobile_header_bar: Adw.HeaderBar | None = None
+        self.details_panel_layout: Gtk.Box | None = None
+        self.details_home: Gtk.Box | None = None
 
         try:
             self.builder = Gtk.Builder.new_from_resource(UI_RESOURCE)
@@ -1707,7 +2060,7 @@ class CineShelfWindow:
             self.builder = Gtk.Builder.new_from_file(str(UI_FILE))
         self.window: Adw.ApplicationWindow = self._object("window")
         self.window.set_application(application)
-        self.window.set_size_request(940, 600)
+        self.window.set_default_size(1100, 700)
 
         self._load_css()
         self._bind_objects()
@@ -1760,14 +2113,11 @@ class CineShelfWindow:
             "media_switcher",
             "main_menu_button",
             "search_button",
-            "add_sidebar_button",
             "destination_list",
             "status_list",
             "collections_list",
             "profile_button",
             "sidebar_profile_avatar",
-            "storage_button",
-            "storage_progress",
             "preferences_button",
             "main_workspace",
             "library_pane",
@@ -1795,7 +2145,6 @@ class CineShelfWindow:
             "watched_button",
             "rating_button",
             "bookmark_button",
-            "more_button",
             "rating_popover",
             "runtime_label",
             "genres_label",
@@ -1837,23 +2186,46 @@ class CineShelfWindow:
         self.browser_stack = Gtk.Stack()
         self.browser_stack.set_hexpand(True)
         self.browser_stack.set_vexpand(True)
+        self.browser_stack.set_hhomogeneous(False)
+        self.browser_stack.set_vhomogeneous(False)
         self.browser_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
         self.browser_stack.set_transition_duration(160)
         self.browser_stack.add_named(self.library_pane, "library")
         self.browser_stack.add_named(self.explore_pane, "explore")
         self.browser_stack.set_visible_child_name("library")
-        self.main_workspace.prepend(self.browser_stack)
+
+        self.content_overlay = Gtk.Overlay()
+        self.content_overlay.set_hexpand(True)
+        self.content_overlay.set_vexpand(True)
+        self.content_overlay.set_child(self.browser_stack)
+        self.main_workspace.prepend(self.content_overlay)
 
         self.details_surface.set_child(None)
         details_layout = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         details_layout.add_css_class("detail-panel-layout")
+        details_layout.set_halign(Gtk.Align.FILL)
+        details_layout.set_valign(Gtk.Align.FILL)
+        details_layout.set_hexpand(True)
+        details_layout.set_vexpand(True)
         details_layout.append(self.detail_navigation)
+        self.details_home = details_layout
+        self.details_surface.set_halign(Gtk.Align.FILL)
+        self.details_surface.set_valign(Gtk.Align.FILL)
+        self.details_surface.set_vexpand(True)
+        self.detail_navigation.set_halign(Gtk.Align.FILL)
+        self.detail_navigation.set_valign(Gtk.Align.FILL)
+        self.detail_navigation.set_hexpand(True)
+        self.detail_navigation.set_vexpand(True)
+        self.detail_navigation.connect(
+            "notify::visible-page", self._on_inner_details_page_changed
+        )
         self.details_surface.set_child(details_layout)
         self.details_surface.set_visible(True)
 
         panel_layout = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         panel_layout.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
         panel_layout.append(self.details_surface)
+        self.details_panel_layout = panel_layout
 
         self.details_revealer = Gtk.Revealer()
         self.details_revealer.set_transition_type(
@@ -1863,6 +2235,80 @@ class CineShelfWindow:
         self.details_revealer.set_reveal_child(False)
         self.details_revealer.set_child(panel_layout)
         self.main_workspace.append(self.details_revealer)
+
+        self.details_overlay_close = Gtk.Button.new_from_icon_name(
+            "window-close-symbolic"
+        )
+        self.details_overlay_close.set_tooltip_text("Close details (Escape)")
+        self.details_overlay_close.update_property(
+            [Gtk.AccessibleProperty.LABEL],
+            ["Close details"],
+        )
+        self.details_overlay_close.add_css_class("circular")
+        self.details_overlay_close.add_css_class("osd")
+        self.details_overlay_close.set_halign(Gtk.Align.END)
+        self.details_overlay_close.set_valign(Gtk.Align.START)
+        self.details_overlay_close.set_margin_top(12)
+        self.details_overlay_close.set_margin_end(12)
+        self.details_overlay_close.set_visible(False)
+        self.details_overlay_close.connect(
+            "clicked", lambda *_args: self._set_details_open(False)
+        )
+        self.content_overlay.add_overlay(self.details_overlay_close)
+
+        self._build_content_navigation()
+
+    def _build_content_navigation(self) -> None:
+        """Wrap content in a navigation view for full-page mobile details."""
+        self.mobile_details_host = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.mobile_details_host.set_halign(Gtk.Align.FILL)
+        self.mobile_details_host.set_valign(Gtk.Align.FILL)
+        self.mobile_details_host.set_hexpand(True)
+        self.mobile_details_host.set_vexpand(True)
+
+        self.mobile_header_bar = Adw.HeaderBar()
+        self.mobile_header_bar.set_show_start_title_buttons(False)
+        self.mobile_header_bar.set_show_end_title_buttons(False)
+        mobile_back_button = Gtk.Button.new_from_icon_name(
+            "go-previous-symbolic"
+        )
+        mobile_back_button.set_label("Back")
+        mobile_back_button.set_tooltip_text("Back to content")
+        mobile_back_button.update_property(
+            [Gtk.AccessibleProperty.LABEL],
+            ["Back to content"],
+        )
+        mobile_back_button.connect(
+            "clicked", self._on_mobile_title_back
+        )
+        self.mobile_header_bar.pack_start(mobile_back_button)
+        mobile_title = Adw.WindowTitle(title="Details", subtitle="")
+        self.mobile_header_bar.set_title_widget(mobile_title)
+
+        mobile_toolbar = Adw.ToolbarView()
+        mobile_toolbar.add_top_bar(self.mobile_header_bar)
+        mobile_toolbar.set_content(self.mobile_details_host)
+
+        self.mobile_details_page = Adw.NavigationPage.new(
+            mobile_toolbar, "Details"
+        )
+        self.mobile_details_page.set_tag("details")
+
+        self.content_navigation = Adw.NavigationView()
+        self.content_navigation.set_hexpand(True)
+        self.content_navigation.set_vexpand(True)
+        self.content_navigation.set_hhomogeneous(False)
+        self.content_navigation.set_vhomogeneous(False)
+        self.content_navigation.connect(
+            "notify::visible-page",
+            self._on_content_navigation_page_changed,
+        )
+        previous_content = self.workspace.get_content()
+        self.workspace.set_content(self.content_navigation)
+        self.main_browser_page = previous_content
+        self.main_browser_page.set_tag("browser")
+        self.content_navigation.push(self.main_browser_page)
+        self._sync_mobile_back_visibility()
 
     def _build_media_viewer(self) -> None:
         """Layer the media viewer over the existing app without leaving the window."""
@@ -1912,10 +2358,6 @@ class CineShelfWindow:
         self.media_viewer.open(items, position)
 
     def _configure_accessibility(self) -> None:
-        self.storage_progress.update_property(
-            [Gtk.AccessibleProperty.LABEL],
-            ["Local library storage usage"],
-        )
         self.activity_progress.update_property(
             [Gtk.AccessibleProperty.LABEL],
             ["Watch progress"],
@@ -1982,6 +2424,8 @@ class CineShelfWindow:
             for key, value in payload.get("titleWatchedAt", {}).items()
             if isinstance(value, str) and is_valid_id(str(key))
         }
+        # Obsolete "preferredSidebarMode" keys from older state files are
+        # ignored on purpose; the sidebar no longer has a stored preference.
 
         for record_id, status in self.status_overrides.items():
             if status == "Watched":
@@ -2079,25 +2523,6 @@ class CineShelfWindow:
         menu.append("About CineShelf", "app.about")
         menu.append("Quit", "app.quit")
         self.main_menu_button.set_menu_model(menu)
-
-        detail_menu = Gio.Menu()
-        engagement_section = Gio.Menu()
-        engagement_section.append("Comments", "win.detail-comments")
-        engagement_section.append("Check in", "win.detail-check-in")
-        note_section = Gio.Menu()
-        note_section.append("Add note", "win.detail-add-note")
-        detail_menu.append_section(None, engagement_section)
-        detail_menu.append_section(None, note_section)
-        self.more_button.set_menu_model(detail_menu)
-
-        for action_name, label in (
-            ("detail-comments", "Comments"),
-            ("detail-check-in", "Check in"),
-            ("detail-add-note", "Add note"),
-        ):
-            action = Gio.SimpleAction.new(action_name, None)
-            action.connect("activate", self._on_secondary_detail_action, label)
-            self.window.add_action(action)
 
     def _build_sidebar(self) -> None:
         self.library_row = SidebarRow(
@@ -2227,7 +2652,9 @@ class CineShelfWindow:
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
         clamp.set_child(content)
 
-        hero = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        hero = Adw.WrapBox()
+        hero.set_child_spacing(16)
+        hero.set_line_spacing(12)
         hero.add_css_class("profile-hero")
         profile_user = self.simkl_settings.get("user", {})
         profile_account = self.simkl_settings.get("account", {})
@@ -2263,6 +2690,7 @@ class CineShelfWindow:
             else "Local profile · Connect Simkl to sync your library"
         )
         self.profile_subtitle_label = Gtk.Label(label=subtitle_text, xalign=0)
+        self.profile_subtitle_label.set_wrap(True)
         self.profile_subtitle_label.add_css_class("dim-label")
         identity.append(self.profile_subtitle_label)
         hero.append(identity)
@@ -2364,9 +2792,11 @@ class CineShelfWindow:
         icon_widget.add_css_class("accent")
         card.append(icon_widget)
         value_label = Gtk.Label(label=value, xalign=0)
+        value_label.set_wrap(True)
         value_label.add_css_class("title-2")
         card.append(value_label)
         label_widget = Gtk.Label(label=label, xalign=0)
+        label_widget.set_wrap(True)
         label_widget.add_css_class("dim-label")
         card.append(label_widget)
         return card
@@ -3346,6 +3776,7 @@ class CineShelfWindow:
     def _replace_library(self, records: tuple[TitleRecord, ...]) -> None:
         self.records = records
         self.library_ids = {record.id for record in records}
+        self._tmdb_recommendations = {}
         self.records_by_id = {
             record.id: record
             for record in (
@@ -3407,6 +3838,8 @@ class CineShelfWindow:
         self._tmdb_details_loaded.clear()
         self._tmdb_episode_details_loading.clear()
         self._tmdb_episode_details_loaded.clear()
+        self._tmdb_season_details_loading.clear()
+        self._tmdb_season_details_loaded.clear()
         self._update_profile_identity()
         self.simkl_button.set_sensitive(False)
         self.simkl_disconnect_button.set_sensitive(False)
@@ -3646,6 +4079,8 @@ class CineShelfWindow:
         self.episode_watched_at = {}
         self._tmdb_episode_details_loading.clear()
         self._tmdb_episode_details_loaded.clear()
+        self._tmdb_season_details_loading.clear()
+        self._tmdb_season_details_loaded.clear()
         self.title_watched_at = {
             record.id: record.date
             for record in records
@@ -3671,11 +4106,9 @@ class CineShelfWindow:
             action_label="See all",
         )
 
-        self.episode_cards_box = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL,
-            spacing=8,
-            homogeneous=True,
-        )
+        self.episode_cards_box = Adw.WrapBox()
+        self.episode_cards_box.set_child_spacing(8)
+        self.episode_cards_box.set_line_spacing(8)
         self.seasons_list = Gtk.ListBox()
         self.seasons_list.set_selection_mode(Gtk.SelectionMode.NONE)
         self.seasons_list.set_show_separators(True)
@@ -3753,18 +4186,14 @@ class CineShelfWindow:
         season_actions = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
             spacing=12,
-            homogeneous=True,
+            homogeneous=False,
         )
+        season_actions.set_halign(Gtk.Align.START)
         self.season_watched_button = self._detail_navigation_action(
             "object-select-symbolic",
             "Watched",
         )
-        self.season_comments_button = self._detail_navigation_action(
-            "mail-unread-symbolic",
-            "Comments",
-        )
         season_actions.append(self.season_watched_button)
-        season_actions.append(self.season_comments_button)
 
         episodes_heading = Gtk.CenterBox()
         episodes_title = Gtk.Label(label="Episodes", xalign=0)
@@ -3826,15 +4255,6 @@ class CineShelfWindow:
         episode_header.set_show_back_button(True)
         episode_header.set_title_widget(self.episode_header_title)
 
-        self.episode_position_label = Gtk.Label(xalign=0)
-        self.episode_position_label.add_css_class("dim-label")
-        self.episode_position_dots = Gtk.Label(xalign=1)
-        self.episode_position_dots.add_css_class("numeric")
-        self.episode_position_dots.add_css_class("dim-label")
-        episode_position = Gtk.CenterBox()
-        episode_position.set_start_widget(self.episode_position_label)
-        episode_position.set_end_widget(self.episode_position_dots)
-
         self.episode_hero_host = Gtk.Box()
         self.episode_hero_host.set_halign(Gtk.Align.CENTER)
         self.episode_hero_host.set_hexpand(True)
@@ -3849,23 +4269,14 @@ class CineShelfWindow:
         episode_actions = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
             spacing=8,
-            homogeneous=True,
+            homogeneous=False,
         )
+        episode_actions.set_halign(Gtk.Align.START)
         self.episode_watched_button = self._detail_navigation_action(
             "object-select-symbolic",
             "Watched",
         )
-        self.episode_comments_button = self._detail_navigation_action(
-            "mail-unread-symbolic",
-            "Comments",
-        )
-        self.episode_check_in_button = self._detail_navigation_action(
-            "media-playback-start-symbolic",
-            "Check in",
-        )
         episode_actions.append(self.episode_watched_button)
-        episode_actions.append(self.episode_comments_button)
-        episode_actions.append(self.episode_check_in_button)
 
         self.episode_watched_at_label = Gtk.Label(xalign=0.5)
         self.episode_watched_at_label.set_wrap(True)
@@ -3897,7 +4308,6 @@ class CineShelfWindow:
         self.episode_detail_box.set_margin_end(16)
         self.episode_detail_box.add_css_class("detail-page")
         self.episode_detail_box.add_css_class("detail-subpage-content")
-        self.episode_detail_box.append(episode_position)
         self.episode_detail_box.append(self.episode_hero_host)
         self.episode_detail_box.append(self.episode_title_label)
         self.episode_detail_box.append(self.episode_date_label)
@@ -4127,12 +4537,6 @@ class CineShelfWindow:
         )
 
         self.search_button.connect("clicked", self._on_search_requested)
-        self.add_sidebar_button.connect(
-            "clicked", lambda *_args: self._toast("Add dialog opened")
-        )
-        self.storage_button.connect(
-            "clicked", lambda *_args: self._toast("Library storage: 68% used")
-        )
         self.preferences_button.connect("clicked", self._on_preferences_clicked)
         self.profile_button.connect("clicked", self._on_profile_clicked)
         self.watched_button.connect("clicked", self._on_watched_clicked)
@@ -4141,21 +4545,9 @@ class CineShelfWindow:
             "clicked",
             self._on_season_watched_clicked,
         )
-        self.season_comments_button.connect(
-            "clicked",
-            lambda *_args: self._toast("Season comments opened"),
-        )
         self.episode_watched_button.connect(
             "clicked",
             self._on_episode_watched_clicked,
-        )
-        self.episode_comments_button.connect(
-            "clicked",
-            lambda *_args: self._toast("Episode comments opened"),
-        )
-        self.episode_check_in_button.connect(
-            "clicked",
-            lambda *_args: self._toast("Episode check-in recorded"),
         )
 
         search_action = Gio.SimpleAction.new("search", None)
@@ -4166,9 +4558,7 @@ class CineShelfWindow:
         sidebar_action = Gio.SimpleAction.new("toggle-sidebar", None)
         sidebar_action.connect(
             "activate",
-            lambda *_args: self.sidebar_toggle_button.set_active(
-                not self.sidebar_toggle_button.get_active()
-            ),
+            lambda *_args: self._set_sidebar_open(not self._sidebar_is_open()),
         )
         self.window.add_action(sidebar_action)
         application.set_accels_for_action("win.toggle-sidebar", ["<primary>b"])
@@ -4201,22 +4591,17 @@ class CineShelfWindow:
         if surface is None:
             return
         surface.connect("notify::width", self._on_surface_width_changed)
-        self._queue_explore_resize()
+        self._queue_responsive_layout()
 
     def _on_surface_width_changed(
         self,
         _surface: Gdk.Surface,
         _parameter: Any,
     ) -> None:
-        self._queue_explore_resize()
+        self._queue_responsive_layout()
 
     def _queue_explore_resize(self) -> None:
-        if self._explore_resize_source_id:
-            GLib.source_remove(self._explore_resize_source_id)
-        self._explore_resize_source_id = GLib.timeout_add(
-            90,
-            self._apply_explore_resize,
-        )
+        self._queue_responsive_layout()
 
     def _apply_explore_resize(self) -> bool:
         self._explore_resize_source_id = 0
@@ -4240,19 +4625,32 @@ class CineShelfWindow:
 
     @staticmethod
     def _explore_columns_for_width(width: int) -> int:
-        return 5 if width >= 760 else 4 if width >= 540 else 3 if width >= 390 else 2
+        if width >= 760:
+            return 5
+        if width >= 540:
+            return 4
+        if width >= 390:
+            return 3
+        if width >= 280:
+            return 2
+        return 1
 
-    def _explore_card_height(self, kind: str, span: int) -> int:
-        """Size a card from its real grid span instead of its child request."""
+    def _explore_layout_metrics(self) -> tuple[float, int]:
+        """Return the column width and column count for Explore cards."""
         pane_width = (
             self._last_explore_layout_width
             or self.explore_pane.get_width()
             or self.library_pane.get_width()
             or 620
         )
-        content_width = max(280, pane_width - 48)
-        columns = max(2, self.explore_columns)
+        content_width = max(120, pane_width - 48)
+        columns = max(1, self.explore_columns)
         column_width = max(88, (content_width - 10 * (columns - 1)) / columns)
+        return column_width, columns
+
+    def _explore_card_height(self, kind: str, span: int) -> int:
+        """Size a card from its real grid span instead of its child request."""
+        column_width, _columns = self._explore_layout_metrics()
         card_width = column_width * span + 10 * (span - 1)
 
         if kind == "poster":
@@ -5383,6 +5781,58 @@ class CineShelfWindow:
                     image_file,
                 )
 
+        raw_recommendations = payload.get("recommendations", {})
+        raw_recommendations = (
+            raw_recommendations.get("results", ())
+            if isinstance(raw_recommendations, dict)
+            else ()
+        )
+        recommendations = recommendation_records_from_tmdb(
+            raw_recommendations, updated
+        )
+        GLib.idle_add(
+            self._apply_tmdb_recommendations,
+            record.id,
+            generation,
+            recommendations,
+        )
+        poster_by_tmdb: dict[int, str] = {}
+        if isinstance(raw_recommendations, (list, tuple)):
+            for raw_item in raw_recommendations:
+                if not isinstance(raw_item, dict):
+                    continue
+                try:
+                    raw_id = int(raw_item["id"])
+                except (TypeError, ValueError, KeyError):
+                    continue
+                raw_path = str(raw_item.get("poster_path") or "")
+                if raw_path and raw_id not in poster_by_tmdb:
+                    poster_by_tmdb[raw_id] = raw_path
+        recommendation_work = [
+            (item.id, poster_by_tmdb[item.tmdb_id])
+            for item in recommendations
+            if item.poster_file is None
+            and item.tmdb_id is not None
+            and poster_by_tmdb.get(item.tmdb_id)
+        ]
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = {
+                executor.submit(
+                    tmdb_client.cache_image, path, size="w342"
+                ): item_id
+                for item_id, path in recommendation_work
+            }
+            for future in as_completed(futures):
+                image_file = future.result()
+                if image_file:
+                    GLib.idle_add(
+                        self._apply_tmdb_recommendation_artwork,
+                        record.id,
+                        generation,
+                        futures[future],
+                        image_file,
+                    )
+
     def _apply_tmdb_details(
         self,
         generation: int,
@@ -5397,6 +5847,51 @@ class CineShelfWindow:
         self._tmdb_cast_images_loading[updated.id] = set(cast_pending)
         self._tmdb_gallery_images_loading[updated.id] = gallery_pending
         self._store_tmdb_record(updated)
+        return GLib.SOURCE_REMOVE
+
+    def _apply_tmdb_recommendations(
+        self,
+        record_id: str,
+        generation: int,
+        recommendations: tuple[TitleRecord, ...],
+    ) -> bool:
+        if self._tmdb_detail_generations.get(record_id) != generation:
+            return GLib.SOURCE_REMOVE
+        for item in recommendations:
+            if item.id not in self.library_ids:
+                self.records_by_id[item.id] = item
+        self._tmdb_recommendations[record_id] = tuple(
+            item.id for item in recommendations
+        )
+        record = self.records_by_id.get(record_id)
+        if (
+            record is not None
+            and self.detail_record_id == record_id
+            and self.selected_id == record_id
+        ):
+            self._populate_recommendations(record)
+        return GLib.SOURCE_REMOVE
+
+    def _apply_tmdb_recommendation_artwork(
+        self,
+        record_id: str,
+        generation: int,
+        item_id: str,
+        image_file: str,
+    ) -> bool:
+        if self._tmdb_detail_generations.get(record_id) != generation:
+            return GLib.SOURCE_REMOVE
+        item = self.records_by_id.get(item_id)
+        if item is None or item.id in self.library_ids:
+            return GLib.SOURCE_REMOVE
+        self.records_by_id[item_id] = replace(item, poster_file=image_file)
+        record = self.records_by_id.get(record_id)
+        if (
+            record is not None
+            and self.detail_record_id == record_id
+            and self.selected_id == record_id
+        ):
+            self._populate_recommendations(record)
         return GLib.SOURCE_REMOVE
 
     def _store_tmdb_record(
@@ -5466,6 +5961,312 @@ class CineShelfWindow:
         )
         return replace(record, seasons=updated_seasons)
 
+    @staticmethod
+    def _tmdb_season_cache_key(record_id: str, season_number: int) -> str:
+        return f"{record_id}:s{season_number}"
+
+    def _load_tmdb_season_details_async(
+        self,
+        record: TitleRecord,
+        season_index: int,
+    ) -> None:
+        seasons = self._series_seasons(record)
+        if not seasons or not self.tmdb_token or record.tmdb_id is None:
+            return
+        season = seasons[max(0, min(season_index, len(seasons) - 1))]
+        season_key = self._tmdb_season_cache_key(record.id, season.number)
+        if (
+            season_key in self._tmdb_season_details_loading
+            or season_key in self._tmdb_season_details_loaded
+        ):
+            return
+        self._tmdb_season_details_loading.add(season_key)
+        token = self.tmdb_token
+        assert token is not None
+        threading.Thread(
+            target=self._load_tmdb_season_details_worker,
+            args=(
+                record.id,
+                token,
+                record.tmdb_id,
+                season.number,
+                season_key,
+            ),
+            name=f"cineshelf-tmdb-season-{record.tmdb_id}-{season.number}",
+            daemon=True,
+        ).start()
+
+    def _load_tmdb_season_details_worker(
+        self,
+        record_id: str,
+        token: str,
+        tmdb_id: int,
+        season_number: int,
+        season_key: str,
+    ) -> None:
+        try:
+            payload = tmdb_client.fetch_season_details(
+                token,
+                tmdb_id,
+                season_number,
+            )
+            raw_episodes = payload.get("episodes", ())
+            if not isinstance(raw_episodes, (list, tuple)):
+                raw_episodes = ()
+            updates: list[tuple[int, str, str, str, str, Any, str | None]] = []
+            pending_stills: list[tuple[int, str]] = []
+            for item in raw_episodes:
+                if not isinstance(item, dict):
+                    continue
+                try:
+                    episode_number = int(item.get("episode_number"))
+                except (TypeError, ValueError):
+                    continue
+                try:
+                    title = str(item.get("name") or "").strip()
+                    air_date = str(item.get("air_date") or "").strip()
+                    overview = str(item.get("overview") or "").strip()
+                    try:
+                        runtime_value = int(item.get("runtime") or 0)
+                    except (TypeError, ValueError):
+                        runtime_value = 0
+                    runtime = (
+                        format_watch_time(runtime_value)
+                        if runtime_value > 0
+                        else ""
+                    )
+                    guest_stars = item.get("guest_stars")
+                    if isinstance(guest_stars, list) and guest_stars:
+                        cast_items: list[CastMember] = []
+                        for member in guest_stars[:12]:
+                            if not isinstance(member, dict):
+                                continue
+                            profile_path = str(member.get("profile_path") or "")
+                            try:
+                                profile_file = (
+                                    tmdb_client.cached_image(
+                                        profile_path, size="w185"
+                                    )
+                                    if profile_path
+                                    else None
+                                )
+                            except Exception:
+                                profile_file = None
+                            cast_items.append(
+                                CastMember(
+                                    name=str(member.get("name") or "Unknown"),
+                                    role=str(
+                                        member.get("character") or "Guest star"
+                                    ),
+                                    profile_file=profile_file,
+                                )
+                            )
+                        cast: tuple[CastMember, ...] = tuple(cast_items)
+                    else:
+                        cast = ()
+                    still_path = str(item.get("still_path") or "").strip()
+                    cached_still: str | None = None
+                    if still_path:
+                        try:
+                            cached_still = tmdb_client.cached_image(
+                                still_path, size="w780"
+                            )
+                        except Exception:
+                            cached_still = None
+                        if cached_still is None:
+                            pending_stills.append((episode_number, still_path))
+                    updates.append(
+                        (
+                            episode_number,
+                            title,
+                            air_date,
+                            overview,
+                            runtime,
+                            cast,
+                            cached_still,
+                        )
+                    )
+                except Exception:
+                    continue
+            GLib.idle_add(
+                self._apply_tmdb_season_details,
+                record_id,
+                season_number,
+                season_key,
+                tuple(updates),
+            )
+            for episode_number, still_path in pending_stills:
+                try:
+                    image_file = tmdb_client.cache_image(still_path, size="w780")
+                except Exception as error:
+                    self._app_log(
+                        "TMDB season still failed: %s",
+                        error,
+                        level=logging.WARNING,
+                    )
+                    continue
+                if image_file:
+                    GLib.idle_add(
+                        self._apply_tmdb_season_artwork,
+                        record_id,
+                        season_number,
+                        episode_number,
+                        image_file,
+                    )
+        except Exception as error:
+            GLib.idle_add(
+                self._on_tmdb_season_details_failed, season_key, str(error)
+            )
+
+    def _apply_tmdb_season_details(
+        self,
+        record_id: str,
+        season_number: int,
+        season_key: str,
+        updates: tuple[tuple[int, str, str, str, str, Any, str | None], ...],
+    ) -> bool:
+        self._tmdb_season_details_loading.discard(season_key)
+        record = self.records_by_id.get(record_id)
+        if record is None:
+            return GLib.SOURCE_REMOVE
+        seasons = self._series_seasons(record)
+        season_index = next(
+            (
+                index
+                for index, season in enumerate(seasons)
+                if season.number == season_number
+            ),
+            None,
+        )
+        if season_index is None:
+            return GLib.SOURCE_REMOVE
+        season = seasons[season_index]
+        base_episodes = self._episodes_for_season(record, season_index)
+        by_number = {entry[0]: entry for entry in updates}
+        merged: list[EpisodeInfo] = []
+        for episode in base_episodes:
+            entry = by_number.get(episode.number)
+            if entry is None:
+                merged.append(episode)
+                continue
+            _number, title, air_date, overview, runtime, cast, cached_still = entry
+            new_cast = cast if isinstance(cast, tuple) and cast else episode.cast
+            if not isinstance(new_cast, tuple):
+                new_cast = episode.cast
+            merged.append(
+                replace(
+                    episode,
+                    title=title or episode.title,
+                    date=air_date or episode.date,
+                    description=overview or episode.description,
+                    runtime=runtime or episode.runtime,
+                    cast=new_cast,
+                    artwork_file=cached_still or episode.artwork_file,
+                )
+            )
+        updated_season = replace(season, episode_items=tuple(merged))
+        updated_seasons = tuple(
+            updated_season if index == season_index else item
+            for index, item in enumerate(seasons)
+        )
+        updated = replace(record, seasons=updated_seasons)
+        self._tmdb_season_details_loaded.add(season_key)
+        for episode in merged:
+            self._tmdb_episode_details_loaded.add(
+                f"{record_id}:s{season_number}:e{episode.number}"
+            )
+        self._store_tmdb_record(updated, refresh_details=False)
+        self._refresh_visible_season_page(updated, season_number)
+        self._refresh_visible_episode_for_season(updated, season_number)
+        return GLib.SOURCE_REMOVE
+
+    def _apply_tmdb_season_artwork(
+        self,
+        record_id: str,
+        season_number: int,
+        episode_number: int,
+        image_file: str,
+    ) -> bool:
+        updated = self._replace_episode_info(
+            record_id,
+            season_number,
+            episode_number,
+            lambda episode: replace(episode, artwork_file=image_file),
+        )
+        if updated is not None:
+            self._store_tmdb_record(updated, refresh_details=False)
+            self._refresh_visible_season_page(updated, season_number)
+            self._refresh_visible_episode_page(
+                updated, season_number, episode_number
+            )
+        return GLib.SOURCE_REMOVE
+
+    def _refresh_visible_season_page(
+        self,
+        record: TitleRecord,
+        season_number: int,
+    ) -> None:
+        if (
+            self.detail_record_id != record.id
+            or self.detail_navigation.get_visible_page_tag() != "season"
+        ):
+            return
+        seasons = self._series_seasons(record)
+        season_index = next(
+            (
+                index
+                for index, season in enumerate(seasons)
+                if season.number == season_number
+            ),
+            None,
+        )
+        if season_index is None:
+            return
+        if self.current_season_index != season_index:
+            return
+        self._populate_season_page(record, season_index, reset_scroll=False)
+
+    def _refresh_visible_episode_for_season(
+        self,
+        record: TitleRecord,
+        season_number: int,
+    ) -> None:
+        if (
+            self.detail_record_id != record.id
+            or self.detail_navigation.get_visible_page_tag() != "episode"
+        ):
+            return
+        seasons = self._series_seasons(record)
+        season_index = next(
+            (
+                index
+                for index, season in enumerate(seasons)
+                if season.number == season_number
+            ),
+            None,
+        )
+        if season_index is None:
+            return
+        if self.current_season_index != season_index:
+            return
+        episodes = self._episodes_for_season(record, season_index)
+        if not episodes:
+            return
+        episode_index = max(
+            0, min(self.current_episode_index, len(episodes) - 1)
+        )
+        self._populate_episode_page(
+            record, season_index, episode_index, reset_scroll=False
+        )
+
+    def _on_tmdb_season_details_failed(self, season_key: str, message: str) -> bool:
+        self._tmdb_season_details_loading.discard(season_key)
+        self._app_log(
+            "TMDB season details failed: %s", message, level=logging.WARNING
+        )
+        self._toast("Season details could not be loaded from TMDB")
+        return GLib.SOURCE_REMOVE
+
     def _load_tmdb_episode_details_async(
         self,
         record: TitleRecord,
@@ -5480,6 +6281,12 @@ class CineShelfWindow:
         if not episodes:
             return
         episode = episodes[max(0, min(episode_index, len(episodes) - 1))]
+        season_key = self._tmdb_season_cache_key(record.id, season.number)
+        if (
+            season_key in self._tmdb_season_details_loading
+            or season_key in self._tmdb_season_details_loaded
+        ):
+            return
         key = f"{record.id}:s{season.number}:e{episode.number}"
         if (
             key in self._tmdb_episode_details_loading
@@ -5794,6 +6601,8 @@ class CineShelfWindow:
         self._tmdb_details_loaded.clear()
         self._tmdb_episode_details_loading.clear()
         self._tmdb_episode_details_loaded.clear()
+        self._tmdb_season_details_loading.clear()
+        self._tmdb_season_details_loaded.clear()
         self._tmdb_cast_images_loading.clear()
         self._tmdb_gallery_images_loading.clear()
         self._toast("Connecting to TMDB…")
@@ -6048,6 +6857,7 @@ class CineShelfWindow:
         if any(record.tmdb_id is not None for record in self.explore_visible_records):
             attribution = Gtk.Label(label="Data & images provided by TMDB")
             attribution.set_halign(Gtk.Align.START)
+            attribution.set_wrap(True)
             attribution.set_margin_top(2)
             attribution.add_css_class("caption")
             attribution.add_css_class("dim-label")
@@ -6057,6 +6867,7 @@ class CineShelfWindow:
                 label="Sample artwork · Configure TMDB in Preferences for live data"
             )
             fallback_notice.set_halign(Gtk.Align.START)
+            fallback_notice.set_wrap(True)
             fallback_notice.set_margin_top(2)
             fallback_notice.add_css_class("caption")
             fallback_notice.add_css_class("dim-label")
@@ -6116,7 +6927,8 @@ class CineShelfWindow:
         overlay.set_hexpand(True)
         overlay.set_vexpand(True)
         overlay.set_size_request(-1, card_height)
-        art_width = 480 if kind == "hero" else 320 if kind == "landscape" else 160
+        column_width, _columns = self._explore_layout_metrics()
+        art_width = round(column_width * span + 10 * (span - 1))
         art_height = card_height
         preferred_artwork = (
             record.backdrop_file
@@ -6133,6 +6945,7 @@ class CineShelfWindow:
             art_height,
             variant_offset=1 if kind == "landscape" else 0,
             show_text=False,
+            flexible_width=True,
         )
         artwork.set_hexpand(True)
         artwork.set_vexpand(True)
@@ -6195,7 +7008,7 @@ class CineShelfWindow:
         return button
 
     def _sync_explore_selection_style(self) -> None:
-        for record_id, button in self._explore_card_buttons.items():
+        for record_id, button in getattr(self, "_explore_card_buttons", {}).items():
             selected = record_id == self.explore_selected_id
             button.update_state(
                 [Gtk.AccessibleState.SELECTED],
@@ -6394,8 +7207,9 @@ class CineShelfWindow:
             ),
         )
         artwork_button = Gtk.Button()
+        artwork_button.set_hexpand(True)
         artwork_button.set_child(
-            PosterWidget(hero_record, 352, 198, show_text=False)
+            PosterWidget(hero_record, 352, 198, show_text=False, flexible_width=True)
         )
         artwork_button.set_tooltip_text(f"Open images for {record.title}")
         artwork_button.add_css_class("flat")
@@ -6438,6 +7252,7 @@ class CineShelfWindow:
         self._clear_container(self.detail_ratings_host)
         for source, value in self._rating_sources(record):
             chip = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+            chip.set_hexpand(True)
             chip.add_css_class("detail-metric")
             score = Gtk.Label(label=value)
             score.add_css_class("numeric")
@@ -6609,15 +7424,6 @@ class CineShelfWindow:
     def _season_short_label(season: SeasonInfo) -> str:
         return f"S{season.number}"
 
-    @staticmethod
-    def _watched_timestamp() -> str:
-        now = datetime.now().astimezone()
-        hour = now.strftime("%I").lstrip("0") or "12"
-        return (
-            f"{now.strftime('%b')} {now.day}, {now.year} at "
-            f"{hour}:{now.strftime('%M %p')}"
-        )
-
     def _episode_key(
         self,
         record: TitleRecord,
@@ -6689,6 +7495,8 @@ class CineShelfWindow:
         episode: EpisodeInfo,
         width: int,
         height: int,
+        *,
+        flexible_width: bool = False,
     ) -> Gtk.Overlay:
         overlay = Gtk.Overlay()
         artwork_record = replace(
@@ -6704,6 +7512,7 @@ class CineShelfWindow:
                 height,
                 variant_offset=episode.image_variant,
                 show_text=False,
+                flexible_width=flexible_width,
             )
         )
         number = Gtk.Label(label=str(episode.number))
@@ -6720,13 +7529,20 @@ class CineShelfWindow:
     @staticmethod
     def _episode_card(label: str, value: str, subtitle: str) -> Gtk.Box:
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        card.set_hexpand(True)
         card.add_css_class("episode-card")
         overline = Gtk.Label(label=label, xalign=0)
+        overline.set_wrap(True)
         overline.add_css_class("caption")
         overline.add_css_class("dim-label")
         title = Gtk.Label(label=value, xalign=0)
+        title.set_wrap(True)
+        title.set_lines(2)
+        title.set_ellipsize(Pango.EllipsizeMode.END)
         title.add_css_class("heading")
         detail = Gtk.Label(label=subtitle, xalign=0)
+        detail.set_wrap(True)
+        detail.set_lines(2)
         detail.set_ellipsize(Pango.EllipsizeMode.END)
         detail.add_css_class("caption")
         detail.add_css_class("dim-label")
@@ -6901,21 +7717,12 @@ class CineShelfWindow:
         self.current_episode_index = episode_index
         self.episode_header_title.set_title(f"Episode {episode.number}")
         self.episode_header_title.set_subtitle(season.title)
-        self.episode_position_label.set_label(
-            f"Episode {episode.number} of {len(episodes)}"
-        )
-        if len(episodes) <= 7:
-            dots = "  ".join(
-                "●" if index == episode_index else "•"
-                for index in range(len(episodes))
-            )
-        else:
-            dots = f"{episode.number}/{len(episodes)}  •••"
-        self.episode_position_dots.set_label(dots)
 
         self._clear_container(self.episode_hero_host)
         self.episode_hero_host.append(
-            self._episode_artwork(record, episode, 352, 198)
+            self._episode_artwork(
+                record, episode, 352, 198, flexible_width=True
+            )
         )
         self.episode_title_label.set_label(episode.title)
         episode_metadata = " · ".join(
@@ -6946,7 +7753,7 @@ class CineShelfWindow:
             self._episode_key(record, season_index, episode)
         )
         if watched and watched_at:
-            status = f"Watched · {watched_at}"
+            status = f"Watched · {format_watched_iso(watched_at)}"
         elif watched:
             status = "Watched"
         else:
@@ -7065,33 +7872,38 @@ class CineShelfWindow:
 
     def _related_records(self, record: TitleRecord) -> tuple[TitleRecord, ...]:
         related: list[TitleRecord] = []
-        for record_id in record.recommendations:
+        for record_id in self._tmdb_recommendations.get(record.id, ()):
             candidate = self.records_by_id.get(record_id)
-            if candidate is not None and candidate.id != record.id and candidate not in related:
+            if (
+                candidate is not None
+                and candidate.id != record.id
+                and candidate not in related
+            ):
                 related.append(candidate)
+        return tuple(related)
 
-        if len(related) < 8:
-            for candidate in self.records:
-                if candidate.id == record.id or candidate in related:
-                    continue
-                shares_genre = bool(set(candidate.genres).intersection(record.genres))
-                if candidate.media_type == record.media_type or shares_genre:
-                    related.append(candidate)
-                if len(related) == 8:
-                    break
-        return tuple(related[:8])
+    def _on_recommendation_clicked(self, record_id: str) -> None:
+        record = self.records_by_id.get(record_id)
+        if record is None:
+            return
+        self.selected_id = record.id
+        self._update_details()
+        self._set_details_open(True)
+        self._load_tmdb_details_async(record)
 
     def _populate_recommendations(self, record: TitleRecord) -> None:
         self._clear_container(self.recommendations_box)
-        for related in self._related_records(record):
+        related = self._related_records(record)
+        self.recommendations_section.set_visible(bool(related))
+        for item in related:
             content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-            content.append(PosterWidget(related, 88, 132))
-            title = Gtk.Label(label=related.title, xalign=0)
+            content.append(PosterWidget(item, 88, 132))
+            title = Gtk.Label(label=item.title, xalign=0)
             title.set_wrap(True)
             title.set_lines(2)
             title.set_max_width_chars(13)
             title.add_css_class("caption")
-            year = Gtk.Label(label=str(related.year), xalign=0)
+            year = Gtk.Label(label=str(item.year), xalign=0)
             year.add_css_class("caption")
             year.add_css_class("dim-label")
             content.append(title)
@@ -7101,11 +7913,11 @@ class CineShelfWindow:
             button.set_child(content)
             button.add_css_class("flat")
             button.add_css_class("recommendation-card")
-            button.set_tooltip_text(f"Open {related.title}")
+            button.set_tooltip_text(f"Open {item.title}")
             button.connect(
                 "clicked",
-                lambda _button, title_name=related.title: self._toast(
-                    f"Open {title_name}"
+                lambda _button, item_id=item.id: self._on_recommendation_clicked(
+                    item_id
                 ),
             )
             self.recommendations_box.append(button)
@@ -7258,7 +8070,6 @@ class CineShelfWindow:
     ) -> None:
         if self._updating or row is None:
             return
-        self._set_details_open(False)
         if row.key == "library":
             if self.active_destination == "library":
                 return
@@ -7270,6 +8081,8 @@ class CineShelfWindow:
             self.selected_id = self.library_selected_id
             self._sync_library_filter_selection()
             self._refresh_results()
+            self._close_sidebar_overlay()
+            self._queue_responsive_layout()
             return
         if row.key != "explore":
             return
@@ -7284,14 +8097,14 @@ class CineShelfWindow:
         self.browser_stack.set_visible_child_name("explore")
         self._update_explore_genre_model()
         self._refresh_explore()
-        self._queue_explore_resize()
+        self._close_sidebar_overlay()
+        self._queue_responsive_layout()
 
     def _on_profile_clicked(self, _button: Gtk.Button) -> None:
         if self._updating:
             return
         if self.active_destination == "profile":
             return
-        self._set_details_open(False)
         if self.active_destination == "library":
             self.library_selected_id = self.selected_id
         elif self.active_destination == "explore":
@@ -7305,22 +8118,271 @@ class CineShelfWindow:
         self._updating = False
         self.browser_stack.set_visible_child_name("profile")
         self._refresh_profile()
+        self._close_sidebar_overlay()
+        self._queue_responsive_layout()
+
+    def _sidebar_is_open(self) -> bool:
+        return bool(self.workspace.get_show_sidebar())
+
+    def _sidebar_overlay_open(self) -> bool:
+        return bool(
+            self.workspace.get_collapsed() and self.workspace.get_show_sidebar()
+        )
+
+    def _set_sidebar_open(self, open_sidebar: bool) -> None:
+        self.workspace.set_show_sidebar(open_sidebar)
+        self._update_sidebar_toggle()
+
+    def _update_sidebar_toggle(self) -> None:
+        self._updating_sidebar_toggle = True
+        try:
+            is_open = self._sidebar_is_open()
+            self.sidebar_toggle_button.set_active(is_open)
+            self.sidebar_toggle_button.set_tooltip_text(
+                "Hide sidebar (Ctrl+B)" if is_open else "Show sidebar (Ctrl+B)"
+            )
+        finally:
+            self._updating_sidebar_toggle = False
 
     def _on_sidebar_toggled(self, button: Gtk.ToggleButton) -> None:
-        sidebar_visible = button.get_active()
-        if not sidebar_visible:
-            self.workspace.set_show_content(True)
-        self.workspace.set_collapsed(not sidebar_visible)
-        button.set_tooltip_text(
-            "Hide sidebar (Ctrl+B)" if sidebar_visible else "Show sidebar (Ctrl+B)"
-        )
-        self._queue_explore_resize()
+        if self._updating_sidebar_toggle:
+            return
+        self._set_sidebar_open(button.get_active())
+        self._queue_responsive_layout()
         if self._sidebar_resize_source_id:
             GLib.source_remove(self._sidebar_resize_source_id)
         self._sidebar_resize_source_id = GLib.timeout_add(
             280,
             self._on_sidebar_transition_complete,
         )
+
+    def _close_sidebar_overlay(self) -> None:
+        if self._sidebar_overlay_open():
+            self._set_sidebar_open(False)
+
+    def _queue_responsive_layout(self) -> None:
+        if self._responsive_layout_source_id:
+            GLib.source_remove(self._responsive_layout_source_id)
+        self._responsive_layout_source_id = GLib.timeout_add(
+            90,
+            self._apply_responsive_layout,
+        )
+
+    def _responsive_window_width(self) -> int:
+        try:
+            width = self.window.get_width()
+        except Exception:
+            width = 0
+        if width > 0:
+            return width
+        try:
+            surface = self.window.get_surface()
+            if surface is not None and int(surface.get_width()) > 0:
+                return int(surface.get_width())
+        except Exception:
+            pass
+        return self.explore_pane.get_width() or self.library_pane.get_width() or 0
+
+    def _apply_responsive_layout(self) -> bool:
+        self._responsive_layout_source_id = 0
+        if self._applying_responsive:
+            return GLib.SOURCE_REMOVE
+        self._applying_responsive = True
+        try:
+            width = self._responsive_window_width()
+            if width <= 0:
+                return GLib.SOURCE_REMOVE
+            layout = responsive_layout_for_width(
+                width, details_open=self.details_open
+            )
+            self._apply_sidebar_docked(layout.sidebar_mode == SIDEBAR_EXPANDED)
+            self._apply_details_mode(layout.details_mode)
+            self._sync_details_presentation()
+            self._apply_explore_columns_for_width()
+            self._update_sidebar_toggle()
+        finally:
+            self._applying_responsive = False
+        return GLib.SOURCE_REMOVE
+
+    def _explore_base_width(self, *, details_open: bool | None = None) -> int:
+        """Available width for Explore cards, derived from the window.
+
+        Derived from the window (not the pane allocation) so card minimums
+        can never ratchet the window wider and the window stays shrinkable.
+        """
+        window_width = self._responsive_window_width()
+        if window_width <= 0:
+            fallback = (
+                self.explore_pane.get_width() or self.library_pane.get_width()
+            )
+            return max(0, fallback - 16)
+        sidebar_min = (
+            SIDEBAR_EXPANDED_MIN_WIDTH if self._sidebar_docked else 0
+        )
+        open_details = self.details_open if details_open is None else details_open
+        base = window_width - sidebar_min - 24
+        if open_details and self.effective_details_mode == DETAILS_INLINE:
+            base -= self._details_panel_preferred_width(
+                DETAILS_INLINE, window_width
+            )
+        return max(0, base)
+
+    def _apply_explore_columns_for_width(self) -> None:
+        if self._details_resize_source_id or self._sidebar_resize_source_id:
+            return
+        width = self._explore_base_width()
+        if width <= 0:
+            return
+        columns = self._explore_columns_for_width(width)
+        columns_changed = columns != self.explore_columns
+        width_changed = abs(width - self._last_explore_layout_width) >= 12
+        self._last_explore_layout_width = width
+        self.explore_columns = columns
+        if (
+            self.active_destination == "explore"
+            and self.explore_visible_records
+            and (columns_changed or width_changed)
+        ):
+            scroll_value = self.explore_scroller.get_vadjustment().get_value()
+            self._populate_explore_feed()
+            self._scroll_to_value(self.explore_scroller, scroll_value)
+
+    def _apply_sidebar_docked(self, docked: bool) -> None:
+        """Dock the sidebar beside content or collapse it into a drawer.
+
+        Only acts when the docked bucket changes, so an open drawer is never
+        closed by an unrelated resize callback.
+        """
+        if docked == self._sidebar_docked:
+            return
+        self._sidebar_docked = docked
+        self.workspace.set_collapsed(not docked)
+        if not docked:
+            self.workspace.set_show_sidebar(False)
+        self._update_sidebar_toggle()
+
+    def _details_revealer_parent(self) -> Any:
+        return self.details_revealer.get_parent()
+
+    def _move_details_to_mobile(self) -> None:
+        """Host the shared details surface on the full-page mobile page."""
+        if self.details_surface.get_parent() is self.mobile_details_host:
+            return
+        self.details_panel_layout.remove(self.details_surface)
+        self.mobile_details_host.append(self.details_surface)
+        self.details_surface.set_hexpand(True)
+
+    def _move_details_home(self) -> None:
+        """Return the shared details surface to the inline/overlay panel."""
+        if self.details_surface.get_parent() is self.details_panel_layout:
+            return
+        self.mobile_details_host.remove(self.details_surface)
+        self.details_panel_layout.append(self.details_surface)
+        self.details_surface.set_hexpand(False)
+
+    def _sync_mobile_back_visibility(self) -> None:
+        if self.mobile_header_bar is None:
+            return
+        self.mobile_header_bar.set_visible(
+            self.detail_navigation.get_visible_page_tag() == "title"
+        )
+
+    def _on_inner_details_page_changed(
+        self,
+        _navigation: Adw.NavigationView,
+        _parameter: Any,
+    ) -> None:
+        self._sync_mobile_back_visibility()
+
+    def _mobile_details_is_visible(self) -> bool:
+        """Return whether the mobile Details page is actually visible."""
+        return (
+            self.content_navigation is not None
+            and self.content_navigation.get_visible_page_tag() == "details"
+        )
+
+    def _on_content_navigation_page_changed(
+        self,
+        _navigation: Adw.NavigationView,
+        _parameter: Any,
+    ) -> None:
+        """Synchronize flags when the outer navigation changes externally.
+
+        Never pushes or pops here; only mirrors the real visible page so a
+        Back button or gesture cannot desynchronize the details state.
+        Programmatic pops during breakpoint transitions leave navigation
+        mode, so they are ignored here and handled by the mode transition.
+        """
+        if self._mobile_details_is_visible():
+            return
+        if not self.details_open:
+            return
+        if self.effective_details_mode != DETAILS_NAVIGATION:
+            return
+        self.details_open = False
+        self._restore_details_return_focus()
+        self._schedule_details_reset()
+
+    def _sync_details_presentation(self) -> None:
+        """Idempotently place the details UI for the open flag and mode."""
+        mode = self.effective_details_mode
+        if mode == DETAILS_NAVIGATION:
+            self._move_details_to_mobile()
+        else:
+            self._move_details_home()
+        want_mobile = self.details_open and mode == DETAILS_NAVIGATION
+        mobile_visible = self._mobile_details_is_visible()
+        if want_mobile and not mobile_visible:
+            self.content_navigation.push(self.mobile_details_page)
+        elif not want_mobile and mobile_visible:
+            self.content_navigation.pop_to_tag("browser")
+        if mode == DETAILS_OVERLAY:
+            if self._details_revealer_parent() is not self.content_overlay:
+                self.main_workspace.remove(self.details_revealer)
+                self.content_overlay.add_overlay(self.details_revealer)
+            self.details_revealer.set_halign(Gtk.Align.END)
+            self.details_revealer.set_valign(Gtk.Align.FILL)
+            self.details_revealer.set_hexpand(False)
+            self.details_revealer.set_vexpand(True)
+            panel_width = self._details_panel_preferred_width(
+                DETAILS_OVERLAY, self._responsive_window_width()
+            )
+            self.details_surface.set_size_request(panel_width, -1)
+        else:
+            if self._details_revealer_parent() is not self.main_workspace:
+                self.content_overlay.remove_overlay(self.details_revealer)
+                self.main_workspace.append(self.details_revealer)
+            self.details_revealer.set_halign(Gtk.Align.FILL)
+            self.details_revealer.set_valign(Gtk.Align.FILL)
+            self.details_revealer.set_hexpand(False)
+            self.details_revealer.set_vexpand(True)
+            if mode == DETAILS_INLINE:
+                self.details_surface.set_size_request(
+                    DETAILS_INLINE_WIDTH, -1
+                )
+            else:
+                self.details_surface.set_size_request(-1, -1)
+        self.details_revealer.set_reveal_child(
+            self.details_open and mode != DETAILS_NAVIGATION
+        )
+        self._sync_details_mode_chrome()
+        self._sync_mobile_back_visibility()
+
+    def _apply_details_mode(self, mode: str) -> None:
+        self.effective_details_mode = mode
+
+    def _sync_details_mode_chrome(self) -> None:
+        overlay_active = (
+            self.details_open and self.effective_details_mode == DETAILS_OVERLAY
+        )
+        navigation_active = (
+            self.details_open
+            and self.effective_details_mode == DETAILS_NAVIGATION
+        )
+        if self.details_overlay_close is not None:
+            self.details_overlay_close.set_visible(overlay_active)
+        if overlay_active or navigation_active:
+            self.detail_navigation.grab_focus()
 
     def _on_sidebar_transition_complete(self) -> bool:
         self._sidebar_resize_source_id = 0
@@ -7340,7 +8402,6 @@ class CineShelfWindow:
         self._activate_library_filter(row.key)
 
     def _activate_library_filter(self, filter_name: str) -> None:
-        self._set_details_open(False)
         returning_to_library = self.active_destination != "library"
         previous_status = self.active_status
         if returning_to_library:
@@ -7361,6 +8422,8 @@ class CineShelfWindow:
             self.genre = "All genres"
             self._updating = False
         self._refresh_results()
+        self._close_sidebar_overlay()
+        self._queue_responsive_layout()
 
     def _on_library_list_selected(
         self,
@@ -7526,6 +8589,7 @@ class CineShelfWindow:
             return
         self._populate_season_page(record, int(season_index))
         self.detail_navigation.push_by_tag("season")
+        self._load_tmdb_season_details_async(record, int(season_index))
 
     def _on_season_switch_changed(
         self,
@@ -7545,6 +8609,7 @@ class CineShelfWindow:
         except ValueError:
             return
         self._populate_season_page(record, season_index)
+        self._load_tmdb_season_details_async(record, season_index)
 
     def _on_episode_activated(
         self,
@@ -7568,6 +8633,182 @@ class CineShelfWindow:
             int(episode_index),
         )
 
+    @staticmethod
+    def _uses_12_hour_clock() -> bool:
+        return bool(datetime.now().strftime("%p"))
+
+    def _build_watched_time_dialog(
+        self,
+        *,
+        title_text: str,
+        subtitle_text: str | None,
+        on_confirm: Any,
+    ) -> Adw.AlertDialog:
+        """Build the watched-at date/time selector dialog (not presented)."""
+        now = datetime.now().astimezone().replace(microsecond=0)
+        use_12h = self._uses_12_hour_clock()
+        body = title_text if not subtitle_text else f"{title_text}\n{subtitle_text}"
+        dialog = Adw.AlertDialog(
+            heading="When did you watch this?",
+            body=body,
+        )
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        picker_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        picker_card.add_css_class("card")
+        picker_card.add_css_class("watched-dialog-card")
+        date_caption = Gtk.Label(label="Date", xalign=0)
+        date_caption.add_css_class("caption")
+        date_caption.add_css_class("dim-label")
+        picker_card.append(date_caption)
+        calendar = Gtk.Calendar()
+        calendar.set_hexpand(True)
+        calendar.add_css_class("watched-dialog-calendar")
+        calendar.select_day(
+            GLib.DateTime.new_local(now.year, now.month, now.day, 0, 0, 0.0)
+        )
+        picker_card.append(calendar)
+        time_caption = Gtk.Label(label="Time", xalign=0)
+        time_caption.add_css_class("caption")
+        time_caption.add_css_class("dim-label")
+        picker_card.append(time_caption)
+
+        time_row = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=6,
+        )
+        time_row.set_halign(Gtk.Align.CENTER)
+        display_hour = int(now.strftime("%I" if use_12h else "%H"))
+        hour_spin = Gtk.SpinButton.new_with_range(
+            1 if use_12h else 0,
+            12 if use_12h else 23,
+            1,
+        )
+        hour_spin.set_value(display_hour)
+        hour_spin.set_wrap(True)
+        hour_spin.set_tooltip_text("Hour")
+        time_row.append(hour_spin)
+        separator = Gtk.Label(label=":")
+        separator.add_css_class("title-2")
+        time_row.append(separator)
+        minute_spin = Gtk.SpinButton.new_with_range(0, 59, 1)
+        minute_spin.set_value(now.minute)
+        minute_spin.set_wrap(True)
+        minute_spin.set_tooltip_text("Minute")
+        time_row.append(minute_spin)
+        ampm_dropdown: Gtk.DropDown | None = None
+        if use_12h:
+            ampm_dropdown = Gtk.DropDown.new_from_strings(("AM", "PM"))
+            ampm_dropdown.set_selected(1 if now.hour >= 12 else 0)
+            ampm_dropdown.set_tooltip_text("AM or PM")
+            time_row.append(ampm_dropdown)
+
+        actions_row = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=6,
+        )
+        actions_row.set_halign(Gtk.Align.CENTER)
+        now_button = Gtk.Button(label="Now")
+        now_button.set_tooltip_text("Reset to the current date and time")
+        now_button.add_css_class("pill")
+        actions_row.append(now_button)
+        picker_card.append(time_row)
+        picker_card.append(actions_row)
+        content.append(picker_card)
+
+        error_label = Gtk.Label(xalign=0.5)
+        error_label.set_wrap(True)
+        error_label.add_css_class("error")
+        error_label.set_visible(False)
+        content.append(error_label)
+        dialog.set_extra_child(content)
+
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("mark", "Mark as Watched")
+        dialog.set_close_response("cancel")
+        dialog.set_default_response("mark")
+        dialog.set_response_appearance("mark", Adw.ResponseAppearance.SUGGESTED)
+
+        def read_selection() -> str:
+            selected = calendar.get_date()
+            year, month, day = (
+                selected.get_year(),
+                selected.get_month(),
+                selected.get_day_of_month(),
+            )
+            moment = watched_datetime_from_parts(
+                year,
+                month,
+                day,
+                hour_spin.get_value_as_int(),
+                minute_spin.get_value_as_int(),
+                hour_is_12h=use_12h,
+                is_pm=bool(
+                    ampm_dropdown is not None
+                    and ampm_dropdown.get_selected() == 1
+                ),
+            )
+            return moment.isoformat() if moment is not None else ""
+
+        def refresh_validity(*_args: Any) -> None:
+            error = validate_watched_iso(read_selection() or "invalid")
+            dialog.set_response_enabled("mark", error is None)
+            error_label.set_label(error or "")
+            error_label.set_visible(error is not None)
+
+        def reset_to_now(*_args: Any) -> None:
+            current = datetime.now().astimezone().replace(microsecond=0)
+            calendar.select_day(
+                GLib.DateTime.new_local(
+                    current.year, current.month, current.day, 0, 0, 0.0
+                )
+            )
+            hour_spin.set_value(int(current.strftime("%I" if use_12h else "%H")))
+            minute_spin.set_value(current.minute)
+            if ampm_dropdown is not None:
+                ampm_dropdown.set_selected(1 if current.hour >= 12 else 0)
+            refresh_validity()
+
+        now_button.connect("clicked", reset_to_now)
+        calendar.connect("day-selected", refresh_validity)
+        hour_spin.connect("value-changed", refresh_validity)
+        minute_spin.connect("value-changed", refresh_validity)
+        if ampm_dropdown is not None:
+            ampm_dropdown.connect("notify::selected", refresh_validity)
+
+        def on_response(_dialog: Adw.AlertDialog, response: str) -> None:
+            if response != "mark":
+                return
+            selection = read_selection()
+            if validate_watched_iso(selection or "invalid") is not None:
+                refresh_validity()
+                return
+            on_confirm(selection)
+
+        dialog.connect("response", on_response)
+        refresh_validity()
+        dialog._watched_time_controls = (  # type: ignore[attr-defined]
+            calendar,
+            hour_spin,
+            minute_spin,
+            ampm_dropdown,
+            error_label,
+        )
+        return dialog
+
+    def _show_watched_time_dialog(
+        self,
+        *,
+        title_text: str,
+        subtitle_text: str | None,
+        on_confirm: Any,
+    ) -> None:
+        dialog = self._build_watched_time_dialog(
+            title_text=title_text,
+            subtitle_text=subtitle_text,
+            on_confirm=on_confirm,
+        )
+        dialog.present(self.window)
+
     def _on_season_watched_clicked(self, _button: Gtk.Button) -> None:
         record = self.records_by_id.get(self.detail_record_id or "")
         if record is None:
@@ -7577,23 +8818,118 @@ class CineShelfWindow:
             return
         watched = self._season_watched_count(record, self.current_season_index)
         new_status = watched < len(episodes)
-        timestamp = self._watched_timestamp() if new_status else None
-        for episode in episodes:
-            key = self._episode_key(record, self.current_season_index, episode)
-            self.episode_status_overrides[key] = new_status
-            if timestamp is None:
-                self.episode_watched_at.pop(key, None)
-            else:
-                self.episode_watched_at[key] = timestamp
-        self._save_user_state()
+        if not new_status:
+            self._unmark_season_watched(record, self.current_season_index)
+            return
+        seasons = self._series_seasons(record)
+        season = seasons[self.current_season_index]
+        season_index = self.current_season_index
+        self._show_watched_time_dialog(
+            title_text=record.title,
+            subtitle_text=f"{season.title}",
+            on_confirm=lambda iso: self._mark_season_watched(
+                record, season_index, iso
+            ),
+        )
+
+    def _refresh_season_watched_ui(
+        self, record: TitleRecord, season_index: int
+    ) -> None:
+        season_scroll = self.season_details_scroller.get_vadjustment().get_value()
         self._populate_series(record)
-        self._populate_season_page(record, self.current_season_index)
+        self._populate_season_page(record, season_index)
+        self._scroll_to_value(self.season_details_scroller, season_scroll)
+        episodes = self._episodes_for_season(record, season_index)
+        if (
+            self.detail_record_id == record.id
+            and self.current_season_index == season_index
+            and 0 <= self.current_episode_index < len(episodes)
+        ):
+            self._update_episode_watch_controls(
+                record,
+                season_index,
+                episodes[self.current_episode_index],
+            )
         if self.active_destination == "profile":
             self._refresh_profile()
-        self._toast(
-            "Season marked as watched"
-            if new_status
-            else "Season marked as unwatched"
+
+    def _mark_season_watched(
+        self,
+        record: TitleRecord,
+        season_index: int,
+        iso_timestamp: str,
+    ) -> None:
+        seasons = self._series_seasons(record)
+        season = seasons[season_index]
+        episodes = self._episodes_for_season(record, season_index)
+        newly_watched = [
+            episode
+            for episode in episodes
+            if not self._episode_is_watched(record, season_index, episode)
+        ]
+        if not newly_watched:
+            return
+
+        def apply() -> None:
+            for episode in newly_watched:
+                key = self._episode_key(record, season_index, episode)
+                self.episode_status_overrides[key] = True
+                self.episode_watched_at[key] = iso_timestamp
+            self._save_user_state()
+            self._refresh_season_watched_ui(record, season_index)
+
+        if not self._simkl_writable():
+            apply()
+            self._toast("Season watched time saved locally (not synced)")
+            return
+        self._run_simkl_mutation(
+            f"{record.id}:s{season.number}:watched",
+            lambda: simkl_client.set_episode_watched(
+                self.simkl_client_id or "",
+                self.simkl_token or "",
+                self._simkl_group(record),
+                self._simkl_ids(record),
+                season.number,
+                [
+                    (episode.number, iso_timestamp)
+                    for episode in newly_watched
+                ],
+            ),
+            apply,
+            "Season marked as watched",
+        )
+
+    def _unmark_season_watched(
+        self, record: TitleRecord, season_index: int
+    ) -> None:
+        seasons = self._series_seasons(record)
+        season = seasons[season_index]
+        episodes = self._episodes_for_season(record, season_index)
+
+        def apply() -> None:
+            for episode in episodes:
+                key = self._episode_key(record, season_index, episode)
+                self.episode_status_overrides[key] = False
+                self.episode_watched_at.pop(key, None)
+            self._save_user_state()
+            self._refresh_season_watched_ui(record, season_index)
+
+        if not self._simkl_writable():
+            apply()
+            self._toast("Season marked as unwatched locally (not synced)")
+            return
+        self._run_simkl_mutation(
+            f"{record.id}:s{season.number}:unwatched",
+            lambda: simkl_client.remove_episode_watched(
+                self.simkl_client_id or "",
+                self.simkl_token or "",
+                self._simkl_group(record),
+                self._simkl_ids(record),
+                season.number,
+                [episode.number for episode in episodes],
+            ),
+            apply,
+            "Season marked as unwatched",
         )
 
     def _on_episode_watched_clicked(self, _button: Gtk.Button) -> None:
@@ -7609,32 +8945,136 @@ class CineShelfWindow:
             self.current_season_index,
             episode,
         )
-        key = self._episode_key(record, self.current_season_index, episode)
-        self.episode_status_overrides[key] = new_status
-        if new_status:
-            self.episode_watched_at[key] = self._watched_timestamp()
-        else:
+        if not new_status:
+            self._unmark_episode_watched(
+                record, self.current_season_index, episode
+            )
+            return
+        seasons = self._series_seasons(record)
+        season = seasons[self.current_season_index]
+        season_index = self.current_season_index
+        episode_code = f"S{season.number:02d}E{episode.number:02d}"
+        self._show_watched_time_dialog(
+            title_text=record.title,
+            subtitle_text=f"{episode_code} · {episode.title}",
+            on_confirm=lambda iso: self._mark_episode_watched(
+                record, season_index, episode.number, iso
+            ),
+        )
+
+    def _mark_episode_watched(
+        self,
+        record: TitleRecord,
+        season_index: int,
+        episode_number: int,
+        iso_timestamp: str,
+    ) -> None:
+        seasons = self._series_seasons(record)
+        season = seasons[season_index]
+        match = next(
+            (
+                episode
+                for episode in self._episodes_for_season(record, season_index)
+                if episode.number == episode_number
+            ),
+            None,
+        )
+        if match is None:
+            return
+        key = self._episode_key(record, season_index, match)
+
+        def apply() -> None:
+            self.episode_status_overrides[key] = True
+            self.episode_watched_at[key] = iso_timestamp
+            self._save_user_state()
+            self._populate_series(record)
+            season_scroll = (
+                self.season_details_scroller.get_vadjustment().get_value()
+            )
+            self._populate_season_page(
+                record,
+                season_index,
+                reset_scroll=False,
+            )
+            self._scroll_to_value(self.season_details_scroller, season_scroll)
+            episodes = self._episodes_for_season(record, season_index)
+            if 0 <= self.current_episode_index < len(episodes):
+                self._update_episode_watch_controls(
+                    record,
+                    season_index,
+                    episodes[self.current_episode_index],
+                )
+            if self.active_destination == "profile":
+                self._refresh_profile()
+
+        if not self._simkl_writable():
+            apply()
+            self._toast("Episode watched time saved locally (not synced)")
+            return
+        self._run_simkl_mutation(
+            f"{key}:watched",
+            lambda: simkl_client.set_episode_watched(
+                self.simkl_client_id or "",
+                self.simkl_token or "",
+                self._simkl_group(record),
+                self._simkl_ids(record),
+                season.number,
+                [(episode_number, iso_timestamp)],
+            ),
+            apply,
+            "Episode marked as watched",
+        )
+
+    def _unmark_episode_watched(
+        self,
+        record: TitleRecord,
+        season_index: int,
+        episode: EpisodeInfo,
+    ) -> None:
+        seasons = self._series_seasons(record)
+        season = seasons[season_index]
+        key = self._episode_key(record, season_index, episode)
+
+        def apply() -> None:
+            self.episode_status_overrides[key] = False
             self.episode_watched_at.pop(key, None)
-        self._save_user_state()
-        self._populate_series(record)
-        season_scroll = self.season_details_scroller.get_vadjustment().get_value()
-        self._populate_season_page(
-            record,
-            self.current_season_index,
-            reset_scroll=False,
-        )
-        self._scroll_to_value(self.season_details_scroller, season_scroll)
-        self._update_episode_watch_controls(
-            record,
-            self.current_season_index,
-            episode,
-        )
-        if self.active_destination == "profile":
-            self._refresh_profile()
-        self._toast(
-            "Episode marked as watched"
-            if new_status
-            else "Episode marked as unwatched"
+            self._save_user_state()
+            self._populate_series(record)
+            season_scroll = (
+                self.season_details_scroller.get_vadjustment().get_value()
+            )
+            self._populate_season_page(
+                record,
+                season_index,
+                reset_scroll=False,
+            )
+            self._scroll_to_value(self.season_details_scroller, season_scroll)
+            episodes = self._episodes_for_season(record, season_index)
+            if 0 <= self.current_episode_index < len(episodes):
+                self._update_episode_watch_controls(
+                    record,
+                    season_index,
+                    episodes[self.current_episode_index],
+                )
+            if self.active_destination == "profile":
+                self._refresh_profile()
+
+        if not self._simkl_writable():
+            apply()
+            self._toast("Episode marked as unwatched locally (not synced)")
+            return
+        self._run_simkl_mutation(
+            f"{key}:unwatched",
+            lambda: simkl_client.remove_episode_watched(
+                self.simkl_client_id or "",
+                self.simkl_token or "",
+                self._simkl_group(record),
+                self._simkl_ids(record),
+                season.number,
+                [episode.number],
+            ),
+            apply,
+            "Episode marked as unwatched",
         )
 
     def _on_list_selected(
@@ -7695,26 +9135,109 @@ class CineShelfWindow:
         self._set_details_open(True)
         self._load_tmdb_details_async(self.records_by_id[self.selected_id])
 
-    def _set_details_open(self, open_details: bool) -> None:
-        if self.details_open == open_details:
-            return
+    @staticmethod
+    def _details_panel_preferred_width(
+        mode: str, available_width: int
+    ) -> int:
+        """Return the details panel width for a presentation mode.
+
+        The width depends only on the mode and the available viewport, never
+        on the measured content, so Movies, Shows, and Anime share one width.
+        Returns 0 for full-page navigation, which fills its allocation.
+        """
+        if mode == DETAILS_INLINE:
+            return DETAILS_INLINE_WIDTH
+        if mode == DETAILS_OVERLAY:
+            return min(
+                DETAILS_OVERLAY_MAX_WIDTH,
+                max(
+                    DETAILS_OVERLAY_MIN_WIDTH,
+                    max(0, available_width) - DETAILS_NARROW_SAFE_MARGIN,
+                ),
+            )
+        return 0
+
+    def _preshrink_explore_for_inline_details(self) -> None:
+        """Shrink Explore cards before revealing inline details.
+
+        The reveal must not raise the window minimum above the current width,
+        so cards are rebuilt for their post-reveal width first.
+        """
         if (
-            open_details
-            and self.active_destination == "explore"
-            and self.explore_visible_records
+            self.active_destination != "explore"
+            or not self.explore_visible_records
         ):
-            panel_width = max(388, self.details_surface.get_width())
-            target_width = max(280, self.explore_pane.get_width() - panel_width)
-            target_columns = min(4, self._explore_columns_for_width(target_width))
-            if target_columns != self.explore_columns:
-                self.explore_columns = target_columns
-                self._last_explore_layout_width = target_width
-                self._populate_explore_feed()
-        self.details_open = open_details
-        self.details_revealer.set_reveal_child(open_details)
-        if not open_details:
+            return
+        target = self._explore_base_width(details_open=True)
+        if target < 200:
+            return
+        columns = self._explore_columns_for_width(max(0, target))
+        if (
+            columns == self.explore_columns
+            and abs(target - self._last_explore_layout_width) < 12
+        ):
+            return
+        self.explore_columns = columns
+        self._last_explore_layout_width = target
+        scroll_value = self.explore_scroller.get_vadjustment().get_value()
+        self._populate_explore_feed()
+        self._scroll_to_value(self.explore_scroller, scroll_value)
+
+    def _cancel_pending_details_reset(self) -> None:
+        if self._details_reset_source_id:
+            GLib.source_remove(self._details_reset_source_id)
+            self._details_reset_source_id = 0
+
+    def _schedule_details_reset(self) -> None:
+        self._cancel_pending_details_reset()
+        self._details_reset_source_id = GLib.timeout_add(
+            300,
+            self._reset_details_if_closed,
+        )
+
+    def _reset_details_if_closed(self) -> bool:
+        self._details_reset_source_id = 0
+        if not self.details_open:
             self._reset_detail_navigation()
-        self._queue_explore_resize()
+        return GLib.SOURCE_REMOVE
+
+    def _remember_details_return_focus(self) -> None:
+        try:
+            focused = self.window.get_focus()
+        except GLib.Error:
+            focused = None
+        self._details_return_focus = focused
+
+    def _restore_details_return_focus(self) -> None:
+        target = self._details_return_focus
+        self._details_return_focus = None
+        if (
+            target is not None
+            and target.get_root() is not None
+            and target.get_visible()
+        ):
+            target.grab_focus()
+
+    def _set_details_open(self, open_details: bool) -> None:
+        if open_details:
+            self._cancel_pending_details_reset()
+            self._remember_details_return_focus()
+            width = self._responsive_window_width()
+            layout = responsive_layout_for_width(
+                max(0, width),
+                details_open=True,
+            )
+            self.details_open = True
+            self._apply_details_mode(layout.details_mode)
+            if layout.details_mode == DETAILS_INLINE:
+                self._preshrink_explore_for_inline_details()
+            self._sync_details_presentation()
+        else:
+            self.details_open = False
+            self._sync_details_presentation()
+            self._schedule_details_reset()
+            self._restore_details_return_focus()
+        self._queue_responsive_layout()
         if self._details_resize_source_id:
             GLib.source_remove(self._details_resize_source_id)
         self._details_resize_source_id = GLib.timeout_add(
@@ -7727,11 +9250,40 @@ class CineShelfWindow:
         self._queue_explore_resize()
         return GLib.SOURCE_REMOVE
 
+    def _on_episode_back(self, *_args: Any) -> None:
+        self.detail_navigation.pop_to_tag("season")
+
+    def _on_season_back(self, *_args: Any) -> None:
+        self.detail_navigation.pop_to_tag("title")
+
+    def _on_mobile_title_back(self, *_args: Any) -> None:
+        self._set_details_open(False)
+
+    def _navigate_back(self) -> bool:
+        """Walk back through viewer, drawer, episode, season, then details."""
+        if self.media_viewer.get_visible():
+            self.media_viewer.close()
+            return True
+        if self._sidebar_overlay_open():
+            self._set_sidebar_open(False)
+            return True
+        if not self.details_open:
+            return False
+        action = details_back_action(
+            self.detail_navigation.get_visible_page_tag()
+        )
+        if action == "pop-season":
+            self._on_episode_back()
+        elif action == "pop-title":
+            self._on_season_back()
+        else:
+            self._set_details_open(False)
+        return True
+
     def _on_window_close_request(self, _window: Gtk.Window) -> bool:
         if not self.details_open:
             return False
         self._set_details_open(False)
-        self.window.set_focus(None)
         return True
 
     def _on_window_key_pressed(
@@ -7741,13 +9293,7 @@ class CineShelfWindow:
         _keycode: int,
         _state: Gdk.ModifierType,
     ) -> bool:
-        if (
-            keyval == Gdk.KEY_Escape
-            and self.details_open
-            and self.detail_navigation.get_visible_page_tag() == "title"
-        ):
-            self._set_details_open(False)
-            self.window.set_focus(None)
+        if keyval == Gdk.KEY_Escape and self._navigate_back():
             return True
         return False
 
@@ -7808,6 +9354,11 @@ class CineShelfWindow:
                 "This title has no Simkl or TMDB identifier."
             )
         return ids
+
+    def _simkl_writable(self) -> bool:
+        return bool(
+            self.simkl_client_id and self.simkl_token and self.simkl_connected
+        )
 
     def _run_simkl_mutation(
         self,
@@ -7924,16 +9475,45 @@ class CineShelfWindow:
             )
             return
         watched = record.id not in self.completed
-
-        def apply_watched() -> None:
-            if watched:
-                self.completed.add(record.id)
-                self.status_overrides[record.id] = "Watched"
-                self.title_watched_at[record.id] = self._watched_timestamp()
-            else:
+        if not watched:
+            def apply_unwatched() -> None:
                 self.completed.discard(record.id)
                 self.status_overrides[record.id] = "Watchlist"
                 self.title_watched_at.pop(record.id, None)
+                if self.status_overrides[record.id] == record.status:
+                    self.status_overrides.pop(record.id)
+                self._save_user_state()
+                if self.active_destination == "profile":
+                    self._refresh_profile()
+                else:
+                    self._refresh_results()
+
+            self._run_simkl_mutation(
+                f"{record.id}:watched",
+                lambda: simkl_client.set_watched(
+                    self.simkl_client_id or "",
+                    self.simkl_token or "",
+                    self._simkl_group(record),
+                    self._simkl_ids(record),
+                    False,
+                ),
+                apply_unwatched,
+                "Marked as unwatched",
+            )
+            return
+        self._show_watched_time_dialog(
+            title_text=record.title,
+            subtitle_text=f"{record.media_type} · {record.year}",
+            on_confirm=lambda iso: self._mark_title_watched(record, iso),
+        )
+
+    def _mark_title_watched(
+        self, record: TitleRecord, iso_timestamp: str
+    ) -> None:
+        def apply_watched() -> None:
+            self.completed.add(record.id)
+            self.status_overrides[record.id] = "Watched"
+            self.title_watched_at[record.id] = iso_timestamp
             if self.status_overrides[record.id] == record.status:
                 self.status_overrides.pop(record.id)
             self._save_user_state()
@@ -7942,6 +9522,10 @@ class CineShelfWindow:
             else:
                 self._refresh_results()
 
+        if not self._simkl_writable():
+            apply_watched()
+            self._toast("Watched time saved locally (not synced)")
+            return
         self._run_simkl_mutation(
             f"{record.id}:watched",
             lambda: simkl_client.set_watched(
@@ -7949,10 +9533,11 @@ class CineShelfWindow:
                 self.simkl_token or "",
                 self._simkl_group(record),
                 self._simkl_ids(record),
-                watched,
+                True,
+                watched_at=iso_timestamp,
             ),
             apply_watched,
-            "Marked as watched" if watched else "Marked as unwatched",
+            "Marked as watched",
         )
 
     def _on_bookmark_toggled(self, button: Gtk.ToggleButton) -> None:
@@ -7987,16 +9572,6 @@ class CineShelfWindow:
             adding=adding,
             on_success=apply_bookmark,
         )
-
-    def _on_secondary_detail_action(
-        self,
-        _action: Gio.SimpleAction,
-        _parameter: GLib.Variant | None,
-        action: str,
-    ) -> None:
-        record = self.records_by_id.get(self.selected_id or "")
-        if record is not None:
-            self._toast(f"{action} for {record.title}")
 
     def _on_rating_button_toggled(
         self,

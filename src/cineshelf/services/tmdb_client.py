@@ -309,6 +309,21 @@ def fetch_episode_details(
     )
 
 
+def fetch_season_details(
+    token: str,
+    series_id: int,
+    season_number: int,
+    *,
+    language: str = "en-US",
+) -> dict[str, Any]:
+    """Fetch every episode of one TV season with a single TMDB request."""
+    return request_json(
+        f"/tv/{series_id}/season/{season_number}",
+        token=token,
+        params={"language": language},
+    )
+
+
 def fetch_summary(
     token: str,
     media_type: str,

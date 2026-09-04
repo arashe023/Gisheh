@@ -77,13 +77,63 @@ class DetailActionLayoutTests(unittest.TestCase):
 
         self.assertEqual(objects["rating_button"], "GtkMenuButton")
         self.assertEqual(objects["rating_popover"], "GtkPopover")
-        self.assertEqual(objects["more_button"], "GtkMenuButton")
+        self.assertNotIn("more_button", objects)
         self.assertNotIn("detail_more_popover", objects)
         self.assertNotIn("comments_button", objects)
         self.assertNotIn("check_in_button", objects)
         self.assertNotIn("note_button", objects)
         self.assertNotIn("quick_actions_host", objects)
         self.assertNotIn("favorite_button", objects)
+        self.assertNotIn("add_sidebar_button", objects)
+        self.assertNotIn("storage_button", objects)
+        self.assertNotIn("storage_progress", objects)
+
+    def test_removed_actions_have_no_code_or_labels(self) -> None:
+        source = Path(cineshelf.__file__).read_text(encoding="utf-8")
+        for token in (
+            "season_comments_button",
+            "episode_comments_button",
+            "episode_check_in_button",
+            "_on_secondary_detail_action",
+            "detail-comments",
+            "detail-check-in",
+            "detail-add-note",
+            "Season comments opened",
+            "Episode comments opened",
+            "Episode check-in recorded",
+            "Add dialog opened",
+            "Library storage: 68% used",
+            "12.4 / 18 GB",
+        ):
+            self.assertNotIn(token, source)
+        ui_text = Path(cineshelf.UI_FILE).read_text(encoding="utf-8")
+        for token in (
+            "add_sidebar_button",
+            "storage_button",
+            "storage_progress",
+            "more_button",
+            "Add to library",
+            "Local library",
+            "12.4 / 18 GB",
+            "Comments",
+            "Check in",
+            "Add note",
+        ):
+            self.assertNotIn(token, ui_text)
+
+    def test_season_and_episode_actions_keep_only_watched(self) -> None:
+        source = Path(cineshelf.__file__).read_text(encoding="utf-8")
+        season_block = source.split("season_actions = Gtk.Box(")[1].split(
+            "episodes_heading = Gtk.CenterBox()"
+        )[0]
+        self.assertIn("season_watched_button", season_block)
+        self.assertNotIn("Comments", season_block)
+        episode_block = source.split("episode_actions = Gtk.Box(")[1].split(
+            "self.episode_watched_at_label"
+        )[0]
+        self.assertIn("episode_watched_button", episode_block)
+        self.assertNotIn("Comments", episode_block)
+        self.assertNotIn("Check in", episode_block)
 
     def test_profile_avatar_is_a_direct_navigation_button(self) -> None:
         root = ET.parse(cineshelf.UI_FILE).getroot()

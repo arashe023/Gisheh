@@ -312,5 +312,126 @@ class SimklClientTests(unittest.TestCase):
             ],
         )
 
+    def test_watched_write_includes_watched_at_timestamp(self) -> None:
+        response = BytesIO(b'{"added":{"movies":1},"not_found":{"movies":[]}}')
+        with patch.object(simkl_client, "urlopen", return_value=response) as opener:
+            simkl_client.set_watched(
+                "client-id",
+                "token",
+                "movies",
+                {"simkl": 10, "tmdb": 20},
+                True,
+                watched_at="2026-09-04T21:35:00+03:30",
+            )
+
+        request = opener.call_args.args[0]
+        self.assertEqual(
+            request.full_url.split("?", 1)[0], "https://api.simkl.com/sync/history"
+        )
+        self.assertEqual(
+            json.loads(request.data),
+            {
+                "movies": [
+                    {
+                        "status": "completed",
+                        "ids": {"simkl": 10, "tmdb": 20},
+                        "watched_at": "2026-09-04T21:35:00+03:30",
+                    }
+                ]
+            },
+        )
+
+    def test_watched_write_without_timestamp_omits_watched_at(self) -> None:
+        response = BytesIO(b'{"added":{"movies":1},"not_found":{"movies":[]}}')
+        with patch.object(simkl_client, "urlopen", return_value=response) as opener:
+            simkl_client.set_watched(
+                "client-id", "token", "movies", {"simkl": 10}, True
+            )
+
+        request = opener.call_args.args[0]
+        self.assertEqual(
+            json.loads(request.data),
+            {"movies": [{"status": "completed", "ids": {"simkl": 10}}]},
+        )
+
+    def test_episode_watched_uses_episode_level_payload(self) -> None:
+        response = BytesIO(b'{"added":{"shows":1},"not_found":{"shows":[]}}')
+        with patch.object(simkl_client, "urlopen", return_value=response) as opener:
+            simkl_client.set_episode_watched(
+                "client-id",
+                "token",
+                "shows",
+                {"simkl": 11, "tmdb": 22},
+                2,
+                [(5, "2026-09-04T21:35:00+03:30"), (6, "2026-09-04T21:40:00+03:30")],
+            )
+
+        request = opener.call_args.args[0]
+        self.assertEqual(
+            request.full_url.split("?", 1)[0], "https://api.simkl.com/sync/history"
+        )
+        payload = json.loads(request.data)
+        self.assertEqual(
+            payload,
+            {
+                "shows": [
+                    {
+                        "ids": {"simkl": 11, "tmdb": 22},
+                        "seasons": [
+                            {
+                                "number": 2,
+                                "episodes": [
+                                    {
+                                        "number": 5,
+                                        "watched_at": "2026-09-04T21:35:00+03:30",
+                                    },
+                                    {
+                                        "number": 6,
+                                        "watched_at": "2026-09-04T21:40:00+03:30",
+                                    },
+                                ],
+                            }
+                        ],
+                    }
+                ]
+            },
+        )
+        entry = payload["shows"][0]
+        self.assertNotIn("status", entry)
+
+    def test_episode_removal_uses_episode_level_payload(self) -> None:
+        response = BytesIO(b'{"deleted":{"shows":1}}')
+        with patch.object(simkl_client, "urlopen", return_value=response) as opener:
+            simkl_client.remove_episode_watched(
+                "client-id", "token", "shows", {"simkl": 11}, 1, [3]
+            )
+
+        request = opener.call_args.args[0]
+        self.assertEqual(
+            request.full_url.split("?", 1)[0],
+            "https://api.simkl.com/sync/history/remove",
+        )
+        self.assertEqual(
+            json.loads(request.data),
+            {
+                "shows": [
+                    {
+                        "ids": {"simkl": 11},
+                        "seasons": [{"number": 1, "episodes": [{"number": 3}]}],
+                    }
+                ]
+            },
+        )
+
+    def test_episode_history_rejects_empty_episodes(self) -> None:
+        with self.assertRaises(simkl_client.SimklError):
+            simkl_client.set_episode_watched(
+                "client-id", "token", "shows", {"simkl": 11}, 1, []
+            )
+        with self.assertRaises(simkl_client.SimklError):
+            simkl_client.remove_episode_watched(
+                "client-id", "token", "shows", {"simkl": 11}, 1, []
+            )
+
 if __name__ == "__main__":
     unittest.main()

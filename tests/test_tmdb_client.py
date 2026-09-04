@@ -164,6 +164,21 @@ class TmdbClientTests(unittest.TestCase):
             params={"language": "en-US"},
         )
 
+    def test_season_details_use_the_season_level_tmdb_endpoint(self) -> None:
+        with patch.object(
+            tmdb_client,
+            "request_json",
+            return_value={"id": 99, "episodes": []},
+        ) as requester:
+            payload = tmdb_client.fetch_season_details("test-token", 20, 3)
+
+        self.assertEqual(payload, {"id": 99, "episodes": []})
+        requester.assert_called_once_with(
+            "/tv/20/season/3",
+            token="test-token",
+            params={"language": "en-US"},
+        )
+
     def test_empty_tmdb_search_does_not_make_a_request(self) -> None:
         with patch.object(tmdb_client, "request_json") as requester:
             result = tmdb_client.search_titles_page("token", "Movies", "   ")

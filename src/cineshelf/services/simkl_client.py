@@ -307,15 +307,20 @@ def set_watched(
     group: str,
     ids: dict[str, int | str],
     watched: bool,
+    *,
+    watched_at: str | None = None,
 ) -> dict[str, Any]:
     if group not in LIBRARY_GROUPS:
         raise SimklError("The requested Simkl media type is not valid.")
     if watched:
+        entry: dict[str, Any] = {"status": "completed", "ids": ids}
+        if watched_at:
+            entry["watched_at"] = watched_at
         return _write_sync_json(
             "/sync/history",
             client_id=client_id,
             token=token,
-            payload={group: [{"status": "completed", "ids": ids}]},
+            payload={group: [entry]},
         )
     remove_from_library(client_id, token, group, ids)
     try:
@@ -337,6 +342,79 @@ def set_watched(
         except SimklError:
             pass
         raise
+
+
+def set_episode_watched(
+    client_id: str,
+    token: str,
+    group: str,
+    ids: dict[str, int | str],
+    season_number: int,
+    episodes: list[tuple[int, str]],
+) -> dict[str, Any]:
+    """Record episode-level watch history without completing the show."""
+    if group not in LIBRARY_GROUPS:
+        raise SimklError("The requested Simkl media type is not valid.")
+    try:
+        season = int(season_number)
+        watched_episodes = [
+            {"number": int(number), "watched_at": watched_at}
+            for number, watched_at in episodes
+        ]
+    except (TypeError, ValueError):
+        raise SimklError("The Simkl episode history is not valid.")
+    if not watched_episodes:
+        raise SimklError("The Simkl episode history is not valid.")
+    return _write_sync_json(
+        "/sync/history",
+        client_id=client_id,
+        token=token,
+        payload={
+            group: [
+                {
+                    "ids": ids,
+                    "seasons": [
+                        {"number": season, "episodes": watched_episodes}
+                    ],
+                }
+            ]
+        },
+    )
+
+
+def remove_episode_watched(
+    client_id: str,
+    token: str,
+    group: str,
+    ids: dict[str, int | str],
+    season_number: int,
+    episodes: list[int],
+) -> dict[str, Any]:
+    """Remove episode-level watch history without touching the show."""
+    if group not in LIBRARY_GROUPS:
+        raise SimklError("The requested Simkl media type is not valid.")
+    try:
+        season = int(season_number)
+        removed_episodes = [{"number": int(number)} for number in episodes]
+    except (TypeError, ValueError):
+        raise SimklError("The Simkl episode history is not valid.")
+    if not removed_episodes:
+        raise SimklError("The Simkl episode history is not valid.")
+    return _write_sync_json(
+        "/sync/history/remove",
+        client_id=client_id,
+        token=token,
+        payload={
+            group: [
+                {
+                    "ids": ids,
+                    "seasons": [
+                        {"number": season, "episodes": removed_episodes}
+                    ],
+                }
+            ]
+        },
+    )
 
 
 def request_pin(client_id: str) -> dict[str, Any]:
