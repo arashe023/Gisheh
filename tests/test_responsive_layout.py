@@ -60,15 +60,21 @@ class ResponsiveDecisionTests(unittest.TestCase):
             cineshelf.SIDEBAR_HIDDEN,
         )
         self.assertEqual(
-            cineshelf.responsive_layout_for_width(980).details_mode,
+            cineshelf.responsive_layout_for_width(
+                980, details_open=True
+            ).details_mode,
             cineshelf.DETAILS_INLINE,
         )
         self.assertEqual(
-            cineshelf.responsive_layout_for_width(979).details_mode,
+            cineshelf.responsive_layout_for_width(
+                979, details_open=True
+            ).details_mode,
             cineshelf.DETAILS_OVERLAY,
         )
         self.assertEqual(
-            cineshelf.responsive_layout_for_width(720).details_mode,
+            cineshelf.responsive_layout_for_width(
+                720, details_open=True
+            ).details_mode,
             cineshelf.DETAILS_OVERLAY,
         )
         self.assertEqual(
@@ -76,7 +82,9 @@ class ResponsiveDecisionTests(unittest.TestCase):
             cineshelf.SIDEBAR_HIDDEN,
         )
         self.assertEqual(
-            cineshelf.responsive_layout_for_width(719).details_mode,
+            cineshelf.responsive_layout_for_width(
+                719, details_open=True
+            ).details_mode,
             cineshelf.DETAILS_NAVIGATION,
         )
 
@@ -92,8 +100,69 @@ class ResponsiveDecisionTests(unittest.TestCase):
         first = cineshelf.responsive_layout_for_width(1024, details_open=True)
         second = cineshelf.responsive_layout_for_width(1024, details_open=True)
         self.assertEqual(first, second)
-        closed = cineshelf.responsive_layout_for_width(1024, details_open=False)
-        self.assertEqual(first, closed)
+        closed = cineshelf.responsive_layout_for_width(900, details_open=False)
+        opened = cineshelf.responsive_layout_for_width(900, details_open=True)
+        self.assertEqual(closed.details_mode, cineshelf.DETAILS_INLINE)
+        self.assertEqual(opened.details_mode, cineshelf.DETAILS_OVERLAY)
+
+    def test_docked_sidebar_and_inline_details_require_three_regions(self) -> None:
+        required = (
+            cineshelf.SIDEBAR_EXPANDED_MIN_WIDTH
+            + cineshelf.DETAILS_INLINE_WIDTH
+            + cineshelf.EXPLORE_SAFE_CONTENT_WIDTH
+            + cineshelf.RESPONSIVE_LAYOUT_GAPS
+        )
+        too_small = cineshelf.responsive_layout_for_width(
+            required - 1, details_open=True
+        )
+        large_enough = cineshelf.responsive_layout_for_width(
+            max(required, cineshelf.RESPONSIVE_WIDE_ENTER_WIDTH),
+            details_open=True,
+        )
+        self.assertEqual(too_small.sidebar_mode, cineshelf.SIDEBAR_HIDDEN)
+        self.assertEqual(large_enough.sidebar_mode, cineshelf.SIDEBAR_EXPANDED)
+        self.assertEqual(large_enough.details_mode, cineshelf.DETAILS_INLINE)
+
+    def test_hysteresis_retains_modes_inside_the_safe_band(self) -> None:
+        wide = cineshelf.ResponsiveLayout(
+            cineshelf.SIDEBAR_EXPANDED, cineshelf.DETAILS_INLINE
+        )
+        retained_wide = cineshelf.responsive_layout_for_width(
+            cineshelf.RESPONSIVE_WIDE_EXIT_WIDTH,
+            details_open=True,
+            current_layout=wide,
+        )
+        self.assertEqual(retained_wide.sidebar_mode, cineshelf.SIDEBAR_EXPANDED)
+        self.assertEqual(
+            cineshelf.responsive_layout_for_width(
+                cineshelf.RESPONSIVE_WIDE_EXIT_WIDTH - 1,
+                details_open=True,
+                current_layout=wide,
+            ).sidebar_mode,
+            cineshelf.SIDEBAR_HIDDEN,
+        )
+        inline = cineshelf.ResponsiveLayout(
+            cineshelf.SIDEBAR_HIDDEN, cineshelf.DETAILS_INLINE
+        )
+        self.assertEqual(
+            cineshelf.responsive_layout_for_width(
+                cineshelf.RESPONSIVE_INLINE_EXIT_WIDTH,
+                details_open=True,
+                current_layout=inline,
+            ).details_mode,
+            cineshelf.DETAILS_INLINE,
+        )
+        navigation = cineshelf.ResponsiveLayout(
+            cineshelf.SIDEBAR_HIDDEN, cineshelf.DETAILS_NAVIGATION
+        )
+        self.assertEqual(
+            cineshelf.responsive_layout_for_width(
+                cineshelf.RESPONSIVE_NARROW_EXIT_WIDTH - 1,
+                details_open=True,
+                current_layout=navigation,
+            ).details_mode,
+            cineshelf.DETAILS_NAVIGATION,
+        )
 
 
 class DetailsBackActionTests(unittest.TestCase):
@@ -160,6 +229,141 @@ class ExploreColumnTests(unittest.TestCase):
         for kind in ("poster", "landscape", "hero"):
             height = controller._explore_card_height(kind, 1)
             self.assertGreater(height, 0)
+
+    def test_small_allocations_in_one_bucket_do_not_rebuild_explore(self) -> None:
+        width = {"value": 640}
+        rebuilds: list[int] = []
+        controller = object.__new__(cineshelf.CineShelfWindow)
+        controller._explore_resize_source_id = 1
+        controller._details_resize_source_id = 0
+        controller._sidebar_resize_source_id = 0
+        controller.explore_pane = SimpleNamespace(get_width=lambda: width["value"])
+        controller.library_pane = SimpleNamespace(get_width=lambda: 0)
+        controller.explore_columns = 4
+        controller._last_explore_layout_width = 0
+        controller._last_explore_layout_bucket = None
+        controller.active_destination = "explore"
+        controller.explore_visible_records = (object(),)
+        controller.explore_scroller = SimpleNamespace(
+            get_vadjustment=lambda: SimpleNamespace(get_value=lambda: 42.0)
+        )
+        controller._populate_explore_feed = (
+            lambda **_kwargs: rebuilds.append(width["value"])
+        )
+        controller._scroll_to_value = lambda *_args: None
+
+        controller._apply_explore_resize()
+        width["value"] = 675
+        controller._apply_explore_resize()
+        width["value"] = 700
+        controller._apply_explore_resize()
+        self.assertEqual(rebuilds, [640])
+
+        width["value"] = 720
+        controller._apply_explore_resize()
+        self.assertEqual(rebuilds, [640, 720])
+
+        width["value"] = 760
+        controller._apply_explore_resize()
+        self.assertEqual(rebuilds, [640, 720, 760])
+
+    def test_flexible_artwork_has_no_horizontal_minimum_or_natural_width(self) -> None:
+        from gi.repository import Gtk
+
+        record = cineshelf.TitleRecord(
+            id="measure-test",
+            title="Measurement",
+            media_type="Movies",
+            year=2026,
+            status="Watchlist",
+            date="2026-01-01",
+            runtime="90m",
+            rating=7.0,
+            user_rating=None,
+            genres=(),
+            country="",
+            creator="",
+            description="",
+            poster_palette=("#000", "#111", "#222"),
+            poster_variant=0,
+            order=0,
+            certification="",
+            language="",
+            availability="",
+            network="",
+            external_ratings=(),
+            cast=(),
+            seasons=(),
+            recommendations=(),
+            discover_period="All releases",
+            featured=False,
+            popularity=0,
+            release_rank=0,
+            discover_layout="poster",
+        )
+        artwork = cineshelf.PosterWidget(record, 480, 270, flexible_width=True)
+        minimum, natural, _minimum_baseline, _natural_baseline = artwork.measure(
+            Gtk.Orientation.HORIZONTAL, -1
+        )
+        self.assertEqual((minimum, natural), (0, 0))
+
+    def test_pagination_appends_without_recreating_existing_cards(self) -> None:
+        class FakeGrid:
+            def __init__(self, parent: object) -> None:
+                self.parent = parent
+                self.attached: list[tuple[str, int, int, int]] = []
+
+            def get_parent(self) -> object:
+                return self.parent
+
+            def attach(
+                self, card: object, column: int, row: int, span: int, _height: int
+            ) -> None:
+                self.attached.append((str(card), column, row, span))
+
+        controller = object.__new__(cineshelf.CineShelfWindow)
+        feed = object()
+        grid = FakeGrid(feed)
+        old_card_a = object()
+        old_card_b = object()
+        controller.explore_feed_box = feed
+        controller.explore_grid = grid
+        controller.explore_columns = 2
+        controller._explore_rendered_columns = 2
+        controller._explore_rendered_ids = ("a", "b")
+        controller._explore_grid_row = 1
+        controller._explore_grid_column = 0
+        controller._explore_layout_seed = 7
+        controller._explore_card_buttons = {"a": old_card_a, "b": old_card_b}
+        controller._explore_card_layouts = {
+            "a": ("poster", 1),
+            "b": ("poster", 1),
+        }
+        controller.explore_visible_records = tuple(
+            SimpleNamespace(id=record_id) for record_id in ("a", "b", "c", "d")
+        )
+        controller._create_explore_card = lambda record, _kind, _span: record.id
+        controller._explore_record_visual_signature = lambda record: (record.id,)
+        controller._sync_explore_loading_indicator = lambda: None
+        controller._sync_explore_selection_style = lambda: None
+
+        controller._populate_explore_feed()
+
+        self.assertIs(controller._explore_card_buttons["a"], old_card_a)
+        self.assertIs(controller._explore_card_buttons["b"], old_card_b)
+        self.assertEqual([item[0] for item in grid.attached], ["c", "d"])
+        self.assertEqual(controller._explore_rendered_ids, ("a", "b", "c", "d"))
+
+    def test_loading_footer_fits_a_single_text_line(self) -> None:
+        from gi.repository import Gtk
+
+        footer, _spinner = cineshelf.CineShelfWindow._build_explore_loading_footer()
+        footer.set_visible(True)
+        minimum, _natural, _min_baseline, _natural_baseline = footer.measure(
+            Gtk.Orientation.VERTICAL, -1
+        )
+        self.assertLessEqual(minimum, 18)
+        footer.measure(Gtk.Orientation.HORIZONTAL, 18)
 
 
 class CompactRemovalTests(unittest.TestCase):
@@ -299,6 +503,18 @@ class ResponsiveStructureTests(unittest.TestCase):
         properties = self._ui_properties("details_surface")
         self.assertNotIn("width-request", properties)
 
+    def test_details_wrap_hints_fit_the_inline_content_width(self) -> None:
+        properties = self._ui_properties("detail_ratings_host")
+        self.assertEqual(
+            self._ui_object_classes()["detail_ratings_host"], "GtkGrid"
+        )
+        inner_width = cineshelf.DETAILS_INLINE_WIDTH - 32
+        natural = int(properties.get("natural-line-length", "0") or 0)
+        self.assertLessEqual(natural, inner_width)
+        self.assertEqual(properties.get("hexpand"), "true")
+        facts = self._ui_properties("detail_facts_row")
+        self.assertEqual(facts.get("hexpand"), "true")
+
     def test_default_window_size_fits_common_desktops(self) -> None:
         properties = self._ui_properties("window")
         self.assertEqual(properties.get("default-width"), "1100")
@@ -307,6 +523,15 @@ class ResponsiveStructureTests(unittest.TestCase):
     def test_hard_minimum_window_size_is_removed(self) -> None:
         source = self._source()
         self.assertNotIn("set_size_request(940, 600)", source)
+
+    def test_opening_details_does_not_resize_the_window(self) -> None:
+        source = self._source()
+        opener = source.split("def _set_details_open")[1].split(
+            "\n    def "
+        )[0]
+        self.assertNotIn("set_default_size", opener)
+        self.assertNotIn("resize(", opener)
+        self.assertNotIn("set_size_request", opener)
 
     def test_episode_artwork_remains_flexible(self) -> None:
         import inspect
@@ -515,6 +740,28 @@ class DetailsSyncTests(unittest.TestCase):
         )
         controller._sync_details_presentation()
         self.assertEqual(navigation.calls, [])
+
+    def test_identical_sync_does_not_reparent_or_restart_reveal(self) -> None:
+        controller, _navigation, surface, revealer, _events = _sync_controller(
+            visible_tag="browser",
+            details_open=True,
+            mode=cineshelf.DETAILS_OVERLAY,
+            revealer_parent=None,
+        )
+        controller._sync_details_presentation()
+        first_surface_calls = list(surface.calls)
+        first_revealer_calls = list(revealer.calls)
+        controller._sync_details_presentation()
+        self.assertEqual(surface.calls, first_surface_calls)
+        self.assertEqual(revealer.calls, first_revealer_calls)
+
+    def test_opening_an_already_open_details_panel_does_not_restart_transition(self) -> None:
+        controller = object.__new__(cineshelf.CineShelfWindow)
+        controller.details_open = True
+        synchronized: list[str] = []
+        controller._sync_details_presentation = lambda: synchronized.append("sync")
+        controller._set_details_open(True)
+        self.assertEqual(synchronized, ["sync"])
 
     def test_closing_pops_explicitly_to_browser(self) -> None:
         controller, navigation, _surface, _revealer, _events = (

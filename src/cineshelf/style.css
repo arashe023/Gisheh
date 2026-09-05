@@ -145,6 +145,58 @@
   padding: 0;
 }
 
+.explore-loading-view {
+  min-height: 320px;
+}
+
+.content-skeleton-card {
+  min-width: 148px;
+  padding: 8px;
+  border-radius: 14px;
+  background-color: alpha(@card_bg_color, 0.72);
+  box-shadow: inset 0 0 0 1px alpha(@window_fg_color, 0.06);
+}
+
+.content-skeleton-media,
+.content-skeleton-surface,
+.content-skeleton-line,
+.content-skeleton-cast-line {
+  border-radius: 8px;
+  background-image: linear-gradient(115deg,
+                                    alpha(@window_fg_color, 0.07),
+                                    alpha(@window_fg_color, 0.13),
+                                    alpha(@window_fg_color, 0.07));
+  box-shadow: inset 0 0 0 1px alpha(@window_fg_color, 0.04);
+}
+
+.content-skeleton-surface {
+  background-color: alpha(@card_bg_color, 0.82);
+}
+
+.content-skeleton-avatar {
+  border-radius: 999px;
+  background-image: linear-gradient(115deg,
+                                    alpha(@window_fg_color, 0.08),
+                                    alpha(@window_fg_color, 0.16),
+                                    alpha(@window_fg_color, 0.08));
+  box-shadow: inset 0 0 0 1px alpha(@window_fg_color, 0.05);
+}
+
+.content-skeleton-line {
+  min-height: 8px;
+  margin-left: 2px;
+  margin-right: 22px;
+}
+
+.content-skeleton-line.short {
+  margin-right: 54px;
+  background-color: alpha(@window_fg_color, 0.07);
+}
+
+.content-skeleton-cast-line {
+  min-height: 7px;
+}
+
 .explore-card {
   padding: 0;
   border-radius: 12px;
@@ -338,6 +390,28 @@ progressbar progress {
 
 .watched-dialog-calendar.header {
   border-bottom: 1px solid alpha(@window_fg_color, 0.12);
+}
+
+.calendar-timeline {
+  padding-bottom: 8px;
+}
+
+.calendar-day-section {
+  padding-bottom: 4px;
+}
+
+.calendar-day-header {
+  padding: 0 2px;
+}
+
+.calendar-poster {
+  border-radius: 12px;
+  background-color: alpha(@window_fg_color, 0.08);
+}
+
+.calendar-skeleton {
+  border-radius: 12px;
+  background-color: alpha(@window_fg_color, 0.08);
 }
 
 .profile-hero {

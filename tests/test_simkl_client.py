@@ -186,24 +186,24 @@ class SimklClientTests(unittest.TestCase):
             )
         )
 
-    def test_episode_history_validation_forces_legacy_snapshot_repair(self) -> None:
-        legacy = {
+    def test_episode_history_validation_tolerates_unexpanded_seasons(self) -> None:
+        unexpanded = {
             "movies": [],
             "shows": [
                 {
                     "status": "watching",
-                    "watched_episodes_count": 2,
-                    "total_episodes_count": 10,
+                    "watched_episodes_count": 0,
+                    "total_episodes_count": 63,
                     "show": {"ids": {"simkl": 12}},
                 }
             ],
             "anime": [],
         }
         rich = {
-            **legacy,
+            **unexpanded,
             "shows": [
                 {
-                    **legacy["shows"][0],
+                    **unexpanded["shows"][0],
                     "seasons": [
                         {"number": 1, "episodes": [{"number": 1}, {"number": 2}]}
                     ],
@@ -211,8 +211,18 @@ class SimklClientTests(unittest.TestCase):
             ],
         }
 
-        self.assertFalse(simkl_client.library_has_episode_history(legacy))
+        self.assertTrue(simkl_client.library_has_episode_history(unexpanded))
         self.assertTrue(simkl_client.library_has_episode_history(rich))
+        self.assertFalse(
+            simkl_client.library_has_episode_history(
+                {"movies": [], "shows": [{"status": "watching"}], "anime": []}
+            )
+        )
+        self.assertFalse(
+            simkl_client.library_has_episode_history(
+                {"movies": [], "shows": "not-a-list", "anime": []}
+            )
+        )
 
     def test_delta_merge_updates_and_reconciles_removed_items(self) -> None:
         movie = lambda simkl_id, title: {
@@ -335,7 +345,7 @@ class SimklClientTests(unittest.TestCase):
                     {
                         "status": "completed",
                         "ids": {"simkl": 10, "tmdb": 20},
-                        "watched_at": "2026-09-04T21:35:00+03:30",
+                        "watched_at": "2026-09-04T18:05:00Z",
                     }
                 ]
             },
@@ -383,11 +393,11 @@ class SimklClientTests(unittest.TestCase):
                                 "episodes": [
                                     {
                                         "number": 5,
-                                        "watched_at": "2026-09-04T21:35:00+03:30",
+                        "watched_at": "2026-09-04T18:05:00Z",
                                     },
                                     {
                                         "number": 6,
-                                        "watched_at": "2026-09-04T21:40:00+03:30",
+                                        "watched_at": "2026-09-04T18:10:00Z",
                                     },
                                 ],
                             }
@@ -421,6 +431,83 @@ class SimklClientTests(unittest.TestCase):
                     }
                 ]
             },
+        )
+
+    def test_watched_at_normalizes_to_utc_zulu(self) -> None:
+        self.assertEqual(
+            simkl_client.normalize_watched_at("2026-09-04T21:35:00+03:30"),
+            "2026-09-04T18:05:00Z",
+        )
+        self.assertEqual(
+            simkl_client.normalize_watched_at("2026-09-04T18:05:00Z"),
+            "2026-09-04T18:05:00Z",
+        )
+        with self.assertRaises(simkl_client.SimklError):
+            simkl_client.normalize_watched_at("2026-09-04T18:05:00")
+        with self.assertRaises(simkl_client.SimklError):
+            simkl_client.normalize_watched_at("not a date")
+        self.assertIsNone(simkl_client.normalize_watched_at(None))
+
+    def test_invalid_timestamp_is_rejected_before_network_call(self) -> None:
+        with patch.object(simkl_client, "urlopen") as opener:
+            with self.assertRaises(simkl_client.SimklError):
+                simkl_client.set_watched(
+                    "client-id", "token", "movies", {"tmdb": 20}, True,
+                    watched_at="not-a-timestamp",
+                )
+        opener.assert_not_called()
+
+    def test_history_response_distinguishes_noop_status_and_not_found(self) -> None:
+        noop = simkl_client.history_sync_result(
+            {"added": {"movies": 0, "shows": 0, "episodes": 0}}
+        )
+        self.assertTrue(noop.noop)
+        self.assertFalse(noop.changed)
+        show = simkl_client.history_sync_result(
+            {
+                "added": {
+                    "shows": 1,
+                    "statuses": [{"response": {"status": "watching"}}],
+                },
+                "not_found": {"shows": []},
+            }
+        )
+        self.assertTrue(show.changed)
+        self.assertEqual(show.effective_status, "watching")
+        missing = simkl_client.history_sync_result(
+            {"added": {"movies": 1}, "not_found": {"movies": [{"ids": {}}]}}
+        )
+        self.assertFalse(missing.changed)
+        self.assertFalse(missing.noop)
+        self.assertIn("movies", missing.not_found)
+
+    def test_change_watched_date_restores_previous_history_after_add_failure(self) -> None:
+        with (
+            patch.object(simkl_client, "remove_from_library") as remove,
+            patch.object(
+                simkl_client,
+                "set_watched",
+                side_effect=[
+                    simkl_client.SimklError("add failed"),
+                    {"added": {"movies": 1}},
+                ],
+            ) as set_watched,
+        ):
+            with self.assertRaisesRegex(simkl_client.SimklError, "was restored"):
+                simkl_client.change_watched_date(
+                    "client-id",
+                    "token",
+                    "movies",
+                    {"simkl": 10},
+                    previous_watched_at="2026-09-04T21:35:00+03:30",
+                    watched_at="2026-09-03T21:35:00+03:30",
+                )
+
+        remove.assert_called_once()
+        self.assertEqual(set_watched.call_count, 2)
+        self.assertEqual(
+            set_watched.call_args_list[1].kwargs["watched_at"],
+            "2026-09-04T18:05:00Z",
         )
 
     def test_episode_history_rejects_empty_episodes(self) -> None:

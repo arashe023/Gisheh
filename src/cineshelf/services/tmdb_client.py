@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -78,6 +79,16 @@ def store_token(token: str) -> Path:
     return destination
 
 
+def clear_token() -> None:
+    """Remove the user-stored TMDB token without touching environment config."""
+    try:
+        token_file().unlink()
+    except FileNotFoundError:
+        pass
+    except OSError as error:
+        raise TmdbError(f"Could not remove the TMDB token: {error}") from None
+
+
 def cache_dir() -> Path:
     configured = os.environ.get("XDG_CACHE_HOME")
     base = Path(configured).expanduser() if configured else Path.home() / ".cache"
@@ -88,6 +99,17 @@ def metadata_cache_dir() -> Path:
     configured = os.environ.get("XDG_CACHE_HOME")
     base = Path(configured).expanduser() if configured else Path.home() / ".cache"
     return base / APP_ID / "tmdb-metadata"
+
+
+def clear_cache() -> None:
+    """Remove reproducible TMDB image and metadata caches."""
+    for destination in (cache_dir(), metadata_cache_dir()):
+        try:
+            shutil.rmtree(destination)
+        except FileNotFoundError:
+            pass
+        except OSError as error:
+            raise TmdbError(f"Could not clear the TMDB cache: {error}") from None
 
 
 def _summary_file(media_type: str, tmdb_id: int) -> Path:

@@ -18,6 +18,21 @@ from cineshelf import window as cineshelf
 
 
 class ExploreLayoutTests(unittest.TestCase):
+    def test_pagination_keeps_existing_order_and_appends_new_records(self) -> None:
+        existing = tuple(
+            type("Record", (), {"id": record_id})()
+            for record_id in ("a", "b", "c")
+        )
+        filtered = tuple(
+            type("Record", (), {"id": record_id})()
+            for record_id in ("new-high", "b", "a", "c", "new-low")
+        )
+        merged = cineshelf.preserve_explore_page_prefix(existing, filtered)
+        self.assertEqual(
+            tuple(record.id for record in merged),
+            ("a", "b", "c", "new-high", "new-low"),
+        )
+
     def test_library_grid_columns_follow_real_card_width(self) -> None:
         self.assertEqual(cineshelf.grid_columns_for_width(120), 1)
         self.assertEqual(cineshelf.grid_columns_for_width(320), 2)
@@ -46,6 +61,69 @@ class ExploreLayoutTests(unittest.TestCase):
         self.assertEqual(first, second)
         kinds = {kind for row in first for kind, _span in row}
         self.assertGreaterEqual(len(kinds), 2)
+
+    def test_initial_explore_loading_uses_content_skeletons(self) -> None:
+        from gi.repository import Gtk
+
+        view = cineshelf.CineShelfWindow._build_explore_loading_view()
+        self.assertIn("explore-loading-view", view.get_css_classes())
+        placeholders = view.get_last_child()
+        self.assertIsInstance(placeholders, Gtk.FlowBox)
+        assert isinstance(placeholders, Gtk.FlowBox)
+        count = 0
+        child = placeholders.get_first_child()
+        while child is not None:
+            count += 1
+            child = child.get_next_sibling()
+        self.assertEqual(count, 5)
+
+    def test_detail_loading_uses_media_and_cast_skeleton_shapes(self) -> None:
+        media = cineshelf.CineShelfWindow._loading_media_placeholder(
+            96, 144, "Loading poster"
+        )
+        self.assertIn("content-skeleton-surface", media.get_css_classes())
+        self.assertEqual(media.get_tooltip_text(), "Loading poster")
+
+        cast = cineshelf.CineShelfWindow._loading_cast_placeholder()
+        avatar = cast.get_first_child()
+        self.assertIsNotNone(avatar)
+        assert avatar is not None
+        self.assertIn("content-skeleton-avatar", avatar.get_css_classes())
+
+    def test_carousel_labels_are_bounded_and_truncate_after_two_lines(self) -> None:
+        from gi.repository import Gtk, Pango
+
+        label = Gtk.Label(label="A very long unbroken carousel title " * 4)
+        cineshelf.CineShelfWindow._configure_bounded_card_label(label, 13)
+
+        self.assertTrue(label.get_wrap())
+        self.assertEqual(label.get_wrap_mode(), Pango.WrapMode.WORD_CHAR)
+        self.assertEqual(label.get_lines(), 2)
+        self.assertEqual(label.get_ellipsize(), Pango.EllipsizeMode.END)
+        self.assertEqual(label.get_width_chars(), 13)
+        self.assertEqual(label.get_max_width_chars(), 13)
+        self.assertFalse(label.get_hexpand())
+
+        short_label = Gtk.Label(label="Short title")
+        cineshelf.CineShelfWindow._configure_bounded_card_label(short_label, 13)
+        self.assertEqual(
+            label.measure(Gtk.Orientation.HORIZONTAL, -1),
+            short_label.measure(Gtk.Orientation.HORIZONTAL, -1),
+        )
+
+    def test_single_line_carousel_labels_do_not_wrap(self) -> None:
+        from gi.repository import Gtk, Pango
+
+        label = Gtk.Label(label="A very long role or video title")
+        cineshelf.CineShelfWindow._configure_bounded_card_label(
+            label,
+            11,
+            lines=1,
+        )
+
+        self.assertFalse(label.get_wrap())
+        self.assertEqual(label.get_lines(), 1)
+        self.assertEqual(label.get_ellipsize(), Pango.EllipsizeMode.END)
 
 
 class DetailActionLayoutTests(unittest.TestCase):
@@ -148,6 +226,102 @@ class DetailActionLayoutTests(unittest.TestCase):
         self.assertNotIn("profile_popover", objects)
         self.assertNotIn("profile_sidebar_list", objects)
         self.assertNotIn("profile_sidebar_row", objects)
+
+
+class SettingsDialogTests(unittest.TestCase):
+    @staticmethod
+    def _controller() -> cineshelf.CineShelfWindow:
+        controller = object.__new__(cineshelf.CineShelfWindow)
+        controller.simkl_connected = False
+        controller.tmdb_token = None
+        controller.auto_sync = True
+        controller.color_scheme = "dark"
+        controller.default_media = "Movies"
+        controller.preferred_view_mode = "list"
+        return controller
+
+    def test_native_preferences_dialog_contains_functional_controls(self) -> None:
+        from gi.repository import Adw
+
+        controller = self._controller()
+
+        controller._build_settings_dialog()
+
+        self.assertIsInstance(controller.settings_dialog, Adw.PreferencesDialog)
+        self.assertEqual(controller.settings_dialog.get_title(), "Preferences")
+        self.assertTrue(controller.settings_dialog.get_search_enabled())
+        self.assertEqual(
+            controller.settings_dialog.get_visible_page().get_title(),
+            "General",
+        )
+        self.assertEqual(controller.settings_color_scheme_row.get_selected(), 2)
+        self.assertEqual(controller.settings_media_row.get_selected(), 0)
+        self.assertEqual(controller.settings_view_row.get_selected(), 0)
+        self.assertTrue(controller.settings_auto_sync_row.get_active())
+        self.assertEqual(controller.settings_simkl_button.get_label(), "Connect")
+        self.assertEqual(controller.settings_tmdb_button.get_label(), "Connect")
+        self.assertFalse(controller.settings_simkl_disconnect_button.get_visible())
+        self.assertFalse(controller.settings_tmdb_disconnect_button.get_visible())
+
+    def test_connected_services_are_reflected_in_settings(self) -> None:
+        controller = self._controller()
+        controller.simkl_connected = True
+        controller.tmdb_token = "secret-token"
+
+        controller._build_settings_dialog()
+
+        self.assertEqual(controller.settings_simkl_button.get_label(), "Sync Now")
+        self.assertEqual(controller.settings_tmdb_button.get_label(), "Change Token")
+        self.assertTrue(controller.settings_simkl_disconnect_button.get_visible())
+        self.assertTrue(controller.settings_tmdb_disconnect_button.get_visible())
+        self.assertNotIn("secret-token", controller.settings_tmdb_row.get_subtitle())
+
+    def test_preferences_round_trip_through_user_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            state_file = Path(temporary_directory) / "state.json"
+            writer = object.__new__(cineshelf.CineShelfWindow)
+            writer.state_file = state_file
+            writer.bookmarks = set()
+            writer.favorites = set()
+            writer.completed = set()
+            writer.ratings = {}
+            writer.status_overrides = {}
+            writer.episode_status_overrides = {}
+            writer.episode_watched_at = {}
+            writer.title_watched_at = {}
+            writer.color_scheme = "light"
+            writer.auto_sync = False
+            writer.default_media = "Anime"
+            writer.preferred_view_mode = "grid"
+            writer._save_user_state()
+
+            reader = object.__new__(cineshelf.CineShelfWindow)
+            reader.state_file = state_file
+            reader.records_by_id = {}
+            reader.simkl_token = None
+            reader.simkl_connected = False
+            reader.bookmarks = set()
+            reader.favorites = set()
+            reader.completed = set()
+            reader.ratings = {}
+            reader.status_overrides = {}
+            reader.episode_status_overrides = {}
+            reader.episode_watched_at = {}
+            reader.title_watched_at = {}
+            reader.color_scheme = "dark"
+            reader.auto_sync = True
+            reader.default_media = "Movies"
+            reader.preferred_view_mode = "list"
+            reader.active_media = "Movies"
+            reader.view_mode = "list"
+            reader._load_user_state()
+
+            self.assertEqual(reader.color_scheme, "light")
+            self.assertFalse(reader.auto_sync)
+            self.assertEqual(reader.default_media, "Anime")
+            self.assertEqual(reader.active_media, "Anime")
+            self.assertEqual(reader.preferred_view_mode, "grid")
+            self.assertEqual(reader.view_mode, "grid")
 
 
 class SeasonProgressTests(unittest.TestCase):

@@ -301,8 +301,10 @@ def _titled_controller() -> cineshelf.CineShelfWindow:
     )
     controller.saved: list[str] = []
     controller.toasts: list[str] = []
+    controller.logged: list[tuple[object, ...]] = []
     controller._save_user_state = lambda: controller.saved.append("save")  # type: ignore[method-assign]
     controller._toast = lambda message: controller.toasts.append(message)  # type: ignore[method-assign]
+    controller._app_log = lambda message, *args, **kwargs: controller.logged.append((message, *args))  # type: ignore[method-assign]
     controller._refresh_results = lambda: None  # type: ignore[method-assign]
     controller._refresh_profile = lambda: None  # type: ignore[method-assign]
     controller._update_details = lambda: None  # type: ignore[method-assign]
@@ -310,6 +312,7 @@ def _titled_controller() -> cineshelf.CineShelfWindow:
     controller._populate_season_page = lambda *args, **kwargs: None  # type: ignore[method-assign]
     controller._update_episode_watch_controls = lambda *args: None  # type: ignore[method-assign]
     controller._scroll_to_value = lambda *args: None  # type: ignore[method-assign]
+    controller._invalidate_simkl_snapshot_after_mutation = lambda: None  # type: ignore[method-assign]
     return controller
 
 
@@ -324,9 +327,9 @@ class TitleWatchedFlowTests(unittest.TestCase):
         record = self._record()
         controller.records_by_id = {record.id: record}
         controller._mark_title_watched(record, "2026-09-04T21:35:00+03:30")
-        self.assertIn(record.id, controller.completed)
+        self.assertIn(controller._canonical_record_id(record), controller.completed)
         self.assertEqual(
-            controller.title_watched_at[record.id], "2026-09-04T21:35:00+03:30"
+            controller.title_watched_at[controller._canonical_record_id(record)], "2026-09-04T21:35:00+03:30"
         )
         self.assertTrue(any("locally" in toast for toast in controller.toasts))
         self.assertNotIn("synced", " ".join(controller.toasts).lower().replace("(not synced)", ""))
@@ -342,7 +345,7 @@ class TitleWatchedFlowTests(unittest.TestCase):
 
         def fake_set_watched(*args: object, **kwargs: object) -> dict[str, object]:
             calls.append((args, kwargs))
-            return {}
+            return {"added": {"movies": 1}}
 
         def fake_mutation(key, operation, on_success, message):
             operation()
@@ -362,9 +365,9 @@ class TitleWatchedFlowTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0][1].get("watched_at"), "2026-09-04T21:35:00+03:30")
         self.assertTrue(calls[0][0][4])
-        self.assertIn(record.id, controller.completed)
+        self.assertIn(controller._canonical_record_id(record), controller.completed)
         self.assertEqual(
-            controller.title_watched_at[record.id], "2026-09-04T21:35:00+03:30"
+            controller.title_watched_at[controller._canonical_record_id(record)], "2026-09-04T21:35:00+03:30"
         )
         self.assertIn("Marked as watched", controller.toasts)
 
@@ -385,20 +388,285 @@ class TitleWatchedFlowTests(unittest.TestCase):
         self.assertNotIn(record.id, controller.title_watched_at)
         self.assertIn("network down", controller.toasts)
 
-    def test_unwatch_does_not_open_dialog(self) -> None:
+    def test_watched_title_offers_date_change_and_unwatch_actions(self) -> None:
         controller = _titled_controller()
         record = self._record()
-        controller.completed.add(record.id)
+        controller.completed.add(controller._canonical_record_id(record))
         controller.selected_id = record.id
         controller.records_by_id = {record.id: record}
         controller.active_destination = "library"
         shown: list[str] = []
-        controller._show_watched_time_dialog = lambda **kwargs: shown.append("dialog")  # type: ignore[method-assign]
+        controller._show_watched_title_actions = lambda item: shown.append(item.id)  # type: ignore[method-assign]
         mutations: list[str] = []
         controller._run_simkl_mutation = lambda key, op, ok, msg: mutations.append(key)  # type: ignore[method-assign]
         controller._on_watched_clicked(object())
-        self.assertEqual(shown, [])
-        self.assertEqual(mutations, [f"{record.id}:watched"])
+        self.assertEqual(shown, [record.id])
+        self.assertEqual(mutations, [])
+
+    def test_mark_title_unwatched_removes_history_after_server_success(self) -> None:
+        controller = _titled_controller()
+        controller.simkl_client_id = "client"
+        controller.simkl_token = "token"
+        controller.simkl_connected = True
+        record = self._record()
+        controller.records_by_id = {record.id: record}
+        canonical = controller._canonical_record_id(record)
+        controller.completed.add(canonical)
+        controller.title_watched_at[canonical] = "2026-09-04T18:05:00Z"
+        calls: list[tuple[object, ...]] = []
+
+        def fake_mutation(_key, operation, on_success, _message):
+            operation()
+            on_success()
+
+        def fake_set_watched(*args, **kwargs):
+            calls.append((*args, kwargs))
+            return {"added": {"movies": 1}}
+
+        with (
+            patch.object(controller, "_run_simkl_mutation", side_effect=fake_mutation),
+            patch.object(simkl_client, "set_watched", side_effect=fake_set_watched),
+        ):
+            controller._mark_title_unwatched(record)
+
+        self.assertEqual(len(calls), 1)
+        self.assertFalse(calls[0][4])
+        self.assertNotIn(canonical, controller.completed)
+        self.assertIn(canonical, controller.bookmarks)
+        self.assertNotIn(canonical, controller.title_watched_at)
+
+    def test_explore_watch_opens_date_dialog_instead_of_watchlist(self) -> None:
+        controller = _titled_controller()
+        record = self._record()
+        controller.selected_id = record.id
+        controller.records_by_id = {record.id: record}
+        controller.active_destination = "explore"
+        controller.explore_ids = {record.id}
+        shown: list[str] = []
+        controller._show_watched_time_dialog = lambda **kwargs: shown.append("dialog")  # type: ignore[method-assign]
+        list_changes: list[str] = []
+        controller._write_simkl_list_change = lambda *args, **kwargs: list_changes.append("watchlist")  # type: ignore[method-assign]
+        controller._on_watched_clicked(object())
+        self.assertEqual(shown, ["dialog"])
+        self.assertEqual(list_changes, [])
+
+    def test_explore_mark_sends_timestamp_and_refreshes_explore(self) -> None:
+        controller = _titled_controller()
+        controller.simkl_client_id = "client"
+        controller.simkl_token = "token"
+        controller.simkl_connected = True
+        controller.active_destination = "explore"
+        record = self._record()
+        controller.records_by_id = {record.id: record}
+        controller.explore_ids = {record.id}
+        refreshed: list[str] = []
+        controller._refresh_explore = lambda **kwargs: refreshed.append("explore")  # type: ignore[method-assign]
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_set_watched(*args: object, **kwargs: object) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {"added": {"movies": 1}}
+
+        def fake_mutation(key, operation, on_success, message):
+            operation()
+            on_success()
+            controller.toasts.append(message)
+
+        with (
+            patch.object(
+                controller, "_run_simkl_mutation", side_effect=fake_mutation
+            ),
+            patch.object(
+                simkl_client, "set_watched", side_effect=fake_set_watched
+            ),
+        ):
+            controller._mark_title_watched(record, "2026-06-04T21:35:00+03:30")
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][1].get("watched_at"), "2026-06-04T21:35:00+03:30")
+        self.assertIn(controller._canonical_record_id(record), controller.completed)
+        self.assertEqual(refreshed, ["explore"])
+
+    def test_watched_explore_record_is_promoted_to_library_views(self) -> None:
+        controller = _titled_controller()
+        records, _explore, _totals = cineshelf.load_catalog()
+        library_record = next(
+            record for record in records if record.media_type == "Movies"
+        )
+        explore_record = replace(library_record, id="tmdb-999999")
+        controller.records = (library_record,)
+        controller.explore_records = (explore_record,)
+        controller.active_media = "Movies"
+        controller.active_status = "Watched"
+        self.assertNotIn(explore_record.id, [item.id for item in controller._library_records()])
+        controller.completed.add(explore_record.id)
+        controller.status_overrides[explore_record.id] = "Watched"
+        self.assertIn(explore_record.id, [item.id for item in controller._library_records()])
+        self.assertGreaterEqual(controller._status_total("Movies", "Watched"), 1)
+
+    def test_library_and_explore_faces_share_canonical_state(self) -> None:
+        controller = _titled_controller()
+        library = self._record()
+        library = replace(library, id="simkl-movies-12345", tmdb_id=20)
+        explore = replace(library, id="tmdb-movie-20", status="Watchlist")
+        controller.records = (library,)
+        controller.explore_records = (explore,)
+        controller._tmdb_record_aliases = {("movie", 20): library.id}
+        controller._library_records_by_canonical = {library.id: library}
+        controller.completed = {library.id}
+        controller.bookmarks = set()
+        controller.ratings = {library.id: 8}
+        controller.title_watched_at = {library.id: "2026-09-04T18:05:00Z"}
+
+        self.assertEqual(controller._canonical_record_id(explore), library.id)
+        self.assertTrue(controller._is_record_completed(explore))
+        self.assertEqual(controller._effective_status(explore), "Watched")
+        self.assertEqual(controller._effective_record_rating(explore), 8)
+        self.assertEqual(
+            controller.title_watched_at[controller._canonical_record_id(explore)],
+            "2026-09-04T18:05:00Z",
+        )
+        self.assertEqual(controller._library_records(), (library,))
+        self.assertEqual(controller._simkl_ids(explore)["simkl"], 12345)
+
+    def test_show_server_status_watching_does_not_complete_locally(self) -> None:
+        controller = _titled_controller()
+        record = replace(self._record(), id="tmdb-tv-20", media_type="Shows",
+                         tmdb_media_type="tv")
+        controller.records_by_id = {record.id: record}
+        controller.simkl_client_id = "client"
+        controller.simkl_token = "token"
+        controller.simkl_connected = True
+
+        def fake_mutation(_key, operation, on_success, _message):
+            operation()
+            on_success()
+
+        with (
+            patch.object(controller, "_run_simkl_mutation", side_effect=fake_mutation),
+            patch.object(
+                simkl_client,
+                "set_watched",
+                return_value={
+                    "added": {
+                        "shows": 1,
+                        "statuses": [{"response": {"status": "watching"}}],
+                    }
+                },
+            ),
+        ):
+            controller._mark_title_watched(record, "2026-09-04T21:35:00+03:30")
+
+        self.assertFalse(controller._is_record_completed(record))
+        self.assertEqual(controller._effective_status(record), "Watching")
+
+    def test_episode_history_noop_does_not_apply_local_episode(self) -> None:
+        record, controller = SeasonEpisodeWatchedFlowTests()._show()
+        controller.simkl_client_id = "client"
+        controller.simkl_token = "token"
+        controller.simkl_connected = True
+
+        def fake_mutation(_key, operation, on_success, _message):
+            operation()
+            on_success()
+
+        with (
+            patch.object(controller, "_run_simkl_mutation", side_effect=fake_mutation),
+            patch.object(simkl_client, "set_episode_watched",
+                         return_value={"added": {"episodes": 0}}),
+        ):
+            controller._mark_episode_watched(record, 0, 2, "2026-09-04T21:35:00+03:30")
+
+        key = controller._episode_key(record, 0, record.seasons[0].episode_items[1])
+        self.assertNotIn(key, controller.episode_status_overrides)
+        self.assertNotIn(key, controller.episode_watched_at)
+
+    def test_history_write_is_logged_with_result(self) -> None:
+        controller = _titled_controller()
+        result = controller._post_simkl_history(
+            "abc at 2026-06-04T21:35:00+03:30",
+            lambda: {"added": {"movies": 1}},
+        )
+        self.assertEqual(result, {"added": {"movies": 1}})
+        self.assertTrue(
+            any("abc at 2026-06-04" in str(entry) for entry in controller.logged)
+        )
+        self.assertTrue(
+            any("movies" in str(entry) for entry in controller.logged)
+        )
+
+    def test_simkl_history_changed_detects_server_noop(self) -> None:
+        self.assertTrue(
+            cineshelf.simkl_history_changed({"added": {"movies": 1}})
+        )
+        self.assertFalse(
+            cineshelf.simkl_history_changed(
+                {"added": {"movies": 0, "shows": 0, "episodes": 0}}
+            )
+        )
+        self.assertFalse(cineshelf.simkl_history_changed({"added": {}}))
+        self.assertFalse(cineshelf.simkl_history_changed({}))
+        self.assertFalse(cineshelf.simkl_history_changed(None))
+
+    def test_noop_mark_guides_user_to_remark(self) -> None:
+        controller = _titled_controller()
+        controller.simkl_client_id = "client"
+        controller.simkl_token = "token"
+        controller.simkl_connected = True
+        record = self._record()
+        controller.records_by_id = {record.id: record}
+        messages: list[str] = []
+
+        def fake_mutation(key, operation, on_success, message):
+            messages.append(message)
+            operation()
+            on_success()
+
+        noop = {"added": {"movies": 0, "shows": 0, "episodes": 0}}
+        with (
+            patch.object(
+                controller, "_run_simkl_mutation", side_effect=fake_mutation
+            ),
+            patch.object(simkl_client, "set_watched", return_value=noop),
+        ):
+            controller._mark_title_watched(record, "2026-08-04T22:14:00+03:30")
+
+        self.assertEqual(messages, [""])
+        self.assertNotIn(controller._canonical_record_id(record), controller.completed)
+        self.assertFalse(any(t == "Marked as watched" for t in controller.toasts))
+        self.assertTrue(
+            any("Use Change watched date" in t for t in controller.toasts),
+            controller.toasts,
+        )
+
+    def test_not_found_history_response_preserves_local_title_state(self) -> None:
+        controller = _titled_controller()
+        controller.simkl_client_id = "client"
+        controller.simkl_token = "token"
+        controller.simkl_connected = True
+        record = self._record()
+        controller.records_by_id = {record.id: record}
+
+        def fake_mutation(key, operation, _on_success, message):
+            try:
+                operation()
+            except simkl_client.SimklError as error:
+                controller._finish_simkl_mutation(key, None, message, str(error))
+
+        with (
+            patch.object(controller, "_run_simkl_mutation", side_effect=fake_mutation),
+            patch.object(
+                simkl_client,
+                "set_watched",
+                return_value={"added": {"movies": 1}, "not_found": {"movies": [{}]}},
+            ),
+        ):
+            controller._mark_title_watched(record, "2026-09-04T21:35:00+03:30")
+
+        canonical = controller._canonical_record_id(record)
+        self.assertNotIn(canonical, controller.completed)
+        self.assertNotIn(canonical, controller.bookmarks)
+        self.assertNotIn(canonical, controller.title_watched_at)
 
 
 class SeasonEpisodeWatchedFlowTests(unittest.TestCase):
@@ -445,7 +713,9 @@ class SeasonEpisodeWatchedFlowTests(unittest.TestCase):
             controller.episode_watched_at[old_key], "2026-01-01T10:00:00+00:00"
         )
         for number in (2, 3):
-            key = f"{record.id}/s1/e{number}"
+            key = controller._episode_key(
+                record, 0, record.seasons[0].episode_items[number - 1]
+            )
             self.assertEqual(
                 controller.episode_watched_at.get(key), "2026-09-04T21:35:00+03:30"
             )
@@ -466,7 +736,7 @@ class SeasonEpisodeWatchedFlowTests(unittest.TestCase):
                     "episodes": episodes,
                 }
             )
-            return {}
+            return {"added": {"episodes": 1}}
 
         def fake_mutation(key, operation, on_success, message):
             operation()
@@ -486,7 +756,7 @@ class SeasonEpisodeWatchedFlowTests(unittest.TestCase):
         self.assertEqual(
             captured["episodes"], [(2, "2026-09-04T21:35:00+03:30")]
         )
-        key = f"{record.id}/s1/e2"
+        key = controller._episode_key(record, 0, record.seasons[0].episode_items[1])
         self.assertTrue(controller.episode_status_overrides[key])
         self.assertEqual(
             controller.episode_watched_at[key], "2026-09-04T21:35:00+03:30"

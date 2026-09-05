@@ -50,6 +50,38 @@ class TmdbClientTests(unittest.TestCase):
                 self.assertEqual(tmdb_client.read_token(), "stored-token")
             self.assertEqual(token_path.stat().st_mode & 0o777, 0o600)
 
+    def test_clear_token_removes_only_the_stored_token(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            token_path = Path(temporary_directory) / "config" / "token"
+            with patch.dict(
+                os.environ,
+                {"TMDB_READ_TOKEN": "", "TMDB_TOKEN_FILE": str(token_path)},
+                clear=False,
+            ):
+                tmdb_client.store_token("stored-token")
+                tmdb_client.clear_token()
+                self.assertIsNone(tmdb_client.read_token())
+                tmdb_client.clear_token()
+
+    def test_clear_cache_removes_image_and_metadata_directories(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            with patch.dict(
+                os.environ,
+                {"XDG_CACHE_HOME": temporary_directory},
+                clear=False,
+            ):
+                image = tmdb_client.cache_dir() / "poster.jpg"
+                metadata = tmdb_client.metadata_cache_dir() / "movie-1.json"
+                image.parent.mkdir(parents=True)
+                metadata.parent.mkdir(parents=True)
+                image.write_bytes(b"image")
+                metadata.write_text("{}", encoding="utf-8")
+
+                tmdb_client.clear_cache()
+
+                self.assertFalse(tmdb_client.cache_dir().exists())
+                self.assertFalse(tmdb_client.metadata_cache_dir().exists())
+
     def test_fetch_explore_uses_expected_endpoints(self) -> None:
         calls: list[tuple[str, dict[str, object]]] = []
 
