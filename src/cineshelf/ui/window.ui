@@ -194,11 +194,11 @@
                           </object>
                         </property>
                         <child type="end">
-                          <object class="GtkBox">
+                          <object class="GtkBox" id="header_data_status">
                             <property name="spacing">5</property>
                             <property name="valign">center</property>
                             <child>
-                              <object class="GtkImage">
+                              <object class="GtkImage" id="header_data_status_icon">
                                 <property name="icon-name">emblem-ok-symbolic</property>
                                 <style>
                                   <class name="success"/>
@@ -206,7 +206,7 @@
                               </object>
                             </child>
                             <child>
-                              <object class="GtkLabel">
+                              <object class="GtkLabel" id="header_data_status_label">
                                 <property name="label">Synced</property>
                                 <style>
                                   <class name="dim-label"/>
@@ -405,7 +405,7 @@
                                     </style>
                                     <child>
                                       <object class="GtkBox" id="detail_poster_host">
-                                        <property name="halign">center</property>
+                                        <property name="halign">fill</property>
                                         <property name="hexpand">true</property>
                                         <property name="height-request">198</property>
                                       </object>

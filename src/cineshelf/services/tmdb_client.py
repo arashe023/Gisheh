@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import threading
 import time
@@ -15,6 +16,11 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from . import image_http
+
+try:
+    from .._build_config import BUNDLED_TMDB_READ_TOKEN
+except ImportError:
+    BUNDLED_TMDB_READ_TOKEN = ""
 
 
 APP_ID = "io.github.cineshelf.CineShelf"
@@ -43,8 +49,20 @@ def read_token() -> str | None:
     try:
         stored_token = token_file().read_text(encoding="utf-8").strip()
     except OSError:
-        return None
-    return stored_token or None
+        stored_token = ""
+    return stored_token or BUNDLED_TMDB_READ_TOKEN.strip() or None
+
+
+def token_source() -> str | None:
+    """Describe the active credential without exposing its value."""
+    if os.environ.get("TMDB_READ_TOKEN", "").strip():
+        return "environment"
+    try:
+        if token_file().read_text(encoding="utf-8").strip():
+            return "user"
+    except OSError:
+        pass
+    return "bundled" if BUNDLED_TMDB_READ_TOKEN.strip() else None
 
 
 def store_token(token: str) -> Path:
@@ -397,3 +415,42 @@ def cached_image(image_path: str | None, *, size: str = "w780") -> str | None:
         if destination.is_file() and destination.stat().st_size > 0
         else None
     )
+
+
+def _youtube_thumbnail_destination(video_key: str) -> Path | None:
+    """Return a cache destination only for a safe YouTube video key."""
+    normalized = video_key.strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{6,32}", normalized):
+        return None
+    return cache_dir() / f"youtube-{normalized}.jpg"
+
+
+def cached_youtube_thumbnail(video_key: str) -> str | None:
+    destination = _youtube_thumbnail_destination(video_key)
+    if destination is None:
+        return None
+    return (
+        str(destination)
+        if destination.is_file() and destination.stat().st_size > 0
+        else None
+    )
+
+
+def cache_youtube_thumbnail(video_key: str) -> str | None:
+    """Download the preview image for a TMDB-provided YouTube video."""
+    destination = _youtube_thumbnail_destination(video_key)
+    if destination is None:
+        return None
+    cached = cached_youtube_thumbnail(video_key)
+    if cached is not None:
+        return cached
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return None
+    downloaded = image_http.download(
+        f"https://i.ytimg.com/vi/{video_key.strip()}/hqdefault.jpg",
+        destination,
+        max_bytes=4 * 1024 * 1024,
+    )
+    return str(destination) if downloaded else None

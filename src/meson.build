@@ -1,11 +1,24 @@
 app_id = 'io.github.cineshelf.CineShelf'
 python_package_dir = python.get_install_dir() / 'cineshelf'
 
+build_configuration = configuration_data()
+build_configuration.set_quoted('SIMKL_CLIENT_ID', get_option('simkl_client_id'))
+build_configuration.set_quoted('TMDB_READ_TOKEN', get_option('tmdb_read_token'))
+configured_build_module = configure_file(
+  input: 'cineshelf/_build_config.py.in',
+  output: '_build_config.py',
+  configuration: build_configuration,
+  install: true,
+  install_dir: python_package_dir,
+)
+
 python.install_sources(
   files(
     'cineshelf/__init__.py',
     'cineshelf/application.py',
     'cineshelf/main.py',
+    'cineshelf/onboarding.py',
+    'cineshelf/state_store.py',
     'cineshelf/window.py',
   ),
   subdir: 'cineshelf',
@@ -54,6 +67,7 @@ cineshelf_resources = custom_target(
     'cineshelf/ui/window.ui',
     'cineshelf/style.css',
     'cineshelf/library.json',
+    'cineshelf/assets/tmdb-logo.svg',
   ),
   output: 'cineshelf.gresource',
   command: [

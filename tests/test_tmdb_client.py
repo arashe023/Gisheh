@@ -38,6 +38,24 @@ class TmdbClientTests(unittest.TestCase):
             ):
                 self.assertEqual(tmdb_client.read_token(), "environment-token")
 
+    def test_bundled_token_is_used_when_no_developer_override_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            token_path = Path(temporary_directory) / "missing-token"
+            with (
+                patch.dict(
+                    os.environ,
+                    {"TMDB_READ_TOKEN": "", "TMDB_TOKEN_FILE": str(token_path)},
+                    clear=False,
+                ),
+                patch.object(
+                    tmdb_client,
+                    "BUNDLED_TMDB_READ_TOKEN",
+                    "bundled-token",
+                ),
+            ):
+                self.assertEqual(tmdb_client.read_token(), "bundled-token")
+                self.assertEqual(tmdb_client.token_source(), "bundled")
+
     def test_store_token_uses_private_permissions(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             token_path = Path(temporary_directory) / "config" / "token"
@@ -286,6 +304,38 @@ class TmdbClientTests(unittest.TestCase):
                 cached = tmdb_client.cache_image("/poster.jpg", size="w500")
         self.assertIsNotNone(cached)
         downloader.assert_called_once()
+
+    def test_cache_youtube_thumbnail_uses_safe_cached_filename(self) -> None:
+        def download(url: str, destination: Path, **kwargs: object) -> bool:
+            self.assertEqual(url, "https://i.ytimg.com/vi/abc_123-XYZ/hqdefault.jpg")
+            self.assertEqual(kwargs["max_bytes"], 4 * 1024 * 1024)
+            destination.write_bytes(b"image")
+            return True
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            with (
+                patch.dict(
+                    os.environ,
+                    {"XDG_CACHE_HOME": temporary_directory},
+                    clear=False,
+                ),
+                patch.object(
+                    tmdb_client.image_http,
+                    "download",
+                    side_effect=download,
+                ),
+            ):
+                cached = tmdb_client.cache_youtube_thumbnail("abc_123-XYZ")
+                self.assertEqual(
+                    cached,
+                    str(tmdb_client.cache_dir() / "youtube-abc_123-XYZ.jpg"),
+                )
+                self.assertEqual(
+                    tmdb_client.cached_youtube_thumbnail("abc_123-XYZ"),
+                    cached,
+                )
+
+        self.assertIsNone(tmdb_client.cache_youtube_thumbnail("../../unsafe"))
 
 
 if __name__ == "__main__":

@@ -90,6 +90,92 @@ class ExploreLayoutTests(unittest.TestCase):
         assert avatar is not None
         self.assertIn("content-skeleton-avatar", avatar.get_css_classes())
 
+    def test_missing_artwork_uses_loading_surface_instead_of_generated_cover(self) -> None:
+        from gi.repository import Gtk
+
+        records, _explore, _totals = cineshelf.load_catalog(
+            include_sample_data=True
+        )
+        record = replace(
+            records[0],
+            artwork_file=None,
+            poster_file=None,
+            backdrop_file=None,
+        )
+        poster = cineshelf.PosterWidget(record, 140, 210)
+        media = poster.get_first_child()
+
+        self.assertIsInstance(media, Gtk.Box)
+        assert media is not None
+        self.assertIn("content-skeleton-surface", media.get_css_classes())
+        self.assertIn("Loading artwork", media.get_tooltip_text())
+
+    def test_episode_artwork_keeps_its_16_by_9_size_and_has_no_number_overlay(
+        self,
+    ) -> None:
+        from gi.repository import Gtk
+
+        records, _explore, _totals = cineshelf.load_catalog(
+            include_sample_data=True
+        )
+        record = next(item for item in records if item.media_type == "Shows")
+        episode = cineshelf.EpisodeInfo(
+            id="episode-1",
+            number=1,
+            title="Pilot",
+            date="2026-01-01",
+            description="Overview",
+            watched=False,
+            image_variant=0,
+        )
+        controller = object.__new__(cineshelf.CineShelfWindow)
+        artwork = controller._episode_artwork(record, episode, 112, 63)
+
+        self.assertEqual(artwork.get_size_request(), (112, 63))
+        self.assertEqual(artwork.get_valign(), Gtk.Align.CENTER)
+        self.assertIn("episode-artwork", artwork.get_css_classes())
+        self.assertIsNone(artwork.get_child().get_next_sibling())
+
+    def test_episode_watch_controls_use_native_adwaita_button_styles(self) -> None:
+        from gi.repository import Gtk
+
+        row_button = cineshelf.CineShelfWindow._episode_watch_button(False)
+        self.assertIn("circular", row_button.get_css_classes())
+        self.assertIn("flat", row_button.get_css_classes())
+        self.assertIn("episode-watch-button", row_button.get_css_classes())
+        self.assertIsInstance(row_button.get_child(), Gtk.Image)
+        self.assertEqual(row_button.get_child().get_pixel_size(), 14)
+
+        watched_button = cineshelf.CineShelfWindow._episode_watch_button(True)
+        watched_icon = watched_button.get_child()
+        self.assertIsInstance(watched_icon, Gtk.Image)
+        self.assertEqual(watched_icon.get_icon_name(), "object-select-symbolic")
+        self.assertIn("success", watched_icon.get_css_classes())
+
+        stylesheet = (
+            Path(__file__).resolve().parents[1] / "src/cineshelf/style.css"
+        ).read_text(encoding="utf-8")
+        compact_rule = stylesheet.split(
+            "button.episode-watch-button {"
+        )[1].split("}")[0]
+        self.assertIn("min-width: 28px", compact_rule)
+        self.assertIn("min-height: 28px", compact_rule)
+        self.assertIn("padding: 0", compact_rule)
+        hover_rule = stylesheet.split(
+            "button.episode-watch-button:hover {"
+        )[1].split("}")[0]
+        self.assertIn("background-color: transparent", hover_rule)
+        self.assertIn("box-shadow: none", hover_rule)
+
+        detail_button = cineshelf.CineShelfWindow._detail_navigation_action(
+            "object-select-symbolic", "Mark watched"
+        )
+        self.assertNotIn("pill", detail_button.get_css_classes())
+        self.assertNotIn("flat", detail_button.get_css_classes())
+        content = detail_button.get_child()
+        self.assertIsInstance(content, Gtk.Box)
+        self.assertEqual(content.get_orientation(), Gtk.Orientation.HORIZONTAL)
+
     def test_carousel_labels_are_bounded_and_truncate_after_two_lines(self) -> None:
         from gi.repository import Gtk, Pango
 
@@ -144,6 +230,11 @@ class DetailActionLayoutTests(unittest.TestCase):
         self.assertFalse(cineshelf.should_show_completion_progress("Movies"))
         self.assertTrue(cineshelf.should_show_completion_progress("Shows"))
         self.assertTrue(cineshelf.should_show_completion_progress("Anime"))
+
+    def test_season_completion_requires_at_least_one_episode(self) -> None:
+        self.assertFalse(cineshelf.is_episode_group_complete(0, 0))
+        self.assertFalse(cineshelf.is_episode_group_complete(5, 6))
+        self.assertTrue(cineshelf.is_episode_group_complete(6, 6))
 
     def test_rating_popover_and_native_secondary_menu_have_no_custom_rows(self) -> None:
         root = ET.parse(cineshelf.UI_FILE).getroot()
@@ -202,16 +293,30 @@ class DetailActionLayoutTests(unittest.TestCase):
     def test_season_and_episode_actions_keep_only_watched(self) -> None:
         source = Path(cineshelf.__file__).read_text(encoding="utf-8")
         season_block = source.split("season_actions = Gtk.Box(")[1].split(
-            "episodes_heading = Gtk.CenterBox()"
+            'episodes_title = Gtk.Label(label="Episodes", xalign=0)'
         )[0]
         self.assertIn("season_watched_button", season_block)
         self.assertNotIn("Comments", season_block)
-        episode_block = source.split("episode_actions = Gtk.Box(")[1].split(
+        episode_block = source.split("episode_actions = Adw.WrapBox()")[1].split(
             "self.episode_watched_at_label"
         )[0]
         self.assertIn("episode_watched_button", episode_block)
         self.assertNotIn("Comments", episode_block)
         self.assertNotIn("Check in", episode_block)
+
+    def test_season_page_has_no_redundant_switcher_or_episode_count(self) -> None:
+        source = Path(cineshelf.__file__).read_text(encoding="utf-8")
+        builder = source.split("def _build_episode_navigation_pages")[1].split(
+            "def _detail_navigation_action"
+        )[0]
+
+        self.assertNotIn("season_switcher", builder)
+        self.assertNotIn("season_episode_count", builder)
+        self.assertIn(
+            "self.season_detail_box.append(self.season_summary_label)",
+            builder,
+        )
+        self.assertIn("self.season_detail_box.append(episodes_title)", builder)
 
     def test_profile_avatar_is_a_direct_navigation_button(self) -> None:
         root = ET.parse(cineshelf.UI_FILE).getroot()
@@ -233,6 +338,8 @@ class SettingsDialogTests(unittest.TestCase):
     def _controller() -> cineshelf.CineShelfWindow:
         controller = object.__new__(cineshelf.CineShelfWindow)
         controller.simkl_connected = False
+        controller.simkl_client_id = "public-client-id"
+        controller.library_mode = cineshelf.LIBRARY_MODE_LOCAL
         controller.tmdb_token = None
         controller.auto_sync = True
         controller.color_scheme = "dark"
@@ -255,16 +362,31 @@ class SettingsDialogTests(unittest.TestCase):
             "General",
         )
         self.assertEqual(controller.settings_color_scheme_row.get_selected(), 2)
+        self.assertFalse(hasattr(controller, "settings_accent_row"))
         self.assertEqual(controller.settings_media_row.get_selected(), 0)
         self.assertEqual(controller.settings_view_row.get_selected(), 0)
         self.assertTrue(controller.settings_auto_sync_row.get_active())
-        self.assertEqual(controller.settings_simkl_button.get_label(), "Connect")
-        self.assertEqual(controller.settings_tmdb_button.get_label(), "Connect")
+        self.assertEqual(controller.settings_simkl_button.get_label(), "Use Simkl")
+        self.assertIn(
+            "Local-first",
+            controller.settings_library_mode_row.get_subtitle(),
+        )
+        self.assertEqual(controller.settings_tmdb_button.get_label(), "Developer Setup")
         self.assertFalse(controller.settings_simkl_disconnect_button.get_visible())
         self.assertFalse(controller.settings_tmdb_disconnect_button.get_visible())
+        self.assertEqual(
+            controller.settings_factory_reset_row.get_title(),
+            "Reset CineShelf",
+        )
+        self.assertTrue(
+            controller.settings_factory_reset_button.has_css_class(
+                "destructive-action"
+            )
+        )
 
     def test_connected_services_are_reflected_in_settings(self) -> None:
         controller = self._controller()
+        controller.library_mode = cineshelf.LIBRARY_MODE_SIMKL
         controller.simkl_connected = True
         controller.tmdb_token = "secret-token"
 
@@ -324,12 +446,48 @@ class SettingsDialogTests(unittest.TestCase):
             self.assertEqual(reader.view_mode, "grid")
 
 
+class DataSourceCreditsTests(unittest.TestCase):
+    def test_tmdb_attribution_and_official_logo_are_bundled(self) -> None:
+        application_source = (
+            Path(__file__).resolve().parents[1] / "src/cineshelf/application.py"
+        ).read_text(encoding="utf-8")
+        resource_manifest = (
+            Path(__file__).resolve().parents[1]
+            / "src/cineshelf/io.github.cineshelf.CineShelf.gresource.xml"
+        ).read_text(encoding="utf-8")
+        logo = (
+            Path(__file__).resolve().parents[1]
+            / "src/cineshelf/assets/tmdb-logo.svg"
+        )
+
+        self.assertIn(
+            "This product uses the TMDB API but is not endorsed or certified by TMDB.",
+            application_source,
+        )
+        self.assertIn("https://www.themoviedb.org", application_source)
+        self.assertIn("Credits & Data Sources", application_source)
+        self.assertIn("assets/tmdb-logo.svg", resource_manifest)
+        self.assertTrue(logo.is_file())
+
+    def test_simkl_release_flow_never_asks_users_for_developer_credentials(self) -> None:
+        window_source = (
+            Path(__file__).resolve().parents[1] / "src/cineshelf/window.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("Create an app in Simkl Developer Settings", window_source)
+        self.assertNotIn("Open Simkl Developer Settings", window_source)
+        self.assertNotIn("Enter a Simkl Client ID", window_source)
+        self.assertIn("Simkl sign-in started; requesting a PIN.", window_source)
+
+
 class SeasonProgressTests(unittest.TestCase):
     @staticmethod
     def _record_with_seasons(
         seasons: tuple[cineshelf.SeasonInfo, ...],
     ) -> cineshelf.TitleRecord:
-        records, _explore, _totals = cineshelf.load_catalog()
+        records, _explore, _totals = cineshelf.load_catalog(
+            include_sample_data=True
+        )
         base = next(record for record in records if record.media_type == "Shows")
         return replace(base, seasons=seasons)
 
@@ -380,6 +538,52 @@ class SeasonProgressTests(unittest.TestCase):
         self.assertIsNotNone(next_item)
         assert next_item is not None
         self.assertEqual(controller._episode_code(record, *next_item), "S1E1")
+
+    def test_completion_progress_uses_actual_watched_episode_count(self) -> None:
+        special = cineshelf.SeasonInfo("specials", 0, "Specials", 1, 1)
+        first = cineshelf.SeasonInfo("s1", 1, "Season 1", 3, 8)
+        second = cineshelf.SeasonInfo("s2", 2, "Season 2", 2, 4)
+        record = self._record_with_seasons((special, first, second))
+        controller = self._controller()
+
+        self.assertEqual(controller._series_completion_progress(record), (5, 12))
+
+    def test_completion_progress_reflects_episode_overrides(self) -> None:
+        season = cineshelf.SeasonInfo("s1", 1, "Season 1", 1, 4)
+        record = self._record_with_seasons((season,))
+        controller = self._controller()
+        controller.episode_status_overrides[f"{record.id}/s1/e2"] = True
+
+        self.assertEqual(controller._series_completion_progress(record), (2, 4))
+
+    def test_completed_series_reports_full_progress(self) -> None:
+        season = cineshelf.SeasonInfo("s1", 1, "Season 1", 2, 6)
+        record = self._record_with_seasons((season,))
+        controller = self._controller()
+        controller.completed.add(record.id)
+
+        self.assertEqual(controller._series_completion_progress(record), (6, 6))
+
+    def test_activity_card_shows_partial_percentage_and_episode_counts(self) -> None:
+        from gi.repository import Adw, Gtk
+
+        season = cineshelf.SeasonInfo("s1", 1, "Season 1", 5, 12)
+        record = self._record_with_seasons((season,))
+        controller = self._controller()
+        controller.activity_progress_card = Adw.Bin()
+        controller.activity_status = Gtk.Label()
+        controller.activity_percentage = Gtk.Label()
+        controller.activity_progress = Gtk.ProgressBar()
+
+        controller._update_activity_progress(record)
+
+        self.assertTrue(controller.activity_progress_card.get_visible())
+        self.assertEqual(
+            controller.activity_status.get_label(),
+            "5 of 12 episodes watched",
+        )
+        self.assertEqual(controller.activity_percentage.get_label(), "42%")
+        self.assertAlmostEqual(controller.activity_progress.get_fraction(), 5 / 12)
 
     def test_exact_simkl_history_preserves_a_gap_between_watched_episodes(self) -> None:
         payload = {
@@ -454,7 +658,9 @@ class SeasonProgressTests(unittest.TestCase):
 
 class MediaCollectionTests(unittest.TestCase):
     def test_media_items_keep_primary_first_and_remove_duplicates(self) -> None:
-        records, _explore, _totals = cineshelf.load_catalog()
+        records, _explore, _totals = cineshelf.load_catalog(
+            include_sample_data=True
+        )
         with tempfile.TemporaryDirectory() as temporary_directory:
             first = Path(temporary_directory) / "first.jpg"
             second = Path(temporary_directory) / "second.jpg"
@@ -493,6 +699,7 @@ class SimklMappingTests(unittest.TestCase):
                     "user_rating": 9,
                     "movie": {
                         "title": "Example Movie",
+                        "runtime": 124,
                         "year": 2025,
                         "poster": "12/345",
                         "ids": {"simkl": 101, "tmdb": 201},
@@ -506,6 +713,7 @@ class SimklMappingTests(unittest.TestCase):
                     "total_episodes_count": 10,
                     "show": {
                         "title": "Example Show",
+                        "runtime": 55,
                         "year": 2024,
                         "ids": {"simkl": 102, "tmdb": 202},
                     },
@@ -542,12 +750,14 @@ class SimklMappingTests(unittest.TestCase):
         self.assertTrue(all(record.year == 0 for record in records))
         self.assertEqual(movie.media_type, "Movies")
         self.assertEqual(movie.status, "Watched")
+        self.assertEqual(movie.runtime, "2h 4m")
         self.assertEqual(movie.user_rating, 9)
         self.assertEqual(movie.rating, 0.0)
         self.assertIsNone(movie.poster_file)
         self.assertEqual(movie.tmdb_id, 201)
         self.assertEqual(show.media_type, "Shows")
         self.assertEqual(show.status, "Watching")
+        self.assertEqual(show.runtime, "55m")
         self.assertEqual(show.seasons[0].watched, 4)
         self.assertEqual(anime.media_type, "Anime")
         self.assertEqual(anime.status, "Watchlist")
@@ -650,6 +860,30 @@ class SimklMappingTests(unittest.TestCase):
             enriched.external_ratings,
             (("TMDB", "7.8"), ("Your rating", "9")),
         )
+
+    def test_tv_runtime_falls_back_to_last_episode_when_average_is_missing(self) -> None:
+        record = cineshelf.title_record_from_tmdb(
+            {
+                "id": 81356,
+                "name": "Sex Education",
+                "first_air_date": "2019-01-11",
+            },
+            "Shows",
+            1,
+            None,
+            None,
+        )
+        summary = {
+            "id": 81356,
+            "name": "Sex Education",
+            "first_air_date": "2019-01-11",
+            "episode_run_time": [],
+            "last_episode_to_air": {"runtime": 85},
+        }
+
+        enriched = cineshelf.enrich_record_from_tmdb(record, summary)
+
+        self.assertEqual(enriched.runtime, "1h 25m")
 
     def test_stats_refresh_is_skipped_when_activity_is_unchanged(self) -> None:
         self.assertFalse(

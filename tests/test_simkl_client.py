@@ -26,14 +26,20 @@ class SimklClientTests(unittest.TestCase):
                 "SIMKL_CLIENT_ID": "",
                 "SIMKL_ACCESS_TOKEN": "",
             }
-            with patch.dict(os.environ, environment, clear=False):
+            with (
+                patch.dict(os.environ, environment, clear=False),
+                patch.object(simkl_client, "_store_keyring_token", return_value=False),
+                patch.object(simkl_client, "_lookup_keyring_token", return_value=None),
+            ):
                 client_path = simkl_client.store_client_id("client-id")
-                token_path = simkl_client.store_token("access-token")
+                storage = simkl_client.store_token("access-token")
+                token_path = simkl_client.token_file()
                 snapshot_path = simkl_client.store_snapshot(
                     {"account": {"id": 7}},
                     {"total_mins": 42},
                     {"movies": []},
                 )
+                self.assertEqual(storage, "private-file")
                 self.assertEqual(simkl_client.read_client_id(), "client-id")
                 self.assertEqual(simkl_client.read_token(), "access-token")
                 self.assertEqual(
@@ -48,6 +54,49 @@ class SimklClientTests(unittest.TestCase):
 
             for path in (client_path, token_path, snapshot_path):
                 self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+
+    def test_keyring_is_preferred_and_legacy_token_file_is_removed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            environment = {
+                "XDG_CONFIG_HOME": temporary_directory,
+                "SIMKL_ACCESS_TOKEN": "",
+            }
+            with (
+                patch.dict(os.environ, environment, clear=False),
+                patch.object(simkl_client, "_store_keyring_token", return_value=True),
+                patch.object(
+                    simkl_client,
+                    "_lookup_keyring_token",
+                    return_value="keyring-token",
+                ),
+            ):
+                simkl_client.token_file().parent.mkdir(parents=True)
+                simkl_client.token_file().write_text("legacy-token\n", encoding="utf-8")
+                storage = simkl_client.store_token("keyring-token")
+
+                self.assertEqual(storage, "keyring")
+                self.assertEqual(simkl_client.read_token(), "keyring-token")
+                self.assertFalse(simkl_client.token_file().exists())
+
+    def test_bundled_client_id_is_used_without_user_configuration(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "XDG_CONFIG_HOME": temporary_directory,
+                        "SIMKL_CLIENT_ID": "",
+                    },
+                    clear=False,
+                ),
+                patch.object(
+                    simkl_client,
+                    "BUNDLED_SIMKL_CLIENT_ID",
+                    "bundled-client-id",
+                ),
+            ):
+                self.assertEqual(simkl_client.read_client_id(), "bundled-client-id")
+                self.assertEqual(simkl_client.client_id_source(), "bundled")
 
     def test_environment_credentials_have_priority(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

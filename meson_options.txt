@@ -4,3 +4,17 @@ option(
   value: true,
   description: 'Build and register the test suite',
 )
+
+option(
+  'simkl_client_id',
+  type: 'string',
+  value: '44a72e203caa001bdd29ccb196f6e219cf9f66bdf9315508705e28d7ee9b1f49',
+  description: 'Public Simkl OAuth Client ID bundled with release builds',
+)
+
+option(
+  'tmdb_read_token',
+  type: 'string',
+  value: 'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI2NjkxZjQ4MmFhMTRiMDBhNDY0NmZkMWMxZTZhNjZmOCIsIm5iZiI6MTY5NjUwMjkzMS42NzIsInN1YiI6IjY1MWU5NDkzZWE4NGM3MDEyZDY5Y2EyMSIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.6YKXnY8oZCfm4GCuFdqvj3--yTL5J-h-IhXCwHmfYJ4',
+  description: 'Public, extractable TMDB read credential bundled with release builds',
+)

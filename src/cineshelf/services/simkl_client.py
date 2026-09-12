@@ -16,7 +16,15 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+import gi
+from gi.repository import GLib
+
 from . import image_http
+
+try:
+    from .._build_config import BUNDLED_SIMKL_CLIENT_ID
+except ImportError:
+    BUNDLED_SIMKL_CLIENT_ID = ""
 
 
 APP_ID = "io.github.cineshelf.CineShelf"
@@ -725,13 +733,91 @@ def _read_text(path: Path) -> str | None:
 
 
 def read_client_id() -> str | None:
-    return os.environ.get("SIMKL_CLIENT_ID", "").strip() or _read_text(
-        client_id_file()
+    return (
+        os.environ.get("SIMKL_CLIENT_ID", "").strip()
+        or BUNDLED_SIMKL_CLIENT_ID.strip()
+        or _read_text(client_id_file())
     )
 
 
+def client_id_source() -> str | None:
+    """Describe where the public OAuth Client ID came from."""
+    if os.environ.get("SIMKL_CLIENT_ID", "").strip():
+        return "environment"
+    if BUNDLED_SIMKL_CLIENT_ID.strip():
+        return "bundled"
+    return "legacy-file" if _read_text(client_id_file()) else None
+
+
+def _secret_schema() -> tuple[Any, Any]:
+    """Load libsecret lazily so non-GNOME systems retain the file fallback."""
+    gi.require_version("Secret", "1")
+    from gi.repository import Secret
+
+    schema = Secret.Schema.new(
+        f"{APP_ID}.SimklToken",
+        Secret.SchemaFlags.NONE,
+        {
+            "application": Secret.SchemaAttributeType.STRING,
+            "account": Secret.SchemaAttributeType.STRING,
+            "profile": Secret.SchemaAttributeType.STRING,
+        },
+    )
+    return Secret, schema
+
+
+def _secret_attributes() -> dict[str, str]:
+    return {
+        "application": APP_ID,
+        "account": "simkl",
+        "profile": str(config_dir()),
+    }
+
+
+def _lookup_keyring_token() -> str | None:
+    try:
+        secret, schema = _secret_schema()
+        value = secret.password_lookup_sync(schema, _secret_attributes(), None)
+    except (ImportError, ValueError, RuntimeError, GLib.Error) as error:
+        LOGGER.debug("Secret Service lookup is unavailable: %s", error)
+        return None
+    return str(value).strip() if value else None
+
+
+def _store_keyring_token(token: str) -> bool:
+    try:
+        secret, schema = _secret_schema()
+        return bool(
+            secret.password_store_sync(
+                schema,
+                _secret_attributes(),
+                secret.COLLECTION_DEFAULT,
+                "CineShelf Simkl access token",
+                token,
+                None,
+            )
+        )
+    except (ImportError, ValueError, RuntimeError, GLib.Error) as error:
+        LOGGER.warning("Secret Service storage is unavailable: %s", error)
+        return False
+
+
+def _clear_keyring_token() -> bool:
+    try:
+        secret, schema = _secret_schema()
+        secret.password_clear_sync(schema, _secret_attributes(), None)
+        return True
+    except (ImportError, ValueError, RuntimeError, GLib.Error) as error:
+        LOGGER.warning("Secret Service removal is unavailable: %s", error)
+        return False
+
+
 def read_token() -> str | None:
-    return os.environ.get("SIMKL_ACCESS_TOKEN", "").strip() or _read_text(token_file())
+    return (
+        os.environ.get("SIMKL_ACCESS_TOKEN", "").strip()
+        or _lookup_keyring_token()
+        or _read_text(token_file())
+    )
 
 
 def _store_private_text(path: Path, value: str) -> Path:
@@ -764,17 +850,35 @@ def store_client_id(client_id: str) -> Path:
     return _store_private_text(client_id_file(), client_id)
 
 
-def store_token(token: str) -> Path:
-    return _store_private_text(token_file(), token)
+def store_token(token: str) -> str:
+    normalized = token.strip()
+    if not normalized:
+        raise SimklError("The value cannot be empty.")
+    if _store_keyring_token(normalized):
+        try:
+            token_file().unlink()
+        except FileNotFoundError:
+            pass
+        except OSError as error:
+            LOGGER.warning("Could not remove the legacy Simkl token file: %s", error)
+        return "keyring"
+    _store_private_text(token_file(), normalized)
+    return "private-file"
 
 
-def clear_token() -> None:
+def clear_token() -> bool:
+    keyring_cleared = _clear_keyring_token()
     try:
         token_file().unlink()
     except FileNotFoundError:
         pass
     except OSError as error:
         raise SimklError(f"Could not remove the Simkl token: {error}") from None
+    if not keyring_cleared:
+        LOGGER.warning(
+            "The local token file was removed, but Secret Service could not be reached."
+        )
+    return keyring_cleared
 
 
 def clear_account_cache() -> None:
@@ -785,6 +889,28 @@ def clear_account_cache() -> None:
             pass
         except OSError as error:
             raise SimklError(f"Could not remove cached Simkl data: {error}") from None
+
+
+def clear_all_user_data() -> None:
+    """Remove Simkl credentials, snapshots, artwork and Calendar downloads."""
+    failures: list[str] = []
+    if not clear_token():
+        failures.append("the Secret Service token could not be removed")
+    try:
+        client_id_file().unlink()
+    except FileNotFoundError:
+        pass
+    except OSError as error:
+        failures.append(f"the legacy Client ID could not be removed: {error}")
+    for destination in (cache_dir(), calendar_cache_dir()):
+        try:
+            shutil.rmtree(destination)
+        except FileNotFoundError:
+            pass
+        except OSError as error:
+            failures.append(f"cache could not be cleared: {error}")
+    if failures:
+        raise SimklError("; ".join(failures))
 
 
 def _request_json(

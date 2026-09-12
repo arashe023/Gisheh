@@ -16,7 +16,9 @@ from cineshelf.services import tmdb_client
 
 
 def _parent(media_type: str = "Movies") -> cineshelf.TitleRecord:
-    records, _explore, _totals = cineshelf.load_catalog()
+    records, _explore, _totals = cineshelf.load_catalog(
+        include_sample_data=True
+    )
     base = next(record for record in records if record.media_type == media_type)
     namespace = "movie" if media_type == "Movies" else "tv"
     return replace(base, tmdb_id=10, tmdb_media_type=namespace)
@@ -79,6 +81,38 @@ class RecommendationNormalizationTests(unittest.TestCase):
             self.assertEqual(records[0].media_type, media_type)
             self.assertEqual(records[0].tmdb_media_type, "tv")
 
+    def test_youtube_videos_include_cached_thumbnails_and_playable_urls(self) -> None:
+        with patch.object(
+            tmdb_client,
+            "cached_youtube_thumbnail",
+            side_effect=lambda key: f"/cache/{key}.jpg",
+        ):
+            videos = cineshelf.video_infos_from_tmdb(
+                [
+                    {"site": "YouTube", "key": "trailer_123", "name": "Trailer"},
+                    {"site": "Vimeo", "key": "ignored", "name": "Ignored"},
+                    {"site": "YouTube", "key": "trailer_123", "name": "Duplicate"},
+                ]
+            )
+
+        self.assertEqual(len(videos), 1)
+        self.assertEqual(videos[0].thumbnail_file, "/cache/trailer_123.jpg")
+        self.assertEqual(
+            videos[0].url,
+            "https://www.youtube.com/watch?v=trailer_123",
+        )
+
+    def test_title_external_url_uses_tmdb_media_namespace(self) -> None:
+        movie = _parent("Movies")
+        show = _parent("Shows")
+        self.assertEqual(
+            cineshelf.CineShelfWindow._title_external_url(movie),
+            "https://www.themoviedb.org/movie/10",
+        )
+        self.assertEqual(
+            cineshelf.CineShelfWindow._title_external_url(show),
+            "https://www.themoviedb.org/tv/10",
+        )
     def test_movie_item_under_show_parent_uses_movie_namespace(self) -> None:
         parent = _parent("Shows")
         with patch.object(
@@ -155,7 +189,9 @@ def _controller() -> cineshelf.CineShelfWindow:
 class RecommendationCacheTests(unittest.TestCase):
     def test_no_local_fallback_without_tmdb_data(self) -> None:
         controller = _controller()
-        records, _explore, _totals = cineshelf.load_catalog()
+        records, _explore, _totals = cineshelf.load_catalog(
+            include_sample_data=True
+        )
         first = records[0]
         controller.records_by_id = {record.id: record for record in records}
         self.assertEqual(controller._related_records(first), ())
@@ -233,6 +269,27 @@ class RecommendationCacheTests(unittest.TestCase):
         from gi.repository import GLib
 
         self.assertFalse(result)
+
+    def test_downloaded_artwork_is_immediately_used_by_the_card(self) -> None:
+        controller = _controller()
+        parent = _parent("Movies")
+        with patch.object(tmdb_client, "cached_image", return_value=None):
+            item = cineshelf.recommendation_records_from_tmdb(
+                [_item(92, "Artwork")], parent
+            )[0]
+        controller.records_by_id = {parent.id: parent, item.id: item}
+        controller._tmdb_detail_generations[parent.id] = 1
+        controller.library_ids = {parent.id}
+        controller.detail_record_id = None
+        controller.selected_id = None
+
+        controller._apply_tmdb_recommendation_artwork(
+            parent.id, 1, item.id, "/cache/poster.jpg"
+        )
+
+        updated = controller.records_by_id[item.id]
+        self.assertEqual(updated.poster_file, "/cache/poster.jpg")
+        self.assertEqual(updated.artwork_file, "/cache/poster.jpg")
 
     def test_recommendation_click_opens_details(self) -> None:
         controller = _controller()

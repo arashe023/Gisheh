@@ -31,6 +31,16 @@ gi.require_version("PangoCairo", "1.0")
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk, Pango, PangoCairo  # noqa: E402
 
 from .services import simkl_client, tmdb_client  # noqa: E402
+from .state_store import (  # noqa: E402
+    LIBRARY_MODE_LOCAL,
+    LIBRARY_MODE_SIMKL,
+    LIBRARY_MODES,
+    clear_state,
+    read_state,
+    save_library_mode,
+    user_state_file as persistent_user_state_file,
+    write_state,
+)
 
 
 APP_ID = "io.github.cineshelf.CineShelf"
@@ -98,6 +108,11 @@ COLOR_SCHEME_LABELS = ("Follow system", "Light", "Dark")
 def should_show_completion_progress(media_type: str) -> bool:
     """Return whether episodic completion progress belongs in title details."""
     return media_type != "Movies"
+
+
+def is_episode_group_complete(watched: int, total: int) -> bool:
+    """Treat a season as complete only when it has episodes and all are watched."""
+    return total > 0 and watched >= total
 
 TMDB_GENRES = {
     12: "Adventure",
@@ -249,13 +264,57 @@ def read_application_log(max_bytes: int = 250_000) -> str:
     return text or "No log entries yet."
 
 
+def clear_application_logs() -> None:
+    """Close active file handlers and remove the log plus rotated copies."""
+    global _APP_LOGGER
+    if _APP_LOGGER is not None:
+        for handler in tuple(_APP_LOGGER.handlers):
+            _APP_LOGGER.removeHandler(handler)
+            handler.close()
+        _APP_LOGGER = None
+    destination = application_log_file()
+    for path in destination.parent.glob(f"{destination.name}*"):
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def clear_desktop_preferences() -> None:
+    """Reset any GSettings values left by this or an earlier CineShelf build."""
+    source = Gio.SettingsSchemaSource.get_default()
+    schema = source.lookup(APP_ID, True) if source is not None else None
+    if schema is None:
+        return
+    settings = Gio.Settings.new_full(schema, None, None)
+    for key in schema.list_keys():
+        settings.reset(key)
+    Gio.Settings.sync()
+
+
+def clear_all_user_data(state_file: Path | None = None) -> None:
+    """Delete personal state, credentials, downloads and diagnostic logs."""
+    failures: list[str] = []
+    operations = (
+        ("personal state", lambda: clear_state(state_file)),
+        ("TMDB developer token", tmdb_client.clear_token),
+        ("TMDB cache", tmdb_client.clear_cache),
+        ("Simkl data", simkl_client.clear_all_user_data),
+        ("desktop preferences", clear_desktop_preferences),
+        ("application logs", clear_application_logs),
+    )
+    for label, operation in operations:
+        try:
+            operation()
+        except (OSError, tmdb_client.TmdbError, simkl_client.SimklError) as error:
+            failures.append(f"{label}: {error}")
+    if failures:
+        raise OSError("; ".join(failures))
+
+
 def user_state_file() -> Path:
-    configured = os.environ.get("CINESHELF_STATE_FILE")
-    if configured:
-        return Path(configured).expanduser()
-    state_home = os.environ.get("XDG_STATE_HOME")
-    base = Path(state_home).expanduser() if state_home else Path.home() / ".local" / "state"
-    return base / APP_ID / "state.json"
+    """Compatibility wrapper for callers that imported this from window."""
+    return persistent_user_state_file()
 
 
 def runtime_minutes(value: str) -> int:
@@ -544,6 +603,7 @@ DETAILS_INLINE_WIDTH = 384
 DETAILS_OVERLAY_MAX_WIDTH = 388
 DETAILS_OVERLAY_MIN_WIDTH = 280
 DETAILS_NARROW_SAFE_MARGIN = 48
+EXPLORE_COLUMN_HYSTERESIS = 20
 
 
 @dataclass(frozen=True, slots=True)
@@ -668,6 +728,20 @@ class SeasonInfo:
     episode_items: tuple[EpisodeInfo, ...] = ()
 
 
+@dataclass(frozen=True, slots=True)
+class VideoInfo:
+    title: str
+    key: str
+    site: str = "YouTube"
+    thumbnail_file: str | None = None
+
+    @property
+    def url(self) -> str | None:
+        if self.site.casefold() == "youtube" and self.key:
+            return f"https://www.youtube.com/watch?v={self.key}"
+        return None
+
+
 def main_progress_season_indexes(seasons: tuple[SeasonInfo, ...]) -> tuple[int, ...]:
     """Use regular seasons for progress, falling back to Specials-only catalogs."""
     regular_indexes = tuple(
@@ -719,6 +793,7 @@ class TitleRecord:
     gallery_backdrops: tuple[str, ...] = ()
     gallery_posters: tuple[str, ...] = ()
     video_titles: tuple[str, ...] = ()
+    videos: tuple[VideoInfo, ...] = ()
     episode_history: tuple[EpisodeWatch, ...] = ()
     episode_history_loaded: bool = False
 
@@ -766,6 +841,21 @@ class TitleRecord:
                         image_variant=int(
                             episode.get("imageVariant", episode_position)
                         ),
+                        artwork_file=(
+                            str(episode["artworkFile"])
+                            if episode.get("artworkFile") is not None
+                            else None
+                        ),
+                        runtime=str(episode.get("runtime", "")),
+                        cast=tuple(
+                            CastMember(
+                                str(member["name"]),
+                                str(member["role"]),
+                                str(member.get("profileFile") or "") or None,
+                            )
+                            for member in episode.get("cast", ())
+                            if isinstance(member, dict)
+                        ),
                     )
                     for episode_position, episode in enumerate(
                         item.get("episodeItems", ()), start=1
@@ -810,7 +900,11 @@ class TitleRecord:
                 for item in raw.get("externalRatings", ())
             ),
             cast=tuple(
-                CastMember(str(item["name"]), str(item["role"]))
+                CastMember(
+                    str(item["name"]),
+                    str(item["role"]),
+                    str(item.get("profileFile") or "") or None,
+                )
                 for item in raw.get("cast", ())
             ),
             seasons=tuple(
@@ -860,10 +954,154 @@ class TitleRecord:
                 if raw.get("backdropFile") is not None
                 else None
             ),
+            gallery_backdrops=tuple(
+                str(value) for value in raw.get("galleryBackdrops", ())
+            ),
+            gallery_posters=tuple(
+                str(value) for value in raw.get("galleryPosters", ())
+            ),
+            video_titles=tuple(
+                str(value) for value in raw.get("videoTitles", ())
+            ),
+            videos=tuple(
+                VideoInfo(
+                    title=str(item.get("title") or "Trailer"),
+                    key=str(item.get("key") or ""),
+                    site=str(item.get("site") or "YouTube"),
+                    thumbnail_file=(
+                        str(item["thumbnailFile"])
+                        if item.get("thumbnailFile") is not None
+                        else None
+                    ),
+                )
+                for item in raw.get("videos", ())
+                if isinstance(item, dict) and item.get("key")
+            ),
+            episode_history=tuple(
+                EpisodeWatch(
+                    season=int(item["season"]),
+                    episode=int(item["episode"]),
+                    watched_at=str(item.get("watchedAt", "")),
+                )
+                for item in raw.get("episodeHistory", ())
+                if isinstance(item, dict)
+                and item.get("season") is not None
+                and item.get("episode") is not None
+            ),
+            episode_history_loaded=bool(raw.get("episodeHistoryLoaded", False)),
         )
 
 
-def load_catalog() -> tuple[
+def title_record_to_mapping(record: TitleRecord) -> dict[str, Any]:
+    """Serialize one locally owned library record without losing rich metadata."""
+    return {
+        "id": record.id,
+        "title": record.title,
+        "type": record.media_type,
+        "status": record.status,
+        "date": record.date,
+        "year": record.year,
+        "runtime": record.runtime,
+        "rating": record.rating,
+        "userRating": record.user_rating,
+        "genres": list(record.genres),
+        "country": record.country,
+        "creator": record.creator,
+        "description": record.description,
+        "posterPalette": list(record.poster_palette),
+        "posterVariant": record.poster_variant,
+        "order": record.order,
+        "certification": record.certification,
+        "language": record.language,
+        "availability": record.availability,
+        "network": record.network,
+        "externalRatings": [
+            {"source": source, "value": value}
+            for source, value in record.external_ratings
+        ],
+        "cast": [
+            {
+                "name": member.name,
+                "role": member.role,
+                "profileFile": member.profile_file,
+            }
+            for member in record.cast
+        ],
+        "seasons": [
+            {
+                "id": season.id,
+                "number": season.number,
+                "title": season.title,
+                "watched": season.watched,
+                "episodes": season.episodes,
+                "episodeItems": [
+                    {
+                        "id": episode.id,
+                        "number": episode.number,
+                        "title": episode.title,
+                        "date": episode.date,
+                        "description": episode.description,
+                        "watched": episode.watched,
+                        "imageVariant": episode.image_variant,
+                        "artworkFile": episode.artwork_file,
+                        "runtime": episode.runtime,
+                        "cast": [
+                            {
+                                "name": member.name,
+                                "role": member.role,
+                                "profileFile": member.profile_file,
+                            }
+                            for member in episode.cast
+                        ],
+                    }
+                    for episode in season.episode_items
+                ],
+            }
+            for season in record.seasons
+        ],
+        "recommendations": list(record.recommendations),
+        "discoverPeriod": record.discover_period,
+        "featured": record.featured,
+        "popularity": record.popularity,
+        "releaseRank": record.release_rank,
+        "layout": record.discover_layout,
+        "tmdbId": record.tmdb_id,
+        "tmdbMediaType": record.tmdb_media_type,
+        "simklId": record.simkl_id,
+        "imdbId": record.imdb_id,
+        "tvdbId": record.tvdb_id,
+        "malId": record.mal_id,
+        "artworkFile": record.artwork_file,
+        "posterFile": record.poster_file,
+        "backdropFile": record.backdrop_file,
+        "galleryBackdrops": list(record.gallery_backdrops),
+        "galleryPosters": list(record.gallery_posters),
+        "videoTitles": list(record.video_titles),
+        "videos": [
+            {
+                "title": item.title,
+                "key": item.key,
+                "site": item.site,
+                "thumbnailFile": item.thumbnail_file,
+            }
+            for item in record.videos
+        ],
+        "episodeHistory": [
+            {
+                "season": item.season,
+                "episode": item.episode,
+                "watchedAt": item.watched_at,
+            }
+            for item in record.episode_history
+        ],
+        "episodeHistoryLoaded": record.episode_history_loaded,
+    }
+
+
+def load_catalog(
+    *,
+    include_sample_data: bool = False,
+) -> tuple[
     tuple[TitleRecord, ...],
     tuple[TitleRecord, ...],
     dict[str, dict[str, int]],
@@ -878,13 +1116,22 @@ def load_catalog() -> tuple[
         with DATA_FILE.open(encoding="utf-8") as source:
             payload = json.load(source)
 
-    records = tuple(TitleRecord.from_mapping(raw) for raw in payload["library"])
-    explore_records = tuple(
-        TitleRecord.from_mapping(raw) for raw in payload.get("explore", ())
+    # Bundled records are retained solely as deterministic test fixtures.
+    # Production callers use the default, so both the personal library and
+    # Explore start empty and are populated only by user actions or live APIs.
+    records = (
+        tuple(TitleRecord.from_mapping(raw) for raw in payload["library"])
+        if include_sample_data
+        else ()
+    )
+    explore_records = (
+        tuple(TitleRecord.from_mapping(raw) for raw in payload.get("explore", ()))
+        if include_sample_data
+        else ()
     )
     totals = {
-        str(media): {str(status): int(count) for status, count in values.items()}
-        for media, values in payload["totals"].items()
+        media_type: {status: 0 for status in LIBRARY_FILTERS}
+        for media_type in MEDIA_TYPES
     }
     return records, explore_records, totals
 
@@ -1031,6 +1278,54 @@ def recommendation_records_from_tmdb(
     return tuple(records)
 
 
+def video_infos_from_tmdb(items: Any) -> tuple[VideoInfo, ...]:
+    """Normalize playable YouTube videos and attach any cached thumbnails."""
+    if not isinstance(items, (list, tuple)):
+        return ()
+    videos: list[VideoInfo] = []
+    seen: set[str] = set()
+    for item in items:
+        if len(videos) >= 8:
+            break
+        if not isinstance(item, dict):
+            continue
+        site = str(item.get("site") or "")
+        key = str(item.get("key") or "").strip()
+        if site.casefold() != "youtube" or not key or key in seen:
+            continue
+        seen.add(key)
+        videos.append(
+            VideoInfo(
+                title=str(item.get("name") or "Trailer"),
+                key=key,
+                site=site,
+                thumbnail_file=tmdb_client.cached_youtube_thumbnail(key),
+            )
+        )
+    return tuple(videos)
+
+
+def runtime_from_tmdb(payload: dict[str, Any], fallback: str) -> str:
+    """Read a useful duration even when TMDB omits episode_run_time."""
+    candidates: list[Any] = [payload.get("runtime")]
+    episode_runtimes = payload.get("episode_run_time")
+    if isinstance(episode_runtimes, (list, tuple)):
+        candidates.extend(episode_runtimes)
+    if fallback in {"", "Loading from TMDB…", "Runtime unavailable"}:
+        for episode_key in ("last_episode_to_air", "next_episode_to_air"):
+            episode = payload.get(episode_key)
+            if isinstance(episode, dict):
+                candidates.append(episode.get("runtime"))
+    for candidate in candidates:
+        try:
+            minutes = int(candidate or 0)
+        except (TypeError, ValueError):
+            continue
+        if minutes > 0:
+            return format_watch_time(minutes)
+    return fallback
+
+
 def enrich_record_from_tmdb(
     record: TitleRecord,
     payload: dict[str, Any],
@@ -1057,15 +1352,7 @@ def enrich_record_from_tmdb(
             if genre_id in TMDB_GENRES
         ) or record.genres
 
-    runtime_minutes = int(payload.get("runtime") or 0)
-    if not runtime_minutes:
-        episode_runtimes = payload.get("episode_run_time") or ()
-        runtime_minutes = int(episode_runtimes[0]) if episode_runtimes else 0
-    runtime = (
-        f"{runtime_minutes // 60}h {runtime_minutes % 60:02d}m"
-        if runtime_minutes >= 60
-        else f"{runtime_minutes}m" if runtime_minutes else record.runtime
-    )
+    runtime = runtime_from_tmdb(payload, record.runtime)
 
     countries = [
         str(item.get("name") or item.get("iso_3166_1"))
@@ -1187,6 +1474,15 @@ def title_records_from_simkl(payload: dict[str, Any]) -> tuple[TitleRecord, ...]
                 total_count = int(entry.get("total_episodes_count") or 0)
             except (TypeError, ValueError):
                 continue
+            try:
+                simkl_runtime_minutes = int(media.get("runtime") or 0)
+            except (TypeError, ValueError):
+                simkl_runtime_minutes = 0
+            simkl_runtime = (
+                format_watch_time(simkl_runtime_minutes)
+                if simkl_runtime_minutes > 0
+                else "Runtime unavailable"
+            )
             raw_seasons = entry.get("seasons")
             episode_history: list[EpisodeWatch] = []
             if isinstance(raw_seasons, list):
@@ -1243,7 +1539,7 @@ def title_records_from_simkl(payload: dict[str, Any]) -> tuple[TitleRecord, ...]
                 status=status,
                 date=last_activity or "Synced from Simkl",
                 year=0,
-                runtime="Loading from TMDB…",
+                runtime=simkl_runtime,
                 rating=0.0,
                 user_rating=(
                     int(user_rating)
@@ -1667,25 +1963,13 @@ class PosterWidget(Gtk.Widget):
             picture.set_hexpand(True)
             picture.set_vexpand(True)
             self._media_child: Gtk.Widget = picture
-        elif record.title == "Loading from TMDB…":
+        else:
             pending = Gtk.Box()
             pending.set_hexpand(True)
             pending.set_vexpand(True)
             pending.add_css_class("content-skeleton-surface")
-            pending.set_tooltip_text("Loading title artwork")
+            pending.set_tooltip_text(f"Loading artwork for {record.title}")
             self._media_child = pending
-        else:
-            generated = GeneratedPosterWidget(
-                record,
-                width,
-                height,
-                variant_offset=variant_offset,
-                show_text=show_text,
-                fixed_size=not flexible_width,
-            )
-            generated.set_hexpand(True)
-            generated.set_vexpand(True)
-            self._media_child = generated
         self._media_child.set_parent(self)
 
     def do_measure(
@@ -2042,16 +2326,32 @@ class SidebarRow(Gtk.ListBoxRow):
 class CineShelfWindow:
     """Controller for the Gtk.Builder-defined window."""
 
-    def __init__(self, application: Adw.Application) -> None:
+    def __init__(
+        self,
+        application: Adw.Application,
+        *,
+        library_mode: str = LIBRARY_MODE_LOCAL,
+    ) -> None:
+        self.library_mode = (
+            library_mode if library_mode in LIBRARY_MODES else LIBRARY_MODE_LOCAL
+        )
         self.records, self.explore_records, self.totals = load_catalog()
         self.simkl_client_id = simkl_client.read_client_id()
-        self.simkl_token = simkl_client.read_token()
+        self.simkl_token = (
+            simkl_client.read_token()
+            if self.library_mode == LIBRARY_MODE_SIMKL
+            else None
+        )
         self.tmdb_token = tmdb_client.read_token()
         self.simkl_settings: dict[str, Any] = {}
         self.simkl_stats: dict[str, Any] = {}
         self.simkl_connected = False
         self.simkl_snapshot_needs_repair = False
-        if self.simkl_client_id and self.simkl_token:
+        if (
+            self.library_mode == LIBRARY_MODE_SIMKL
+            and self.simkl_client_id
+            and self.simkl_token
+        ):
             snapshot = simkl_client.load_snapshot()
             if snapshot is not None:
                 library_payload = (
@@ -2133,11 +2433,7 @@ class CineShelfWindow:
             self._canonical_record_id(record)
             for record in self.records if record.status == "Watchlist"
         }
-        self.favorites = (
-            set()
-            if self.simkl_connected
-            else {"oppenheimer", "perfect-days", "frieren"}
-        )
+        self.favorites: set[str] = set()
         self.completed = {
             self._canonical_record_id(record)
             for record in self.records if record.status == "Watched"
@@ -2148,6 +2444,7 @@ class CineShelfWindow:
             if record.user_rating is not None
         }
         self.status_overrides: dict[str, str] = {}
+        self.local_library_records: dict[str, TitleRecord] = {}
         self.episode_status_overrides: dict[str, bool] = {}
         self.episode_watched_at: dict[str, str] = {
             f"{self._canonical_record_id(record)}/s{item.season}/e{item.episode}": item.watched_at
@@ -2186,7 +2483,7 @@ class CineShelfWindow:
         self._simkl_sync_started_at = 0.0
         self._simkl_mutations_inflight: set[str] = set()
         self._simkl_state_generation = 0
-        self.color_scheme = "dark"
+        self.color_scheme = "system"
         self.auto_sync = True
         self.auto_calendar_refresh = True
         self.default_media = "Movies"
@@ -2198,10 +2495,10 @@ class CineShelfWindow:
 
         self._updating = False
         self._updating_details = False
-        self._updating_season_switcher = False
         self._updating_sidebar_toggle = False
         self._applying_responsive = False
         self.details_open = False
+        self._library_results_dirty = False
         self.detail_record_id: str | None = None
         self.current_season_index = 0
         self.current_episode_index = 0
@@ -2234,6 +2531,7 @@ class CineShelfWindow:
 
         self._load_css()
         self._bind_objects()
+        self._update_header_data_status()
         self._build_media_viewer()
         self._build_browser_stack()
         self._configure_accessibility()
@@ -2250,7 +2548,12 @@ class CineShelfWindow:
         self._refresh_results()
         if self.tmdb_token:
             self._load_tmdb_explore_async()
-        if self.auto_sync and self.simkl_client_id and self.simkl_token:
+        if (
+            self.library_mode == LIBRARY_MODE_SIMKL
+            and self.auto_sync
+            and self.simkl_client_id
+            and self.simkl_token
+        ):
             if self.simkl_snapshot_needs_repair:
                 self._app_log(
                     "Incomplete Simkl snapshot detected; scheduling state repair.",
@@ -2259,7 +2562,11 @@ class CineShelfWindow:
             else:
                 self._app_log("Scheduling Simkl user-state refresh.")
             GLib.idle_add(self._start_simkl_sync)
-        if self.auto_calendar_refresh and self.simkl_client_id:
+        if (
+            self.library_mode == LIBRARY_MODE_SIMKL
+            and self.auto_calendar_refresh
+            and self.simkl_client_id
+        ):
             GLib.idle_add(self._start_calendar_refresh, False)
 
     def _object(self, name: str) -> Any:
@@ -2284,6 +2591,8 @@ class CineShelfWindow:
             "toast_overlay",
             "workspace",
             "header_bar",
+            "header_data_status_icon",
+            "header_data_status_label",
             "media_switcher",
             "main_menu_button",
             "search_button",
@@ -2445,7 +2754,6 @@ class CineShelfWindow:
         mobile_back_button = Gtk.Button.new_from_icon_name(
             "go-previous-symbolic"
         )
-        mobile_back_button.set_label("Back")
         mobile_back_button.set_tooltip_text("Back to content")
         mobile_back_button.update_property(
             [Gtk.AccessibleProperty.LABEL],
@@ -2546,6 +2854,45 @@ class CineShelfWindow:
             print(f"CineShelf could not read user state: {error}", file=sys.stderr)
             return
 
+        preferences = payload.get("preferences", {})
+        if isinstance(preferences, dict):
+            saved_library_mode = preferences.get("libraryMode")
+            if saved_library_mode in LIBRARY_MODES:
+                self.library_mode = str(saved_library_mode)
+
+        loaded_local_records: dict[str, TitleRecord] = {}
+        for raw in payload.get("localLibrary", ()):
+            if not isinstance(raw, dict):
+                continue
+            try:
+                record = TitleRecord.from_mapping(raw)
+            except (KeyError, TypeError, ValueError):
+                continue
+            # The persisted local ID is already canonical for the local
+            # profile. Do not remap it through a currently loaded Simkl
+            # library, or switching modes would change ownership keys.
+            canonical = record.id
+            local_record = replace(record, id=canonical)
+            loaded_local_records[canonical] = local_record
+        self.local_library_records = loaded_local_records
+
+        if getattr(self, "library_mode", LIBRARY_MODE_SIMKL) == LIBRARY_MODE_LOCAL:
+            for canonical, local_record in loaded_local_records.items():
+                if canonical not in self._library_records_by_canonical:
+                    self.records += (local_record,)
+            if loaded_local_records:
+                self.library_ids = {record.id for record in self.records}
+                self.records_by_id.update(
+                    {record.id: record for record in loaded_local_records.values()}
+                )
+                self._rebuild_record_aliases()
+
+        personal_state = payload
+        if self.library_mode == LIBRARY_MODE_LOCAL:
+            stored_local_profile = payload.get("localProfile")
+            if isinstance(stored_local_profile, dict):
+                personal_state = stored_local_profile
+
         valid_ids = set(self.records_by_id)
 
         def canonical_saved_id(value: object) -> str:
@@ -2562,48 +2909,55 @@ class CineShelfWindow:
             )
         self.bookmarks = {
             canonical_saved_id(value)
-            for value in payload.get("bookmarks", self.bookmarks)
+            for value in personal_state.get("bookmarks", self.bookmarks)
             if is_valid_id(value)
         }
         self.favorites = {
             value
-            for value in payload.get("favorites", self.favorites)
+            for value in personal_state.get("favorites", self.favorites)
             if is_valid_id(value)
         }
         self.completed = {
             canonical_saved_id(value)
-            for value in payload.get("completed", self.completed)
+            for value in personal_state.get("completed", self.completed)
             if is_valid_id(value)
         }
         self.ratings = {
             canonical_saved_id(record_id): int(score)
-            for record_id, score in payload.get("ratings", self.ratings).items()
+            for record_id, score in personal_state.get(
+                "ratings", self.ratings
+            ).items()
             if is_valid_id(record_id) and isinstance(score, int) and 1 <= score <= 10
         }
         self.status_overrides = {
             canonical_saved_id(record_id): status
-            for record_id, status in payload.get("statusOverrides", {}).items()
+            for record_id, status in personal_state.get(
+                "statusOverrides", {}
+            ).items()
             if is_valid_id(record_id) and status in LIBRARY_FILTERS
         }
         if not self.simkl_connected:
             self.episode_status_overrides = {
                 str(key): value
-                for key, value in payload.get("episodeStatusOverrides", {}).items()
+                for key, value in personal_state.get(
+                    "episodeStatusOverrides", {}
+                ).items()
                 if isinstance(value, bool)
                 and is_valid_id(str(key).split("/", 1)[0])
             }
             self.episode_watched_at = {
                 str(key): str(value)
-                for key, value in payload.get("episodeWatchedAt", {}).items()
+                for key, value in personal_state.get(
+                    "episodeWatchedAt", {}
+                ).items()
                 if isinstance(value, str)
                 and is_valid_id(str(key).split("/", 1)[0])
             }
         self.title_watched_at = {
             canonical_saved_id(key): str(value)
-            for key, value in payload.get("titleWatchedAt", {}).items()
+            for key, value in personal_state.get("titleWatchedAt", {}).items()
             if isinstance(value, str) and is_valid_id(str(key))
         }
-        preferences = payload.get("preferences", {})
         if isinstance(preferences, dict):
             color_scheme = preferences.get("colorScheme")
             if color_scheme in COLOR_SCHEMES:
@@ -2632,7 +2986,8 @@ class CineShelfWindow:
                 self.completed.discard(record_id)
 
     def _save_user_state(self) -> None:
-        payload = {
+        payload = read_state(self.state_file)
+        personal_state = {
             "bookmarks": sorted(self.bookmarks),
             "favorites": sorted(self.favorites),
             "completed": sorted(self.completed),
@@ -2643,22 +2998,26 @@ class CineShelfWindow:
             ),
             "episodeWatchedAt": dict(sorted(self.episode_watched_at.items())),
             "titleWatchedAt": dict(sorted(self.title_watched_at.items())),
-            "preferences": {
-                "colorScheme": self.color_scheme,
-                "autoSync": self.auto_sync,
-                "autoCalendarRefresh": getattr(self, "auto_calendar_refresh", True),
-                "defaultMedia": self.default_media,
-                "libraryView": self.preferred_view_mode,
-            },
         }
-        temporary = self.state_file.with_name(f".{self.state_file.name}.tmp")
-        try:
-            self.state_file.parent.mkdir(parents=True, exist_ok=True)
-            temporary.write_text(
-                json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-                encoding="utf-8",
+        payload.update(personal_state)
+        if getattr(self, "library_mode", LIBRARY_MODE_LOCAL) == LIBRARY_MODE_LOCAL:
+            payload["localProfile"] = personal_state
+        payload["localLibrary"] = [
+            title_record_to_mapping(record)
+            for _record_id, record in sorted(
+                getattr(self, "local_library_records", {}).items()
             )
-            temporary.replace(self.state_file)
+        ]
+        payload["preferences"] = {
+            "colorScheme": self.color_scheme,
+            "autoSync": self.auto_sync,
+            "autoCalendarRefresh": getattr(self, "auto_calendar_refresh", True),
+            "defaultMedia": self.default_media,
+            "libraryView": self.preferred_view_mode,
+            "libraryMode": getattr(self, "library_mode", LIBRARY_MODE_LOCAL),
+        }
+        try:
+            write_state(payload, self.state_file)
         except OSError as error:
             print(f"CineShelf could not save user state: {error}", file=sys.stderr)
 
@@ -2726,6 +3085,7 @@ class CineShelfWindow:
         menu = Gio.Menu()
         menu.append("Preferences", "win.preferences")
         menu.append("Application Log", "app.logs")
+        menu.append("Credits & Data Sources", "app.credits")
         menu.append("About CineShelf", "app.about")
         menu.append("Quit", "app.quit")
         self.main_menu_button.set_menu_model(menu)
@@ -3039,6 +3399,10 @@ class CineShelfWindow:
 
     def _start_calendar_refresh(self, force: bool = False) -> bool:
         if self._calendar_refresh_inflight:
+            return GLib.SOURCE_REMOVE
+        if self.library_mode == LIBRARY_MODE_LOCAL:
+            if self.active_destination == "calendar":
+                self._render_calendar()
             return GLib.SOURCE_REMOVE
         if not self.simkl_client_id:
             if self.active_destination == "calendar":
@@ -3686,6 +4050,74 @@ class CineShelfWindow:
             self._app_log("Could not open Calendar link: %s", error, level=logging.WARNING)
             self._toast("Could not open this Simkl page")
 
+    @staticmethod
+    def _title_external_url(record: TitleRecord) -> str | None:
+        if record.tmdb_id is None:
+            return None
+        namespace = (
+            "movie"
+            if record.tmdb_media_type == "movie" or record.media_type == "Movies"
+            else "tv"
+        )
+        return f"https://www.themoviedb.org/{namespace}/{record.tmdb_id}"
+
+    def _open_external_uri_with_warning(
+        self,
+        uri: str,
+        *,
+        heading: str,
+        body: str,
+    ) -> None:
+        if not uri:
+            return
+        dialog = Adw.AlertDialog(heading=heading, body=body)
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("open", "Open in Browser")
+        dialog.set_close_response("cancel")
+        dialog.set_default_response("open")
+        dialog.set_response_appearance(
+            "open", Adw.ResponseAppearance.SUGGESTED
+        )
+
+        def respond(_dialog: Adw.AlertDialog, response: str) -> None:
+            if response != "open":
+                return
+            try:
+                Gio.AppInfo.launch_default_for_uri(uri, None)
+            except GLib.Error as error:
+                self._app_log(
+                    "Could not open external link: %s",
+                    error,
+                    level=logging.WARNING,
+                )
+                self._toast("Could not open the link in your browser")
+
+        dialog.connect("response", respond)
+        dialog.present(self.window)
+
+    def _on_detail_title_released(
+        self,
+        _gesture: Gtk.GestureClick,
+        _press_count: int,
+        _x: float,
+        _y: float,
+    ) -> None:
+        record = self.records_by_id.get(self.selected_id or "")
+        if record is None:
+            return
+        uri = self._title_external_url(record)
+        if uri is None:
+            self._toast("No external page is available for this title")
+            return
+        self._open_external_uri_with_warning(
+            uri,
+            heading="Open an external link?",
+            body=(
+                f"CineShelf will open the TMDB page for “{record.title}” "
+                "in your default web browser."
+            ),
+        )
+
     def _add_calendar_watchlist(
         self, button: Gtk.Button, event: simkl_client.CalendarEvent
     ) -> None:
@@ -3720,11 +4152,24 @@ class CineShelfWindow:
             self.calendar_updated_label.set_tooltip_text(self._calendar_cache_subtitle())
         else:
             self.calendar_updated_label.set_label("")
+        if self.library_mode == LIBRARY_MODE_LOCAL:
+            action = "Use Simkl" if self.simkl_client_id else None
+            callback = (
+                (lambda *_args: self.set_library_mode(LIBRARY_MODE_SIMKL))
+                if self.simkl_client_id
+                else None
+            )
+            self.calendar_content.append(self._calendar_status(
+                "drive-harddisk-symbolic", "Local-first mode is active",
+                "Calendar downloads use Simkl. Your local library remains fully "
+                "available without connecting an account.",
+                action, callback,
+            ))
+            return
         if not self.simkl_client_id:
             self.calendar_content.append(self._calendar_status(
-                "dialog-password-symbolic", "Simkl Client ID required",
-                "Calendar data is public, but Simkl requires the app's Client ID for every request.",
-                "Open Preferences", self._open_preferences_from_calendar,
+                "dialog-error-symbolic", "Simkl integration is unavailable",
+                "This build does not include CineShelf's public Simkl application ID.",
             ))
             return
         if loading and snapshot is None:
@@ -3785,87 +4230,6 @@ class CineShelfWindow:
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
         clamp.set_child(content)
 
-        hero = Adw.WrapBox()
-        hero.set_child_spacing(16)
-        hero.set_line_spacing(12)
-        hero.add_css_class("profile-hero")
-        profile_user = self.simkl_settings.get("user", {})
-        profile_account = self.simkl_settings.get("account", {})
-        profile_name = str(profile_user.get("name") or getuser())
-        self.profile_avatar = Adw.Avatar(
-            size=72,
-            text=profile_name,
-            show_initials=True,
-        )
-        self.profile_avatar.add_css_class("profile-avatar")
-        cached_avatar = simkl_client.cached_avatar() if self.simkl_connected else None
-        if cached_avatar:
-            try:
-                self.profile_avatar.set_custom_image(
-                    Gdk.Texture.new_from_filename(cached_avatar)
-                )
-            except GLib.Error:
-                pass
-        else:
-            self.profile_avatar.set_custom_image(None)
-        hero.append(self.profile_avatar)
-
-        identity = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
-        identity.set_hexpand(True)
-        identity.set_valign(Gtk.Align.CENTER)
-        self.profile_name_label = Gtk.Label(label=profile_name, xalign=0)
-        self.profile_name_label.add_css_class("title-1")
-        identity.append(self.profile_name_label)
-        account_type = str(profile_account.get("type") or "").upper()
-        subtitle_text = (
-            f"Connected to Simkl · {account_type or 'Account'}"
-            if self.simkl_connected
-            else "Local profile · Connect Simkl to sync your library"
-        )
-        self.profile_subtitle_label = Gtk.Label(label=subtitle_text, xalign=0)
-        self.profile_subtitle_label.set_wrap(True)
-        self.profile_subtitle_label.add_css_class("dim-label")
-        identity.append(self.profile_subtitle_label)
-        hero.append(identity)
-
-        hero_actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        hero_actions.set_valign(Gtk.Align.CENTER)
-        self.simkl_button = Gtk.Button(
-            label="Sync Simkl" if self.simkl_connected else "Connect Simkl"
-        )
-        self.simkl_button.set_tooltip_text(
-            "Refresh data from Simkl"
-            if self.simkl_connected
-            else "Sign in to Simkl"
-        )
-        self.simkl_button.add_css_class("pill")
-        if not self.simkl_connected:
-            self.simkl_button.add_css_class("suggested-action")
-        self.simkl_button.connect("clicked", self._on_simkl_button_clicked)
-        hero_actions.append(self.simkl_button)
-        self.simkl_disconnect_button = Gtk.Button.new_from_icon_name(
-            "system-log-out-symbolic"
-        )
-        self.simkl_disconnect_button.set_tooltip_text("Disconnect Simkl")
-        self.simkl_disconnect_button.add_css_class("flat")
-        self.simkl_disconnect_button.add_css_class("circular")
-        self.simkl_disconnect_button.set_visible(self.simkl_connected)
-        self.simkl_disconnect_button.connect(
-            "clicked",
-            self._on_simkl_disconnect_clicked,
-        )
-        hero_actions.append(self.simkl_disconnect_button)
-
-        settings = Gtk.Button.new_from_icon_name("emblem-system-symbolic")
-        settings.set_tooltip_text("Preferences (Ctrl+,)")
-        settings.add_css_class("flat")
-        settings.add_css_class("circular")
-        settings.set_valign(Gtk.Align.CENTER)
-        settings.connect("clicked", self._on_preferences_clicked)
-        hero_actions.append(settings)
-        hero.append(hero_actions)
-        content.append(hero)
-
         self.profile_statistics_host = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
             spacing=20,
@@ -3890,6 +4254,22 @@ class CineShelfWindow:
             icon_name="network-workgroup-symbolic",
         )
 
+        ownership = Adw.PreferencesGroup(
+            title="Data ownership",
+            description="Choose where CineShelf keeps your personal library state.",
+        )
+        self.settings_library_mode_row = Adw.ActionRow(title="Library mode")
+        self.settings_library_mode_button = Gtk.Button(label="Change…")
+        self.settings_library_mode_button.set_valign(Gtk.Align.CENTER)
+        self.settings_library_mode_button.connect(
+            "clicked", self._on_change_library_mode_clicked
+        )
+        self.settings_library_mode_row.add_suffix(
+            self.settings_library_mode_button
+        )
+        ownership.add(self.settings_library_mode_row)
+        general_page.add(ownership)
+
         appearance = Adw.PreferencesGroup(
             title="Appearance",
             description="Choose how CineShelf looks on this device.",
@@ -3908,6 +4288,7 @@ class CineShelfWindow:
             "notify::selected", self._on_settings_color_scheme_changed
         )
         appearance.add(self.settings_color_scheme_row)
+
         general_page.add(appearance)
 
         library = Adw.PreferencesGroup(
@@ -3987,7 +4368,7 @@ class CineShelfWindow:
         self.settings_tmdb_button = Gtk.Button()
         self.settings_tmdb_button.set_valign(Gtk.Align.CENTER)
         self.settings_tmdb_button.connect(
-            "clicked", lambda button: self._show_tmdb_token_dialog(button)
+            "clicked", self._on_tmdb_settings_clicked
         )
         self.settings_tmdb_disconnect_button = Gtk.Button.new_from_icon_name(
             "edit-delete-symbolic"
@@ -4044,6 +4425,29 @@ class CineShelfWindow:
         data.add(log_row)
         services_page.add(data)
 
+        reset_group = Adw.PreferencesGroup(
+            title="Reset",
+            description="Erase local CineShelf data and return to first-run setup.",
+        )
+        self.settings_factory_reset_row = Adw.ActionRow(
+            title="Reset CineShelf",
+            subtitle="Delete your library, preferences, accounts, caches and logs.",
+        )
+        self.settings_factory_reset_button = Gtk.Button(label="Reset…")
+        self.settings_factory_reset_button.set_valign(Gtk.Align.CENTER)
+        self.settings_factory_reset_button.add_css_class("destructive-action")
+        self.settings_factory_reset_button.connect(
+            "clicked", self._on_factory_reset_clicked
+        )
+        self.settings_factory_reset_row.add_suffix(
+            self.settings_factory_reset_button
+        )
+        self.settings_factory_reset_row.set_activatable_widget(
+            self.settings_factory_reset_button
+        )
+        reset_group.add(self.settings_factory_reset_row)
+        services_page.add(reset_group)
+
         self._update_settings_account_rows()
         self.settings_dialog.add(general_page)
         self.settings_dialog.add(services_page)
@@ -4061,27 +4465,70 @@ class CineShelfWindow:
     def _update_settings_account_rows(self, *, syncing: bool = False) -> None:
         if not hasattr(self, "settings_simkl_row"):
             return
-        self.settings_simkl_row.set_subtitle(
-            "Connected · Library and watch state sync enabled"
-            if self.simkl_connected
-            else "Not connected · Local library state only"
+        local_mode = (
+            getattr(self, "library_mode", LIBRARY_MODE_LOCAL)
+            == LIBRARY_MODE_LOCAL
         )
+        if hasattr(self, "settings_library_mode_row"):
+            self.settings_library_mode_row.set_subtitle(
+                "Local-first · Personal data stays on this device"
+                if local_mode
+                else "Simkl sync · Simkl manages lists, ratings and watch history"
+            )
+        if local_mode:
+            simkl_subtitle = "Not active · Local-first mode is managing this library"
+        elif self.simkl_connected:
+            simkl_subtitle = "Connected · Library and watch state sync enabled"
+        elif getattr(self, "simkl_client_id", None):
+            simkl_subtitle = "Ready to connect · Sign in with a Simkl PIN"
+        else:
+            simkl_subtitle = "Unavailable · This build has no Simkl application ID"
+        self.settings_simkl_row.set_subtitle(simkl_subtitle)
         self.settings_simkl_button.set_label(
             "Syncing…"
             if syncing
-            else ("Sync Now" if self.simkl_connected else "Connect")
+            else (
+                "Use Simkl"
+                if local_mode and getattr(self, "simkl_client_id", None)
+                else "Unavailable"
+                if local_mode
+                else "Sync Now"
+                if self.simkl_connected
+                else (
+                    "Connect"
+                    if getattr(self, "simkl_client_id", None)
+                    else "Unavailable"
+                )
+            )
         )
-        self.settings_simkl_button.set_sensitive(not syncing)
-        self.settings_simkl_disconnect_button.set_visible(self.simkl_connected)
+        self.settings_simkl_button.set_sensitive(
+            not syncing and bool(getattr(self, "simkl_client_id", None))
+        )
+        self.settings_simkl_disconnect_button.set_visible(
+            self.simkl_connected and not local_mode
+        )
         self.settings_simkl_disconnect_button.set_sensitive(not syncing)
 
-        self.settings_tmdb_row.set_subtitle(
-            "Connected · Live metadata and artwork enabled"
-            if self.tmdb_token
-            else "Not connected · Live Explore and artwork unavailable"
+        tmdb_source = (
+            tmdb_client.token_source() if getattr(self, "tmdb_token", None) else None
         )
-        self.settings_tmdb_button.set_label("Change Token" if self.tmdb_token else "Connect")
-        self.settings_tmdb_disconnect_button.set_visible(bool(self.tmdb_token))
+        if getattr(self, "tmdb_token", None) and tmdb_source is None:
+            tmdb_source = "user"
+        if tmdb_source == "bundled":
+            tmdb_subtitle = "Connected · Credential provided by this build"
+        elif tmdb_source == "environment":
+            tmdb_subtitle = "Connected · Developer environment override"
+        elif tmdb_source == "user":
+            tmdb_subtitle = "Connected · Developer token stored for this user"
+        else:
+            tmdb_subtitle = "Unavailable · This build has no TMDB credential"
+        self.settings_tmdb_row.set_subtitle(tmdb_subtitle)
+        self.settings_tmdb_button.set_label(
+            "Data Source"
+            if tmdb_source in {"bundled", "environment"}
+            else ("Change Token" if tmdb_source == "user" else "Developer Setup")
+        )
+        self.settings_tmdb_disconnect_button.set_visible(tmdb_source == "user")
 
     def _on_settings_color_scheme_changed(
         self, row: Adw.ComboRow, _parameter: Any
@@ -4089,6 +4536,33 @@ class CineShelfWindow:
         self.color_scheme = COLOR_SCHEMES[row.get_selected()]
         self._apply_color_scheme()
         self._save_user_state()
+
+    def _on_change_library_mode_clicked(self, _button: Gtk.Button) -> None:
+        dialog = Adw.AlertDialog(
+            heading="Choose how your library is managed",
+            body=(
+                "Local-first keeps lists, ratings and watch history on this device. "
+                "Simkl sync uses your Simkl account as the shared library source. "
+                "Changing mode does not delete the saved local copy."
+            ),
+        )
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("local", "Use Local-first")
+        if self.simkl_client_id:
+            dialog.add_response("simkl", "Use Simkl")
+        dialog.set_close_response("cancel")
+        dialog.set_default_response(
+            self.library_mode
+            if self.library_mode == LIBRARY_MODE_LOCAL or self.simkl_client_id
+            else LIBRARY_MODE_LOCAL
+        )
+
+        def on_response(_dialog: Adw.AlertDialog, response: str) -> None:
+            if response in LIBRARY_MODES:
+                self.set_library_mode(response)
+
+        dialog.connect("response", on_response)
+        dialog.present(self.settings_dialog)
 
     def _on_settings_default_media_changed(
         self, row: Adw.ComboRow, _parameter: Any
@@ -4189,6 +4663,71 @@ class CineShelfWindow:
         self._tmdb_season_details_loaded.clear()
         self._app_log("Downloaded TMDB image and metadata cache cleared.")
         self._toast("TMDB cache cleared")
+
+    def _on_factory_reset_clicked(self, _button: Gtk.Button) -> None:
+        dialog = Adw.AlertDialog(
+            heading="Reset CineShelf completely?",
+            body=(
+                "Your local library, watch history, ratings, preferences, "
+                "connected accounts, downloaded artwork, metadata, Calendar "
+                "cache and application logs will be permanently deleted. "
+                "CineShelf will restart at the Welcome screen."
+            ),
+        )
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("reset", "Delete Everything & Restart")
+        dialog.set_close_response("cancel")
+        dialog.set_response_appearance("reset", Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.connect("response", self._on_factory_reset_response)
+        dialog.present(self.settings_dialog)
+
+    def _on_factory_reset_response(
+        self,
+        _dialog: Adw.AlertDialog,
+        response: str,
+    ) -> None:
+        if response != "reset":
+            return
+        self.settings_factory_reset_button.set_sensitive(False)
+        try:
+            clear_all_user_data(self.state_file)
+        except OSError as error:
+            self.settings_factory_reset_button.set_sensitive(True)
+            failure = Adw.AlertDialog(
+                heading="CineShelf could not be fully reset",
+                body=str(error),
+            )
+            failure.add_response("close", "Close")
+            failure.present(self.settings_dialog)
+            return
+        try:
+            self._restart_application()
+        except OSError as error:
+            self.settings_factory_reset_button.set_sensitive(True)
+            failure = Adw.AlertDialog(
+                heading="CineShelf was reset but could not restart",
+                body=f"Close and open CineShelf again.\n\n{error}",
+            )
+            failure.add_response("close", "Close")
+            failure.present(self.settings_dialog)
+
+    @staticmethod
+    def _restart_application() -> None:
+        """Replace this process with a clean first-run CineShelf process."""
+        simkl_client.close_image_http_client()
+        environment = os.environ.copy()
+        python_paths = [entry for entry in sys.path if entry]
+        inherited = environment.get("PYTHONPATH", "")
+        if inherited:
+            python_paths.append(inherited)
+        environment["PYTHONPATH"] = os.pathsep.join(dict.fromkeys(python_paths))
+        arguments = [
+            sys.executable,
+            "-m",
+            "cineshelf.main",
+            *sys.argv[1:],
+        ]
+        os.execvpe(sys.executable, arguments, environment)
 
     @staticmethod
     def _profile_card() -> Gtk.Box:
@@ -4717,71 +5256,113 @@ class CineShelfWindow:
         self.profile_statistics_host.append(paired)
         self.profile_statistics_host.append(self._build_ratings_card(stats))
 
-    def _on_simkl_button_clicked(self, _button: Gtk.Button) -> None:
+    def begin_simkl_connection(self) -> bool:
+        """Enter Simkl mode and start its PIN or refresh flow."""
+        self.library_mode = LIBRARY_MODE_SIMKL
+        if not self.simkl_token:
+            self.simkl_token = simkl_client.read_token()
+        self._save_user_state()
+        self._update_settings_account_rows()
+        self._update_profile_identity()
+        if self.simkl_token:
+            self._start_simkl_sync()
+        else:
+            self._on_simkl_button_clicked(None)
+        return GLib.SOURCE_REMOVE
+
+    def set_library_mode(self, mode: str) -> None:
+        """Apply an explicit data-ownership choice without deleting either copy."""
+        if mode not in LIBRARY_MODES:
+            raise ValueError(f"Unsupported library mode: {mode}")
+        if mode == self.library_mode:
+            if mode == LIBRARY_MODE_SIMKL and not self.simkl_connected:
+                self.begin_simkl_connection()
+            return
+
+        if mode == LIBRARY_MODE_LOCAL:
+            stored_state = read_state(self.state_file)
+            self.library_mode = mode
+            save_library_mode(mode, self.state_file)
+            if isinstance(stored_state.get("localProfile"), dict):
+                records, _explore, _totals = load_catalog()
+                self._replace_library(records)
+                self.bookmarks = {
+                    self._canonical_record_id(record)
+                    for record in records
+                    if record.status == "Watchlist"
+                }
+                self.favorites = set()
+                self.completed = {
+                    self._canonical_record_id(record)
+                    for record in records
+                    if record.status == "Watched"
+                }
+                self.ratings = {
+                    self._canonical_record_id(record): record.user_rating
+                    for record in records
+                    if record.user_rating is not None
+                }
+                self.status_overrides = {}
+                self.episode_status_overrides = {}
+                self.episode_watched_at = {}
+                self.title_watched_at = {}
+                self.local_library_records = {}
+                self._load_user_state()
+            else:
+                for record in tuple(self.records):
+                    canonical = self._canonical_record_id(record)
+                    if (
+                        canonical in self.bookmarks
+                        or canonical in self.completed
+                        or canonical in self.ratings
+                        or canonical in self.status_overrides
+                    ):
+                        self._ensure_local_library_record(record)
+            self._save_user_state()
+            self._refresh_results()
+            if self.active_destination == "profile":
+                self._refresh_profile()
+            self._render_calendar()
+            self._update_settings_account_rows()
+            self._update_profile_identity()
+            self._toast("Local-first mode enabled")
+            return
+
+        self._save_user_state()
+        self.library_mode = mode
+        save_library_mode(mode, self.state_file)
+        self._update_settings_account_rows()
+        self._update_profile_identity()
+        self.begin_simkl_connection()
+
+    def _on_simkl_button_clicked(self, _button: Gtk.Button | None) -> None:
+        if getattr(self, "library_mode", LIBRARY_MODE_LOCAL) == LIBRARY_MODE_LOCAL:
+            self.set_library_mode(LIBRARY_MODE_SIMKL)
+            return
         if self.simkl_connected and self.simkl_client_id and self.simkl_token:
             self._app_log("Manual Simkl refresh requested.")
             self._start_simkl_sync()
             return
-        self._simkl_sync_started_at = 0.0
-        self._app_log("Simkl connection flow opened.")
-        dialog = Adw.AlertDialog(
-            heading="Connect Simkl",
-            body=(
-                "Create an app in Simkl Developer Settings, then paste its "
-                "Client ID here. CineShelf uses the PIN flow and never needs "
-                "your Client Secret or password."
-            ),
-        )
-        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        entry = Gtk.Entry()
-        entry.set_placeholder_text("Simkl Client ID")
-        entry.set_text(self.simkl_client_id or "")
-        entry.set_activates_default(True)
-        content.append(entry)
-        developer_link = Gtk.LinkButton(
-            uri="https://simkl.com/settings/developer/",
-            label="Open Simkl Developer Settings",
-        )
-        developer_link.set_halign(Gtk.Align.START)
-        content.append(developer_link)
-        dialog.set_extra_child(content)
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("continue", "Continue")
-        dialog.set_default_response("continue")
-        dialog.set_close_response("cancel")
-        dialog.set_response_appearance(
-            "continue",
-            Adw.ResponseAppearance.SUGGESTED,
-        )
-        dialog.connect("response", self._on_simkl_client_id_response, entry)
-        dialog.present(self.window)
-
-    def _on_simkl_client_id_response(
-        self,
-        _dialog: Adw.AlertDialog,
-        response: str,
-        entry: Gtk.Entry,
-    ) -> None:
-        if response != "continue":
-            return
-        client_id = entry.get_text().strip()
-        if not client_id:
-            self._toast("Enter a Simkl Client ID")
-            return
-        try:
-            simkl_client.store_client_id(client_id)
-        except simkl_client.SimklError as error:
+        if not self.simkl_client_id:
             self._app_log(
-                "Could not save the Simkl Client ID: %s",
-                error,
-                level=logging.ERROR,
+                "Simkl connection is unavailable because this build has no Client ID.",
+                level=logging.WARNING,
             )
-            self._toast("Could not save the Simkl Client ID")
+            dialog = Adw.AlertDialog(
+                heading="Simkl is unavailable in this build",
+                body=(
+                    "The distributor must register CineShelf with Simkl and include "
+                    "the public Client ID when building the application. You never "
+                    "need to create a developer app or enter a Client Secret."
+                ),
+            )
+            dialog.add_response("close", "Close")
+            dialog.set_close_response("close")
+            dialog.present(self.window)
             return
-        self.simkl_client_id = client_id
-        self._app_log("Simkl Client ID saved; requesting a PIN.")
-        self.simkl_button.set_sensitive(False)
-        self.simkl_button.set_label("Requesting PIN…")
+        self._simkl_sync_started_at = 0.0
+        client_id = self.simkl_client_id
+        self._app_log("Simkl sign-in started; requesting a PIN.")
         self._update_settings_account_rows(syncing=True)
         threading.Thread(
             target=self._simkl_pin_worker,
@@ -4867,8 +5448,6 @@ class CineShelfWindow:
     ) -> None:
         was_waiting = not self._simkl_poll_cancelled
         self._simkl_poll_cancelled = True
-        self.simkl_button.set_sensitive(True)
-        self.simkl_button.set_label("Connect Simkl")
         self._update_settings_account_rows()
         if was_waiting:
             self._app_log("Simkl PIN authorization cancelled by the user.")
@@ -4914,11 +5493,16 @@ class CineShelfWindow:
         self._simkl_poll_cancelled = True
         try:
             simkl_client.clear_account_cache()
-            simkl_client.store_token(access_token)
+            storage = simkl_client.store_token(access_token)
         except simkl_client.SimklError as error:
             return self._on_simkl_failed(str(error), error.code)
         self.simkl_token = access_token
-        self._app_log("Simkl authorization approved; access token stored securely.")
+        location = (
+            "the system keyring"
+            if storage == "keyring"
+            else "a private local file with 0600 permissions"
+        )
+        self._app_log("Simkl authorization approved; access token stored in %s.", location)
         if getattr(self, "simkl_pin_dialog", None) is not None:
             self.simkl_pin_dialog.close()
         self._toast("Simkl connected — syncing your library…")
@@ -4926,13 +5510,14 @@ class CineShelfWindow:
         return GLib.SOURCE_REMOVE
 
     def _start_simkl_sync(self) -> None:
-        if not self.simkl_client_id or not self.simkl_token:
+        if (
+            self.library_mode != LIBRARY_MODE_SIMKL
+            or not self.simkl_client_id
+            or not self.simkl_token
+        ):
             return
         self._simkl_sync_started_at = time.monotonic()
         self._app_log("Simkl sync started.")
-        self.simkl_button.set_sensitive(False)
-        self.simkl_button.set_label("Syncing…")
-        self.simkl_disconnect_button.set_sensitive(False)
         self._update_settings_account_rows(syncing=True)
         generation = self._simkl_state_generation
         threading.Thread(
@@ -5190,6 +5775,9 @@ class CineShelfWindow:
         records: tuple[TitleRecord, ...],
         generation: int | None = None,
     ) -> bool:
+        if self.library_mode != LIBRARY_MODE_SIMKL:
+            self._app_log("Ignoring Simkl sync result while Local-first mode is active.")
+            return GLib.SOURCE_REMOVE
         if generation is not None and generation != self._simkl_state_generation:
             self._app_log(
                 "Discarding a Simkl snapshot that predates a local mutation."
@@ -5235,8 +5823,7 @@ class CineShelfWindow:
         self._tmdb_season_details_loading.clear()
         self._tmdb_season_details_loaded.clear()
         self._update_profile_identity()
-        self.simkl_button.set_sensitive(False)
-        self.simkl_disconnect_button.set_sensitive(False)
+        self._update_settings_account_rows(syncing=True)
         self._update_genre_model()
         self._refresh_results()
         self._refresh_profile()
@@ -5265,7 +5852,6 @@ class CineShelfWindow:
             len(records),
             elapsed,
         )
-        self.simkl_button.set_label("Finishing…")
         if self.tmdb_token:
             self._toast(
                 f"Synced {len(records)} Simkl states — loading catalog from TMDB"
@@ -5288,7 +5874,6 @@ class CineShelfWindow:
             return GLib.SOURCE_REMOVE
         try:
             texture = Gdk.Texture.new_from_filename(avatar_file)
-            self.profile_avatar.set_custom_image(texture)
             self.sidebar_profile_avatar.set_custom_image(texture)
         except GLib.Error:
             pass
@@ -5341,52 +5926,58 @@ class CineShelfWindow:
         )
         self._simkl_sync_started_at = 0.0
         self._update_profile_identity()
-        self.simkl_disconnect_button.set_sensitive(True)
+        self._update_settings_account_rows()
         return GLib.SOURCE_REMOVE
 
     def _update_profile_identity(self) -> None:
         user = self.simkl_settings.get("user", {})
-        account = self.simkl_settings.get("account", {})
         name = str(user.get("name") or getuser()) if isinstance(user, dict) else getuser()
-        account_type = (
-            str(account.get("type") or "Account").upper()
-            if isinstance(account, dict)
-            else "Account"
-        )
-        self.profile_name_label.set_label(name)
-        self.profile_avatar.set_text(name)
         self.sidebar_profile_avatar.set_text(name)
         cached_avatar = simkl_client.cached_avatar()
         if cached_avatar:
             try:
                 texture = Gdk.Texture.new_from_filename(cached_avatar)
-                self.profile_avatar.set_custom_image(texture)
                 self.sidebar_profile_avatar.set_custom_image(texture)
             except GLib.Error:
                 pass
         else:
-            self.profile_avatar.set_custom_image(None)
             self.sidebar_profile_avatar.set_custom_image(None)
-        self.profile_subtitle_label.set_label(
-            f"Connected to Simkl · {account_type}"
-            if self.simkl_connected
-            else "Local profile · Connect Simkl to sync your library"
-        )
-        self.simkl_button.set_label(
-            "Sync Simkl" if self.simkl_connected else "Connect Simkl"
-        )
-        self.simkl_button.set_tooltip_text(
-            "Refresh data from Simkl"
-            if self.simkl_connected
-            else "Sign in to Simkl"
-        )
-        self.simkl_button.remove_css_class("suggested-action")
-        if not self.simkl_connected:
-            self.simkl_button.add_css_class("suggested-action")
-        self.simkl_disconnect_button.set_visible(self.simkl_connected)
-        self.simkl_disconnect_button.set_sensitive(True)
-        self.simkl_button.set_sensitive(True)
+        self._update_header_data_status()
         self._update_settings_account_rows()
+
+    def _update_header_data_status(self) -> None:
+        if not hasattr(self, "header_data_status_label"):
+            return
+        if self.library_mode == LIBRARY_MODE_LOCAL:
+            self.header_data_status_icon.set_from_icon_name(
+                "drive-harddisk-symbolic"
+            )
+            self.header_data_status_icon.remove_css_class("success")
+            self.header_data_status_icon.add_css_class("accent")
+            self.header_data_status_label.set_label("Local")
+            self.header_data_status_label.set_tooltip_text(
+                "Local-first · Personal library data stays on this device"
+            )
+        elif self.simkl_connected:
+            self.header_data_status_icon.set_from_icon_name(
+                "emblem-ok-symbolic"
+            )
+            self.header_data_status_icon.remove_css_class("accent")
+            self.header_data_status_icon.add_css_class("success")
+            self.header_data_status_label.set_label("Synced")
+            self.header_data_status_label.set_tooltip_text(
+                "Your library is connected to Simkl"
+            )
+        else:
+            self.header_data_status_icon.set_from_icon_name(
+                "network-offline-symbolic"
+            )
+            self.header_data_status_icon.remove_css_class("success")
+            self.header_data_status_icon.remove_css_class("accent")
+            self.header_data_status_label.set_label("Not synced")
+            self.header_data_status_label.set_tooltip_text(
+                "Simkl mode is selected but no account is connected"
+            )
 
     def _on_simkl_failed(self, message: str, code: int | None) -> bool:
         elapsed = (
@@ -5568,17 +6159,6 @@ class CineShelfWindow:
         season_header.set_show_back_button(True)
         season_header.set_title_widget(self.season_header_title)
 
-        self.season_switcher = Adw.ToggleGroup()
-        self.season_switcher_record_id: str | None = None
-        self.season_switcher.set_halign(Gtk.Align.START)
-        season_switcher_scroller = Gtk.ScrolledWindow()
-        season_switcher_scroller.set_policy(
-            Gtk.PolicyType.AUTOMATIC,
-            Gtk.PolicyType.NEVER,
-        )
-        season_switcher_scroller.set_propagate_natural_height(True)
-        season_switcher_scroller.set_child(self.season_switcher)
-
         self.season_summary_label = Gtk.Label(xalign=0)
         self.season_summary_label.add_css_class("dim-label")
 
@@ -5594,14 +6174,8 @@ class CineShelfWindow:
         )
         season_actions.append(self.season_watched_button)
 
-        episodes_heading = Gtk.CenterBox()
         episodes_title = Gtk.Label(label="Episodes", xalign=0)
         episodes_title.add_css_class("title-4")
-        self.season_episode_count = Gtk.Label()
-        self.season_episode_count.add_css_class("caption")
-        self.season_episode_count.add_css_class("dim-label")
-        episodes_heading.set_start_widget(episodes_title)
-        episodes_heading.set_end_widget(self.season_episode_count)
 
         self.season_episodes_list = Gtk.ListBox()
         self.season_episodes_list.set_selection_mode(Gtk.SelectionMode.NONE)
@@ -5621,11 +6195,10 @@ class CineShelfWindow:
         self.season_detail_box.set_margin_end(16)
         self.season_detail_box.add_css_class("detail-page")
         self.season_detail_box.add_css_class("detail-subpage-content")
-        self.season_detail_box.append(season_switcher_scroller)
         self.season_detail_box.append(self.season_summary_label)
         self.season_detail_box.append(season_actions)
         self.season_detail_box.append(Gtk.Separator())
-        self.season_detail_box.append(episodes_heading)
+        self.season_detail_box.append(episodes_title)
         self.season_detail_box.append(self.season_episodes_list)
 
         self.season_details_scroller = Gtk.ScrolledWindow()
@@ -5657,19 +6230,34 @@ class CineShelfWindow:
         self.episode_hero_host = Gtk.Box()
         self.episode_hero_host.set_halign(Gtk.Align.CENTER)
         self.episode_hero_host.set_hexpand(True)
-        self.episode_hero_host.set_size_request(-1, 200)
+        self.episode_hero_host.set_size_request(-1, 198)
+
+        self.episode_status_label = Gtk.Label(label="Watched")
+        self.episode_status_label.set_halign(Gtk.Align.CENTER)
+        self.episode_status_label.add_css_class("pill")
+        self.episode_status_label.add_css_class("status-pill")
+        self.episode_status_label.set_visible(False)
 
         self.episode_title_label = Gtk.Label(xalign=0)
         self.episode_title_label.set_wrap(True)
-        self.episode_title_label.add_css_class("title-1")
+        self.episode_title_label.set_max_width_chars(28)
+        self.episode_title_label.add_css_class("title-2")
         self.episode_date_label = Gtk.Label(xalign=0)
+        self.episode_date_label.set_wrap(True)
+        self.episode_date_label.set_max_width_chars(40)
+        self.episode_date_label.add_css_class("caption")
         self.episode_date_label.add_css_class("dim-label")
 
-        episode_actions = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL,
-            spacing=8,
-            homogeneous=False,
+        episode_identity = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=3,
         )
+        episode_identity.append(self.episode_date_label)
+        episode_identity.append(self.episode_title_label)
+
+        episode_actions = Adw.WrapBox()
+        episode_actions.set_child_spacing(7)
+        episode_actions.set_line_spacing(7)
         episode_actions.set_halign(Gtk.Align.START)
         self.episode_watched_button = self._detail_navigation_action(
             "object-select-symbolic",
@@ -5677,23 +6265,53 @@ class CineShelfWindow:
         )
         episode_actions.append(self.episode_watched_button)
 
-        self.episode_watched_at_label = Gtk.Label(xalign=0.5)
+        self.episode_watched_at_label = Gtk.Label(xalign=0)
         self.episode_watched_at_label.set_wrap(True)
         self.episode_watched_at_label.add_css_class("caption")
         self.episode_watched_at_label.add_css_class("dim-label")
 
+        self.episode_runtime_label = Gtk.Label(xalign=0)
+        self.episode_runtime_label.add_css_class("dim-label")
+        episode_fact_separator = Gtk.Label(label="•")
+        episode_fact_separator.add_css_class("dim-label")
+        self.episode_series_label = Gtk.Label(xalign=0)
+        self.episode_series_label.set_wrap(True)
+        self.episode_series_label.set_max_width_chars(28)
+        self.episode_series_label.set_ellipsize(Pango.EllipsizeMode.END)
+        self.episode_series_label.add_css_class("dim-label")
+        episode_facts = Adw.WrapBox()
+        episode_facts.set_child_spacing(7)
+        episode_facts.set_line_spacing(4)
+        episode_facts.set_hexpand(True)
+        episode_facts.append(self.episode_runtime_label)
+        episode_facts.append(episode_fact_separator)
+        episode_facts.append(self.episode_series_label)
+
         overview_title = Gtk.Label(label="Overview", xalign=0)
-        overview_title.add_css_class("title-4")
+        overview_title.add_css_class("heading")
         self.episode_overview_label = Gtk.Label(xalign=0)
         self.episode_overview_label.set_wrap(True)
         self.episode_overview_label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        self.episode_overview_label.set_max_width_chars(42)
         self.episode_overview_label.add_css_class("dim-label")
+        episode_overview = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=7,
+        )
+        episode_overview.append(overview_title)
+        episode_overview.append(self.episode_overview_label)
 
-        cast_heading = Gtk.Label(label="Cast & Crew", xalign=0)
-        cast_heading.add_css_class("title-4")
         self.episode_cast_box = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
             spacing=12,
+        )
+        self.episode_cast_scroller = self._horizontal_scroller(
+            self.episode_cast_box,
+            116,
+        )
+        self.episode_cast_section = self._detail_section(
+            "Cast & Crew",
+            self.episode_cast_scroller,
         )
 
         self.episode_detail_box = Gtk.Box(
@@ -5701,25 +6319,20 @@ class CineShelfWindow:
             spacing=16,
         )
         self.episode_detail_box.set_vexpand(True)
-        self.episode_detail_box.set_margin_top(14)
+        self.episode_detail_box.set_margin_top(12)
         self.episode_detail_box.set_margin_bottom(28)
         self.episode_detail_box.set_margin_start(16)
         self.episode_detail_box.set_margin_end(16)
         self.episode_detail_box.add_css_class("detail-page")
-        self.episode_detail_box.add_css_class("detail-subpage-content")
+        self.episode_detail_box.add_css_class("detail-tint-content")
         self.episode_detail_box.append(self.episode_hero_host)
-        self.episode_detail_box.append(self.episode_title_label)
-        self.episode_detail_box.append(self.episode_date_label)
+        self.episode_detail_box.append(self.episode_status_label)
+        self.episode_detail_box.append(episode_identity)
         self.episode_detail_box.append(episode_actions)
         self.episode_detail_box.append(self.episode_watched_at_label)
-        self.episode_detail_box.append(Gtk.Separator())
-        self.episode_detail_box.append(overview_title)
-        self.episode_detail_box.append(self.episode_overview_label)
-        self.episode_detail_box.append(Gtk.Separator())
-        self.episode_detail_box.append(cast_heading)
-        self.episode_detail_box.append(
-            self._horizontal_scroller(self.episode_cast_box, 116)
-        )
+        self.episode_detail_box.append(episode_facts)
+        self.episode_detail_box.append(episode_overview)
+        self.episode_detail_box.append(self.episode_cast_section)
 
         self.episode_details_scroller = Gtk.ScrolledWindow()
         self.episode_details_scroller.set_policy(
@@ -5745,19 +6358,17 @@ class CineShelfWindow:
 
     @staticmethod
     def _detail_navigation_action(icon_name: str, label: str) -> Gtk.Button:
-        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         icon = Gtk.Image.new_from_icon_name(icon_name)
-        icon.set_pixel_size(20)
+        icon.set_pixel_size(16)
         caption = Gtk.Label(label=label)
-        caption.set_wrap(True)
-        caption.add_css_class("caption")
         content.append(icon)
         content.append(caption)
 
         button = Gtk.Button()
         button.set_child(content)
-        button.add_css_class("flat")
-        button.add_css_class("detail-action-button")
+        button.set_tooltip_text(label)
+        button.action_icon = icon
         button.action_label = caption
         return button
 
@@ -5949,15 +6560,16 @@ class CineShelfWindow:
         )
         self.sort_direction_button.connect("clicked", self._on_reverse_sort)
         self.image_switcher.connect("notify::active-name", self._on_image_mode_changed)
-        self.season_switcher.connect(
-            "notify::active-name",
-            self._on_season_switch_changed,
-        )
-
         self.search_button.connect("clicked", self._on_search_requested)
         self.profile_button.connect("clicked", self._on_profile_clicked)
         self.watched_button.connect("clicked", self._on_watched_clicked)
         self.bookmark_button.connect("toggled", self._on_bookmark_toggled)
+        title_click = Gtk.GestureClick()
+        title_click.connect("released", self._on_detail_title_released)
+        self.detail_title.add_controller(title_click)
+        self.detail_title.set_cursor_from_name("pointer")
+        self.detail_title.set_tooltip_text("Open this title on TMDB")
+        self.detail_title.add_css_class("detail-title-link")
         self.season_watched_button.connect(
             "clicked",
             self._on_season_watched_clicked,
@@ -6043,17 +6655,18 @@ class CineShelfWindow:
         width = self.explore_pane.get_width() or self.library_pane.get_width()
         if width <= 0:
             return GLib.SOURCE_REMOVE
-        columns = self._explore_columns_for_width(width)
+        columns = self._stable_explore_columns_for_width(
+            width,
+            self.explore_columns,
+        )
         columns_changed = columns != self.explore_columns
-        bucket = (columns, width // 80)
-        bucket_changed = bucket != self._last_explore_layout_bucket
         self._last_explore_layout_width = width
         self.explore_columns = columns
-        self._last_explore_layout_bucket = bucket
+        self._last_explore_layout_bucket = (columns, 0)
         if (
             self.active_destination == "explore"
             and self.explore_visible_records
-            and (columns_changed or bucket_changed)
+            and columns_changed
         ):
             scroll_value = self.explore_scroller.get_vadjustment().get_value()
             self._populate_explore_feed(force_relayout=True)
@@ -6071,6 +6684,27 @@ class CineShelfWindow:
         if width >= 280:
             return 2
         return 1
+
+    @classmethod
+    def _stable_explore_columns_for_width(
+        cls,
+        width: int,
+        current_columns: int,
+    ) -> int:
+        """Keep small allocation changes from flipping the grid repeatedly."""
+        target = cls._explore_columns_for_width(width)
+        if current_columns < 1 or target == current_columns:
+            return target
+        thresholds = {2: 280, 3: 390, 4: 540, 5: 760}
+        if target > current_columns:
+            target_threshold = thresholds.get(target, 0)
+            if width < target_threshold + EXPLORE_COLUMN_HYSTERESIS:
+                return current_columns
+        else:
+            current_threshold = thresholds.get(current_columns, 0)
+            if width >= current_threshold - EXPLORE_COLUMN_HYSTERESIS:
+                return current_columns
+        return target
 
     def _explore_layout_metrics(self) -> tuple[float, int]:
         """Return the column width and column count for Explore cards."""
@@ -6908,15 +7542,18 @@ class CineShelfWindow:
             artwork_file=preferred_artwork or record.artwork_file,
         )
         art_width = 480 if kind == "hero" else 320 if kind == "landscape" else 160
-        overlay.set_child(
-            PosterWidget(
-                artwork_record,
-                art_width,
-                self._explore_card_height(kind, span),
-                variant_offset=1 if kind == "landscape" else 0,
-                show_text=False,
-            )
+        artwork = PosterWidget(
+            artwork_record,
+            art_width,
+            self._explore_card_height(kind, span),
+            variant_offset=1 if kind == "landscape" else 0,
+            show_text=False,
+            flexible_width=True,
         )
+        artwork.set_hexpand(True)
+        artwork.set_vexpand(True)
+        artwork.set_size_request(-1, -1)
+        overlay.set_child(artwork)
 
     def _on_tmdb_explore_failed(self, generation: int, message: str) -> bool:
         if generation != self._tmdb_explore_generation:
@@ -6924,7 +7561,7 @@ class CineShelfWindow:
         self._tmdb_explore_pages_loading.difference_update(MEDIA_TYPES)
         self._sync_explore_loading_indicator()
         print(f"CineShelf TMDB: {message}", file=sys.stderr)
-        self._toast("TMDB unavailable — showing local sample data")
+        self._toast("TMDB is unavailable — Explore could not be loaded")
         return GLib.SOURCE_REMOVE
 
     def _load_tmdb_details_async(self, record: TitleRecord) -> None:
@@ -7018,7 +7655,6 @@ class CineShelfWindow:
                 if cached is not None
             )
             if record.tmdb_media_type == "movie":
-                runtime_minutes = int(payload.get("runtime") or 0)
                 directors = [
                     str(item.get("name"))
                     for item in payload.get("credits", {}).get("crew", ())
@@ -7027,8 +7663,6 @@ class CineShelfWindow:
                 creator = ", ".join(directors[:2]) or record.creator
                 seasons: tuple[SeasonInfo, ...] = ()
             else:
-                runtimes = payload.get("episode_run_time") or ()
-                runtime_minutes = int(runtimes[0]) if runtimes else 0
                 creators = [
                     str(item.get("name"))
                     for item in payload.get("created_by", ())
@@ -7082,11 +7716,7 @@ class CineShelfWindow:
                     )
                     for position, item in enumerate(season_rows, start=1)
                 )
-            runtime = (
-                f"{runtime_minutes // 60}h {runtime_minutes % 60:02d}m"
-                if runtime_minutes >= 60
-                else f"{runtime_minutes}m" if runtime_minutes else record.runtime
-            )
+            runtime = runtime_from_tmdb(payload, record.runtime)
             countries = [
                 str(item.get("name"))
                 for item in payload.get("production_countries", ())
@@ -7097,11 +7727,14 @@ class CineShelfWindow:
                 for item in payload.get("networks", ())
                 if isinstance(item, dict) and item.get("name")
             ]
-            video_titles = tuple(
-                str(item.get("name"))
-                for item in payload.get("videos", {}).get("results", ())[:8]
-                if isinstance(item, dict) and item.get("name")
+            raw_videos = payload.get("videos", {})
+            raw_videos = (
+                raw_videos.get("results", ())
+                if isinstance(raw_videos, dict)
+                else ()
             )
+            videos = video_infos_from_tmdb(raw_videos)
+            video_titles = tuple(item.title for item in videos)
             recommendation_ids = tuple(
                 f"tmdb-{record.tmdb_media_type}-{int(item['id'])}"
                 for item in payload.get("recommendations", {}).get("results", ())[:12]
@@ -7133,6 +7766,7 @@ class CineShelfWindow:
                 gallery_backdrops=gallery_backdrops,
                 gallery_posters=gallery_posters,
                 video_titles=video_titles,
+                videos=videos,
             )
         except tmdb_client.TmdbError as error:
             GLib.idle_add(
@@ -7167,6 +7801,61 @@ class CineShelfWindow:
             tuple(index for index, _path in profile_work),
             gallery_pending,
         )
+
+        # Recommendations are visible in the first details viewport, so add
+        # their records and prioritize their posters before secondary cast and
+        # gallery downloads.
+        raw_recommendations = payload.get("recommendations", {})
+        raw_recommendations = (
+            raw_recommendations.get("results", ())
+            if isinstance(raw_recommendations, dict)
+            else ()
+        )
+        recommendations = recommendation_records_from_tmdb(
+            raw_recommendations, updated
+        )
+        GLib.idle_add(
+            self._apply_tmdb_recommendations,
+            record.id,
+            generation,
+            recommendations,
+        )
+        poster_by_tmdb: dict[int, str] = {}
+        if isinstance(raw_recommendations, (list, tuple)):
+            for raw_item in raw_recommendations:
+                if not isinstance(raw_item, dict):
+                    continue
+                try:
+                    raw_id = int(raw_item["id"])
+                except (TypeError, ValueError, KeyError):
+                    continue
+                raw_path = str(raw_item.get("poster_path") or "")
+                if raw_path and raw_id not in poster_by_tmdb:
+                    poster_by_tmdb[raw_id] = raw_path
+        recommendation_work = [
+            (item.id, poster_by_tmdb[item.tmdb_id])
+            for item in recommendations
+            if item.poster_file is None
+            and item.tmdb_id is not None
+            and poster_by_tmdb.get(item.tmdb_id)
+        ]
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = {
+                executor.submit(
+                    tmdb_client.cache_image, path, size="w342"
+                ): item_id
+                for item_id, path in recommendation_work
+            }
+            for future in as_completed(futures):
+                image_file = future.result()
+                if image_file:
+                    GLib.idle_add(
+                        self._apply_tmdb_recommendation_artwork,
+                        record.id,
+                        generation,
+                        futures[future],
+                        image_file,
+                    )
 
         main_images = [
             ("poster", poster_path, "w500")
@@ -7224,52 +7913,23 @@ class CineShelfWindow:
                     image_file,
                 )
 
-        raw_recommendations = payload.get("recommendations", {})
-        raw_recommendations = (
-            raw_recommendations.get("results", ())
-            if isinstance(raw_recommendations, dict)
-            else ()
-        )
-        recommendations = recommendation_records_from_tmdb(
-            raw_recommendations, updated
-        )
-        GLib.idle_add(
-            self._apply_tmdb_recommendations,
-            record.id,
-            generation,
-            recommendations,
-        )
-        poster_by_tmdb: dict[int, str] = {}
-        if isinstance(raw_recommendations, (list, tuple)):
-            for raw_item in raw_recommendations:
-                if not isinstance(raw_item, dict):
-                    continue
-                try:
-                    raw_id = int(raw_item["id"])
-                except (TypeError, ValueError, KeyError):
-                    continue
-                raw_path = str(raw_item.get("poster_path") or "")
-                if raw_path and raw_id not in poster_by_tmdb:
-                    poster_by_tmdb[raw_id] = raw_path
-        recommendation_work = [
-            (item.id, poster_by_tmdb[item.tmdb_id])
-            for item in recommendations
-            if item.poster_file is None
-            and item.tmdb_id is not None
-            and poster_by_tmdb.get(item.tmdb_id)
+        video_work = [
+            (index, item.key)
+            for index, item in enumerate(videos)
+            if item.thumbnail_file is None
         ]
         with ThreadPoolExecutor(max_workers=4) as executor:
             futures = {
                 executor.submit(
-                    tmdb_client.cache_image, path, size="w342"
-                ): item_id
-                for item_id, path in recommendation_work
+                    tmdb_client.cache_youtube_thumbnail, key
+                ): index
+                for index, key in video_work
             }
             for future in as_completed(futures):
                 image_file = future.result()
                 if image_file:
                     GLib.idle_add(
-                        self._apply_tmdb_recommendation_artwork,
+                        self._apply_tmdb_video_thumbnail,
                         record.id,
                         generation,
                         futures[future],
@@ -7327,7 +7987,11 @@ class CineShelfWindow:
         item = self.records_by_id.get(item_id)
         if item is None or item.id in self.library_ids:
             return GLib.SOURCE_REMOVE
-        self.records_by_id[item_id] = replace(item, poster_file=image_file)
+        self.records_by_id[item_id] = replace(
+            item,
+            artwork_file=image_file,
+            poster_file=image_file,
+        )
         record = self.records_by_id.get(record_id)
         if (
             record is not None
@@ -7337,12 +8001,43 @@ class CineShelfWindow:
             self._populate_recommendations(record)
         return GLib.SOURCE_REMOVE
 
+    def _apply_tmdb_video_thumbnail(
+        self,
+        record_id: str,
+        generation: int,
+        index: int,
+        image_file: str,
+    ) -> bool:
+        if self._tmdb_detail_generations.get(record_id) != generation:
+            return GLib.SOURCE_REMOVE
+        record = self.records_by_id.get(record_id)
+        if record is None or index >= len(record.videos):
+            return GLib.SOURCE_REMOVE
+        videos = tuple(
+            replace(item, thumbnail_file=image_file)
+            if position == index
+            else item
+            for position, item in enumerate(record.videos)
+        )
+        self._store_tmdb_record(replace(record, videos=videos))
+        return GLib.SOURCE_REMOVE
+
     def _store_tmdb_record(
         self,
         updated: TitleRecord,
         *,
         refresh_details: bool = True,
     ) -> None:
+        canonical = self._canonical_record_id(updated)
+        if canonical in getattr(self, "local_library_records", {}):
+            local_updated = replace(updated, id=canonical)
+            self.local_library_records[canonical] = local_updated
+            self.records = tuple(
+                local_updated
+                if self._canonical_record_id(record) == canonical
+                else record
+                for record in self.records
+            )
         self.records_by_id[updated.id] = updated
         self.records = tuple(
             updated if record.id == updated.id else record
@@ -7407,6 +8102,26 @@ class CineShelfWindow:
     @staticmethod
     def _tmdb_season_cache_key(record_id: str, season_number: int) -> str:
         return f"{record_id}:s{season_number}"
+
+    def _season_episode_details_ready(
+        self,
+        record: TitleRecord,
+        season_index: int,
+    ) -> bool:
+        """Whether opening an episode can use a complete season response."""
+        seasons = self._series_seasons(record)
+        if not seasons:
+            return False
+        season_index = max(0, min(season_index, len(seasons) - 1))
+        if not getattr(self, "tmdb_token", None) or record.tmdb_id is None:
+            # No richer remote representation exists for this title, so its
+            # locally available episode data is the complete representation.
+            return True
+        key = self._tmdb_season_cache_key(
+            record.id,
+            seasons[season_index].number,
+        )
+        return key in getattr(self, "_tmdb_season_details_loaded", set())
 
     def _load_tmdb_season_details_async(
         self,
@@ -7531,13 +8246,7 @@ class CineShelfWindow:
                     )
                 except Exception:
                     continue
-            GLib.idle_add(
-                self._apply_tmdb_season_details,
-                record_id,
-                season_number,
-                season_key,
-                tuple(updates),
-            )
+            downloaded_stills: dict[int, str] = {}
             for episode_number, still_path in pending_stills:
                 try:
                     image_file = tmdb_client.cache_image(still_path, size="w780")
@@ -7549,13 +8258,37 @@ class CineShelfWindow:
                     )
                     continue
                 if image_file:
-                    GLib.idle_add(
-                        self._apply_tmdb_season_artwork,
-                        record_id,
-                        season_number,
-                        episode_number,
-                        image_file,
-                    )
+                    downloaded_stills[episode_number] = image_file
+            complete_updates = tuple(
+                (
+                    episode_number,
+                    title,
+                    air_date,
+                    overview,
+                    runtime,
+                    cast,
+                    downloaded_stills.get(episode_number, cached_still),
+                )
+                for (
+                    episode_number,
+                    title,
+                    air_date,
+                    overview,
+                    runtime,
+                    cast,
+                    cached_still,
+                ) in updates
+            )
+            # Publish the season only after every pending still has either
+            # loaded or failed. Until this callback runs, episode rows remain
+            # non-activatable and cannot open with partial data.
+            GLib.idle_add(
+                self._apply_tmdb_season_details,
+                record_id,
+                season_number,
+                season_key,
+                complete_updates,
+            )
         except Exception as error:
             GLib.idle_add(
                 self._on_tmdb_season_details_failed, season_key, str(error)
@@ -7623,27 +8356,6 @@ class CineShelfWindow:
         self._refresh_visible_episode_for_season(updated, season_number)
         return GLib.SOURCE_REMOVE
 
-    def _apply_tmdb_season_artwork(
-        self,
-        record_id: str,
-        season_number: int,
-        episode_number: int,
-        image_file: str,
-    ) -> bool:
-        updated = self._replace_episode_info(
-            record_id,
-            season_number,
-            episode_number,
-            lambda episode: replace(episode, artwork_file=image_file),
-        )
-        if updated is not None:
-            self._store_tmdb_record(updated, refresh_details=False)
-            self._refresh_visible_season_page(updated, season_number)
-            self._refresh_visible_episode_page(
-                updated, season_number, episode_number
-            )
-        return GLib.SOURCE_REMOVE
-
     def _refresh_visible_season_page(
         self,
         record: TitleRecord,
@@ -7667,7 +8379,51 @@ class CineShelfWindow:
             return
         if self.current_season_index != season_index:
             return
+        scroll_value = self.season_details_scroller.get_vadjustment().get_value()
         self._populate_season_page(record, season_index, reset_scroll=False)
+        self._scroll_to_value(self.season_details_scroller, scroll_value)
+
+    def _refresh_visible_season_artwork(
+        self,
+        record: TitleRecord,
+        season_number: int,
+        episode_number: int,
+    ) -> None:
+        """Replace one loaded still without rebuilding or reordering the list."""
+        if self.detail_record_id != record.id:
+            return
+        seasons = self._series_seasons(record)
+        season_index = next(
+            (
+                index
+                for index, season in enumerate(seasons)
+                if season.number == season_number
+            ),
+            None,
+        )
+        if season_index is None or self.current_season_index != season_index:
+            return
+        episode = next(
+            (
+                item
+                for item in self._episodes_for_season(record, season_index)
+                if item.number == episode_number
+            ),
+            None,
+        )
+        if episode is None:
+            return
+        row = self.season_episodes_list.get_first_child()
+        while row is not None:
+            if getattr(row, "episode_number", None) == episode_number:
+                previous = getattr(row, "episode_artwork", None)
+                if previous is not None:
+                    row.remove(previous)
+                artwork = self._episode_artwork(record, episode, 112, 63)
+                row.episode_artwork = artwork
+                row.add_prefix(artwork)
+                return
+            row = row.get_next_sibling()
 
     def _refresh_visible_episode_for_season(
         self,
@@ -7845,6 +8601,12 @@ class CineShelfWindow:
         if updated is not None:
             self._tmdb_episode_details_loaded.add(key)
             self._store_tmdb_record(updated, refresh_details=False)
+            if artwork_file:
+                self._refresh_visible_season_artwork(
+                    updated,
+                    season_number,
+                    episode_number,
+                )
             self._refresh_visible_episode_page(updated, season_number, episode_number)
         return GLib.SOURCE_REMOVE
 
@@ -7863,6 +8625,11 @@ class CineShelfWindow:
         )
         if updated is not None:
             self._store_tmdb_record(updated, refresh_details=False)
+            self._refresh_visible_season_artwork(
+                updated,
+                season_number,
+                episode_number,
+            )
             self._refresh_visible_episode_page(updated, season_number, episode_number)
         return GLib.SOURCE_REMOVE
 
@@ -7888,7 +8655,16 @@ class CineShelfWindow:
         )
         if season_index is None:
             return
+        if self.current_season_index != season_index:
+            return
         episodes = self._episodes_for_season(record, season_index)
+        if not (0 <= self.current_episode_index < len(episodes)):
+            return
+        # Artwork/detail callbacks may arrive for several episodes. Refresh
+        # only the episode the user actually opened; otherwise every callback
+        # would navigate the page to its own episode number.
+        if episodes[self.current_episode_index].number != episode_number:
+            return
         episode_index = next(
             (
                 index
@@ -8005,12 +8781,25 @@ class CineShelfWindow:
         self._close_sidebar_overlay()
         self.settings_dialog.present(self.window)
 
+    def _on_tmdb_settings_clicked(self, button: Gtk.Button) -> None:
+        if tmdb_client.token_source() in {"bundled", "environment"}:
+            application = self.window.get_application()
+            if application is not None:
+                application.activate_action("credits", None)
+            return
+        self._show_tmdb_token_dialog(button)
+
     def _show_tmdb_token_dialog(self, _button: Gtk.Button) -> None:
         dialog = Adw.AlertDialog(
-            heading="Change TMDB connection" if self.tmdb_token else "Connect to TMDB",
+            heading=(
+                "Change TMDB developer override"
+                if tmdb_client.token_source() == "user"
+                else "Configure this development build"
+            ),
             body=(
-                "Enter a TMDB API Read Access Token to load live titles, "
-                "details and artwork. The token is stored only for this user."
+                "Public releases should include CineShelf's approved TMDB credential. "
+                "For local development only, you can enter your own API Read Access "
+                "Token; it will be stored only for this user."
             ),
         )
         entry = Gtk.PasswordEntry()
@@ -8158,11 +8947,24 @@ class CineShelfWindow:
     def _is_record_bookmarked(self, record: TitleRecord) -> bool:
         return self._canonical_record_id(record) in self.bookmarks
 
+    def _record_has_watched_episode(self, record: TitleRecord) -> bool:
+        if not isinstance(record, TitleRecord) or record.media_type == "Movies":
+            return False
+        return any(
+            self._episode_is_watched(record, season_index, episode)
+            for season_index, _season in enumerate(self._series_seasons(record))
+            for episode in self._episodes_for_season(record, season_index)
+        )
+
     def _effective_record_rating(self, record: TitleRecord) -> int | None:
         return self.ratings.get(self._canonical_record_id(record), record.user_rating)
 
     def _effective_status(self, record: TitleRecord) -> str:
         canonical = self._canonical_record_id(record)
+        if self._is_record_completed(record):
+            return "Watched"
+        if self._local_mode_active() and self._record_has_watched_episode(record):
+            return "Watching"
         override = self.status_overrides.get(canonical)
         if override is not None:
             return override
@@ -8474,16 +9276,6 @@ class CineShelfWindow:
             attribution.add_css_class("caption")
             attribution.add_css_class("dim-label")
             self.explore_feed_box.append(attribution)
-        elif not self.tmdb_token:
-            fallback_notice = Gtk.Label(
-                label="Sample artwork · Configure TMDB in Preferences for live data"
-            )
-            fallback_notice.set_halign(Gtk.Align.START)
-            fallback_notice.set_wrap(True)
-            fallback_notice.set_margin_top(2)
-            fallback_notice.add_css_class("caption")
-            fallback_notice.add_css_class("dim-label")
-            self.explore_feed_box.append(fallback_notice)
         self.explore_feed_box.append(self.explore_loading_box)
         self._sync_explore_loading_indicator()
         self._sync_explore_selection_style()
@@ -8740,18 +9532,124 @@ class CineShelfWindow:
         content.append(self._create_poster_overlay(record, 76, 114))
         content.append(self._create_record_copy(record, compact=False))
 
-        menu_button = Gtk.Button.new_from_icon_name("view-more-symbolic")
+        menu_button = Gtk.MenuButton()
+        menu_button.set_icon_name("view-more-symbolic")
         menu_button.set_tooltip_text(f"More options for {record.title}")
         menu_button.set_valign(Gtk.Align.START)
         menu_button.add_css_class("flat")
         menu_button.add_css_class("circular")
-        menu_button.connect(
-            "clicked",
-            lambda _button, title=record.title: self._toast(f"More options for {title}"),
-        )
+        menu_button.set_popover(self._record_context_popover(record))
         content.append(menu_button)
         row.set_child(content)
         return row
+
+    def _record_context_popover(self, record: TitleRecord) -> Gtk.PopoverMenu:
+        menu = Gio.Menu()
+        state_section = Gio.Menu()
+        watched = self._is_record_completed(record)
+        state_section.append(
+            "Mark as unwatched" if watched else "Mark as watched",
+            "record.watch",
+        )
+        bookmarked = self._is_record_bookmarked(record)
+        state_section.append(
+            "Remove from Watchlist" if bookmarked else "Add to Watchlist",
+            "record.watchlist",
+        )
+        current_rating = self._effective_record_rating(record)
+        rating_section = Gio.Menu()
+        rating_section.append(
+            f"Rate…  ({current_rating}/10)" if current_rating is not None else "Rate…",
+            "record.rate",
+        )
+        menu.append_section(None, state_section)
+        menu.append_section(None, rating_section)
+
+        popover = Gtk.PopoverMenu.new_from_model(menu)
+        actions = Gio.SimpleActionGroup()
+        watch_action = Gio.SimpleAction.new("watch", None)
+        watch_action.connect(
+            "activate",
+            lambda *_args: self._activate_context_watched(record.id),
+        )
+        actions.add_action(watch_action)
+        watchlist_action = Gio.SimpleAction.new("watchlist", None)
+        watchlist_action.connect(
+            "activate",
+            lambda *_args: self._activate_context_watchlist(
+                record.id,
+                not bookmarked,
+            ),
+        )
+        actions.add_action(watchlist_action)
+        rating_action = Gio.SimpleAction.new("rate", None)
+        rating_action.connect(
+            "activate",
+            lambda *_args: self._activate_context_rating(record.id),
+        )
+        actions.add_action(rating_action)
+        popover.insert_action_group("record", actions)
+        return popover
+
+    def _context_record(self, record_id: str) -> TitleRecord | None:
+        return self.records_by_id.get(record_id)
+
+    def _activate_context_watched(self, record_id: str) -> None:
+        record = self._context_record(record_id)
+        if record is not None:
+            self._activate_record_watched(record)
+
+    def _activate_context_watchlist(self, record_id: str, adding: bool) -> None:
+        record = self._context_record(record_id)
+        if record is not None:
+            self._set_record_bookmarked(record, adding)
+
+    def _activate_context_rating(self, record_id: str) -> None:
+        record = self._context_record(record_id)
+        if record is not None:
+            self._show_record_rating_dialog(record)
+
+    def _show_record_rating_dialog(self, record: TitleRecord) -> None:
+        dialog = Adw.AlertDialog(
+            heading=f"Rate {record.title}",
+            body="Choose a score from 1 to 10, then save your rating.",
+        )
+        rating_grid = Gtk.Grid(column_homogeneous=True, row_homogeneous=True)
+        rating_grid.set_column_spacing(6)
+        rating_grid.set_row_spacing(6)
+        selected = {"score": self._effective_record_rating(record)}
+        leader: Gtk.ToggleButton | None = None
+        for score in range(1, 11):
+            button = Gtk.ToggleButton(label=str(score))
+            button.set_tooltip_text(f"{score} out of 10")
+            if leader is None:
+                leader = button
+            else:
+                button.set_group(leader)
+            button.set_active(score == selected["score"])
+            def select_score(item: Gtk.ToggleButton, value: int = score) -> None:
+                if item.get_active():
+                    selected["score"] = value
+                    dialog.set_response_enabled("save", True)
+
+            button.connect("toggled", select_score)
+            rating_grid.attach(button, (score - 1) % 5, (score - 1) // 5, 1, 1)
+        dialog.set_extra_child(rating_grid)
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("save", "Save rating")
+        dialog.set_response_enabled("save", selected["score"] is not None)
+        dialog.set_close_response("cancel")
+        dialog.set_default_response("save")
+        dialog.set_response_appearance("save", Adw.ResponseAppearance.SUGGESTED)
+
+        def save_rating(_dialog: Adw.AlertDialog, response: str) -> None:
+            score = selected["score"]
+            current = self._context_record(record.id)
+            if response == "save" and score is not None and current is not None:
+                self._set_record_rating(current, score)
+
+        dialog.connect("response", save_rating)
+        dialog.present(self.window)
 
     def _create_grid_child(self, record: TitleRecord) -> Gtk.FlowBoxChild:
         child = Gtk.FlowBoxChild()
@@ -8902,14 +9800,21 @@ class CineShelfWindow:
             self.detail_poster_host.append(placeholder)
             return
         overlay = Gtk.Overlay()
+        overlay.set_hexpand(True)
+        overlay.set_halign(Gtk.Align.FILL)
+        trailer_info = record.videos[0] if record.videos else None
         hero_record = replace(
             record,
             artwork_file=(
-                record.backdrop_file or record.poster_file or record.artwork_file
+                record.backdrop_file
+                or (trailer_info.thumbnail_file if trailer_info else None)
+                or record.poster_file
+                or record.artwork_file
             ),
         )
         artwork_button = Gtk.Button()
         artwork_button.set_hexpand(True)
+        artwork_button.set_halign(Gtk.Align.FILL)
         artwork_button.set_child(
             PosterWidget(hero_record, 352, 198, show_text=False, flexible_width=True)
         )
@@ -8932,11 +9837,23 @@ class CineShelfWindow:
         trailer.add_css_class("pill")
         trailer.add_css_class("detail-hero-button")
         trailer.set_tooltip_text(f"Play the trailer for {record.title}")
-        trailer.connect(
-            "clicked",
-            lambda _button, title=record.title: self._toast(f"Playing trailer for {title}"),
-        )
+        trailer.set_visible(trailer_info is not None)
+        if trailer_info is not None and trailer_info.url is not None:
+            trailer.connect(
+                "clicked",
+                lambda _button, video=trailer_info: (
+                    self._open_external_uri_with_warning(
+                        video.url or "",
+                        heading="Open the trailer?",
+                        body=(
+                            f"CineShelf will open “{video.title}” on YouTube "
+                            "in your default web browser."
+                        ),
+                    )
+                ),
+            )
         overlay.add_overlay(trailer)
+        overlay.set_measure_overlay(trailer, False)
 
         self.detail_poster_host.append(overlay)
 
@@ -9195,6 +10112,51 @@ class CineShelfWindow:
             for episode in self._episodes_for_season(record, season_index)
         )
 
+    def _series_completion_progress(
+        self,
+        record: TitleRecord,
+    ) -> tuple[int, int]:
+        """Return effective watched and total episode counts for progress UI."""
+        seasons = self._series_seasons(record)
+        progress_indexes = main_progress_season_indexes(seasons)
+        total = sum(max(0, seasons[index].episodes) for index in progress_indexes)
+        if total == 0:
+            return 0, 0
+        if self._is_record_completed(record):
+            return total, total
+        watched = sum(
+            self._season_watched_count(record, index)
+            for index in progress_indexes
+        )
+        return min(max(0, watched), total), total
+
+    def _update_activity_progress(self, record: TitleRecord) -> None:
+        """Refresh the title-detail progress card from effective episode state."""
+        show_completion = should_show_completion_progress(record.media_type)
+        self.activity_progress_card.set_visible(show_completion)
+        if not show_completion:
+            return
+
+        watched_episodes, total_episodes = self._series_completion_progress(record)
+        fraction = watched_episodes / total_episodes if total_episodes > 0 else 0.0
+        percentage = round(fraction * 100)
+        if total_episodes == 0:
+            activity_status = "Episode data unavailable"
+            tooltip = activity_status
+        elif watched_episodes == 0:
+            activity_status = f"0 of {total_episodes} episodes watched"
+            tooltip = activity_status
+        elif watched_episodes >= total_episodes:
+            activity_status = f"All {total_episodes} episodes watched"
+            tooltip = f"{total_episodes} of {total_episodes} episodes watched"
+        else:
+            activity_status = f"{watched_episodes} of {total_episodes} episodes watched"
+            tooltip = activity_status
+        self.activity_status.set_label(activity_status)
+        self.activity_percentage.set_label(f"{percentage}%")
+        self.activity_progress.set_fraction(fraction)
+        self.activity_progress.set_tooltip_text(tooltip)
+
     def _episode_progress_items(
         self,
         record: TitleRecord,
@@ -9223,6 +10185,13 @@ class CineShelfWindow:
         flexible_width: bool = False,
     ) -> Gtk.Overlay:
         overlay = Gtk.Overlay()
+        # ActionRow prefixes default to FILL and would stretch a 16:9 still to
+        # the row's full height.  Keep both dimensions explicit and centre the
+        # thumbnail so the image is never distorted by a taller text block.
+        overlay.set_size_request(width, height)
+        overlay.set_halign(Gtk.Align.START)
+        overlay.set_valign(Gtk.Align.CENTER)
+        overlay.add_css_class("episode-artwork")
         artwork_record = replace(
             record,
             artwork_file=episode.artwork_file,
@@ -9239,16 +10208,29 @@ class CineShelfWindow:
                 flexible_width=flexible_width,
             )
         )
-        number = Gtk.Label(label=str(episode.number))
-        number.set_halign(Gtk.Align.END)
-        number.set_valign(Gtk.Align.END)
-        number.set_margin_end(5)
-        number.set_margin_bottom(5)
-        number.add_css_class("episode-number-badge")
-        number.add_css_class("numeric")
-        overlay.add_overlay(number)
         overlay.set_tooltip_text(f"Episode {episode.number}: {episode.title}")
         return overlay
+
+    @staticmethod
+    def _episode_watch_button(watched: bool) -> Gtk.Button:
+        """Return a real, compact Adwaita control for episode watch state."""
+        button = Gtk.Button.new_from_icon_name(
+            "object-select-symbolic"
+            if watched
+            else "media-playback-start-symbolic"
+        )
+        icon = button.get_child()
+        if isinstance(icon, Gtk.Image):
+            icon.set_pixel_size(14)
+            if watched:
+                icon.add_css_class("success")
+        button.add_css_class("flat")
+        button.add_css_class("circular")
+        button.add_css_class("episode-watch-button")
+        label = "Mark episode unwatched" if watched else "Mark episode watched"
+        button.set_tooltip_text(label)
+        button.update_property([Gtk.AccessibleProperty.LABEL], [label])
+        return button
 
     @staticmethod
     def _episode_card(label: str, value: str, subtitle: str) -> Gtk.Box:
@@ -9278,6 +10260,7 @@ class CineShelfWindow:
     def _populate_series(self, record: TitleRecord) -> None:
         episodic = record.media_type != "Movies"
         self.series_section.set_visible(episodic)
+        self._update_activity_progress(record)
         if not episodic:
             return
 
@@ -9311,6 +10294,7 @@ class CineShelfWindow:
 
         for season_index, season in enumerate(seasons):
             watched = self._season_watched_count(record, season_index)
+            season_complete = is_episode_group_complete(watched, season.episodes)
             row = Adw.ActionRow(
                 title=season.title,
                 subtitle=f"{watched}/{season.episodes} episodes",
@@ -9323,11 +10307,18 @@ class CineShelfWindow:
             progress.add_css_class("dim-label")
             row.add_suffix(progress)
             icon = Gtk.Image.new_from_icon_name(
-                "emblem-ok-symbolic"
-                if watched >= season.episodes
+                "object-select-symbolic"
+                if season_complete
                 else "media-playback-start-symbolic"
             )
-            if watched >= season.episodes:
+            icon.set_tooltip_text(
+                "Season watched" if season_complete else "Season in progress"
+            )
+            icon.update_property(
+                [Gtk.AccessibleProperty.LABEL],
+                ["Season watched" if season_complete else "Season in progress"],
+            )
+            if season_complete:
                 icon.add_css_class("success")
             row.add_suffix(icon)
             row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
@@ -9347,6 +10338,7 @@ class CineShelfWindow:
         season = seasons[season_index]
         episodes = self._episodes_for_season(record, season_index)
         watched = self._season_watched_count(record, season_index)
+        details_ready = self._season_episode_details_ready(record, season_index)
 
         self.detail_record_id = record.id
         self.current_season_index = season_index
@@ -9355,63 +10347,47 @@ class CineShelfWindow:
         self.season_summary_label.set_label(
             f"{watched} of {len(episodes)} episodes watched · {record.network}"
         )
-        self.season_episode_count.set_label(f"{len(episodes)} episodes")
-        self.season_watched_button.action_label.set_label(
-            "Mark unwatched" if watched == len(episodes) else "Mark watched"
+        self._set_watched_action_state(
+            self.season_watched_button,
+            is_episode_group_complete(watched, len(episodes)),
+            "season",
         )
-
-        self._updating_season_switcher = True
-        rebuild_switcher = (
-            self.season_switcher_record_id != record.id
-            or self.season_switcher.get_n_toggles() != len(seasons)
-        )
-        if rebuild_switcher:
-            self.season_switcher.remove_all()
-            for index, item in enumerate(seasons):
-                item_watched = self._season_watched_count(record, index)
-                self.season_switcher.add(
-                    Adw.Toggle(
-                        name=f"season-{index}",
-                        label=(
-                            f"{self._season_short_label(item)}  "
-                            f"{item_watched}/{item.episodes}"
-                        ),
-                    )
-                )
-            self.season_switcher_record_id = record.id
-        else:
-            for index, item in enumerate(seasons):
-                item_watched = self._season_watched_count(record, index)
-                self.season_switcher.get_toggle(index).set_label(
-                    f"{self._season_short_label(item)}  "
-                    f"{item_watched}/{item.episodes}"
-                )
-        self.season_switcher.set_active_name(f"season-{season_index}")
-        self._updating_season_switcher = False
 
         self._clear_container(self.season_episodes_list)
         for episode_index, episode in enumerate(episodes):
             row = Adw.ActionRow(
-                title=episode.title,
+                title=f"{episode.number}. {episode.title}",
                 subtitle=f"{episode.date}\n{episode.description}",
             )
             row.set_title_lines(1)
             row.set_subtitle_lines(2)
-            row.set_activatable(True)
+            row.set_activatable(details_ready)
             row.season_index = season_index
             row.episode_index = episode_index
-            row.add_prefix(self._episode_artwork(record, episode, 112, 64))
+            row.episode_number = episode.number
+            row.episode_artwork = self._episode_artwork(record, episode, 112, 63)
+            row.add_prefix(row.episode_artwork)
 
-            watched_icon = Gtk.Image.new_from_icon_name(
-                "emblem-ok-symbolic"
-                if self._episode_is_watched(record, season_index, episode)
-                else "media-playback-start-symbolic"
+            watched = self._episode_is_watched(record, season_index, episode)
+            watched_button = self._episode_watch_button(watched)
+            watched_button.connect(
+                "clicked",
+                self._on_episode_row_watched_clicked,
+                record.id,
+                season_index,
+                episode.number,
             )
-            if self._episode_is_watched(record, season_index, episode):
-                watched_icon.add_css_class("success")
-            row.add_suffix(watched_icon)
-            row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
-            row.set_tooltip_text(f"Open episode {episode.number}: {episode.title}")
+            row.watch_button = watched_button
+            row.add_suffix(watched_button)
+            if details_ready:
+                row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
+                row.set_tooltip_text(
+                    f"Open episode {episode.number}: {episode.title}"
+                )
+            else:
+                row.set_tooltip_text(
+                    "Wait for all episode details to finish loading"
+                )
             self.season_episodes_list.append(row)
 
         if reset_scroll:
@@ -9449,10 +10425,14 @@ class CineShelfWindow:
             )
         )
         self.episode_title_label.set_label(episode.title)
-        episode_metadata = " · ".join(
-            value for value in (episode.date, episode.runtime) if value
+        episode_code = f"S{season.number:02d}E{episode.number:02d}"
+        self.episode_date_label.set_label(
+            " · ".join(value for value in (episode_code, episode.date) if value)
         )
-        self.episode_date_label.set_label(episode_metadata)
+        self.episode_runtime_label.set_label(
+            episode.runtime or "Runtime unavailable"
+        )
+        self.episode_series_label.set_label(f"{record.title} · {season.title}")
         self.episode_overview_label.set_label(episode.description)
         self._populate_cast_container(
             self.episode_cast_box,
@@ -9470,8 +10450,10 @@ class CineShelfWindow:
         episode: EpisodeInfo,
     ) -> None:
         watched = self._episode_is_watched(record, season_index, episode)
-        self.episode_watched_button.action_label.set_label(
-            "Watched" if watched else "Mark watched"
+        self.episode_status_label.set_visible(watched)
+        self.episode_status_label.set_label("Watched")
+        self._set_watched_action_state(
+            self.episode_watched_button, watched, "episode"
         )
         watched_at = self.episode_watched_at.get(
             self._episode_key(record, season_index, episode)
@@ -9483,6 +10465,23 @@ class CineShelfWindow:
         else:
             status = "Not watched yet"
         self.episode_watched_at_label.set_label(status)
+
+    @staticmethod
+    def _set_watched_action_state(
+        button: Gtk.Button,
+        watched: bool,
+        noun: str,
+    ) -> None:
+        label = f"Mark {noun} unwatched" if watched else f"Mark {noun} watched"
+        button.action_label.set_label(label)
+        button.action_icon.set_from_icon_name(
+            "edit-undo-symbolic" if watched else "object-select-symbolic"
+        )
+        button.set_tooltip_text(label)
+        if watched:
+            button.remove_css_class("suggested-action")
+        else:
+            button.add_css_class("suggested-action")
 
     @staticmethod
     def _scroll_to_value(scroller: Gtk.ScrolledWindow, value: float) -> None:
@@ -9499,7 +10498,7 @@ class CineShelfWindow:
     def _video_card(
         self,
         record: TitleRecord,
-        title: str,
+        video: VideoInfo,
         variant_offset: int,
     ) -> Gtk.Button:
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
@@ -9507,7 +10506,10 @@ class CineShelfWindow:
         video_record = replace(
             record,
             artwork_file=(
-                record.backdrop_file or record.poster_file or record.artwork_file
+                video.thumbnail_file
+                or record.backdrop_file
+                or record.poster_file
+                or record.artwork_file
             ),
         )
         overlay.set_child(
@@ -9518,9 +10520,9 @@ class CineShelfWindow:
         play.set_valign(Gtk.Align.CENTER)
         play.add_css_class("rating-badge")
         overlay.add_overlay(play)
-        caption = Gtk.Label(label=title, xalign=0)
+        caption = Gtk.Label(label=video.title, xalign=0)
         self._configure_bounded_card_label(caption, 17, lines=1)
-        caption.set_tooltip_text(title)
+        caption.set_tooltip_text(video.title)
         caption.add_css_class("caption")
         content.append(overlay)
         content.append(caption)
@@ -9529,11 +10531,19 @@ class CineShelfWindow:
         button.set_child(content)
         button.add_css_class("flat")
         button.add_css_class("detail-media-card")
-        button.set_tooltip_text(f"Play {title} for {record.title}")
-        button.connect(
-            "clicked",
-            lambda _button, video_title=title: self._toast(f"Playing {video_title}"),
-        )
+        button.set_tooltip_text(f"Play {video.title} for {record.title}")
+        if video.url is not None:
+            button.connect(
+                "clicked",
+                lambda _button, item=video: self._open_external_uri_with_warning(
+                    item.url or "",
+                    heading="Open the video?",
+                    body=(
+                        f"CineShelf will open “{item.title}” on YouTube "
+                        "in your default web browser."
+                    ),
+                ),
+            )
         return button
 
     def _populate_videos(self, record: TitleRecord) -> None:
@@ -9544,9 +10554,9 @@ class CineShelfWindow:
                     self._loading_media_placeholder(156, 112, "Loading video")
                 )
             return
-        titles = record.video_titles or ("New trailer", "Official trailer")
-        for index, title in enumerate(titles[:8], start=1):
-            self.videos_box.append(self._video_card(record, title, index))
+        self.videos_section.set_visible(bool(record.videos))
+        for index, video in enumerate(record.videos[:8], start=1):
+            self.videos_box.append(self._video_card(record, video, index))
 
     def _populate_images(self, record: TitleRecord) -> None:
         self._clear_container(self.images_box)
@@ -9628,7 +10638,11 @@ class CineShelfWindow:
         self.recommendations_section.set_visible(bool(related))
         for item in related:
             content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-            content.append(PosterWidget(item, 88, 132))
+            poster_record = replace(
+                item,
+                artwork_file=item.poster_file or item.artwork_file,
+            )
+            content.append(PosterWidget(poster_record, 88, 132))
             title = Gtk.Label(label=item.title, xalign=0)
             self._configure_bounded_card_label(title, 10)
             title.set_tooltip_text(item.title)
@@ -9673,7 +10687,8 @@ class CineShelfWindow:
             return
 
         record_changed = self.detail_record_id != record.id
-        self._reset_detail_navigation()
+        if record_changed:
+            self._reset_detail_navigation()
         self.detail_record_id = record.id
         self.detail_box.set_visible(True)
         self.detail_poster_host.set_visible(True)
@@ -9699,12 +10714,6 @@ class CineShelfWindow:
         self.release_row.set_subtitle(f"{record.year} · {record.availability}")
         self.country_row.set_subtitle(record.country)
         self.activity_row.set_subtitle(record.date)
-        self.activity_status.set_label("Completed" if is_completed else "Not watched yet")
-        self.activity_percentage.set_label("100%" if is_completed else "0%")
-        self.activity_progress.set_fraction(1.0 if is_completed else 0.0)
-        self.activity_progress_card.set_visible(
-            should_show_completion_progress(record.media_type)
-        )
 
         self._updating_details = True
         self.bookmark_button.set_visible(True)
@@ -10335,26 +11344,6 @@ class CineShelfWindow:
         self.detail_navigation.push_by_tag("season")
         self._load_tmdb_season_details_async(record, int(season_index))
 
-    def _on_season_switch_changed(
-        self,
-        group: Adw.ToggleGroup,
-        _parameter: Any,
-    ) -> None:
-        if self._updating_season_switcher:
-            return
-        active = group.get_active_name()
-        if not active or not active.startswith("season-"):
-            return
-        record = self.records_by_id.get(self.detail_record_id or "")
-        if record is None:
-            return
-        try:
-            season_index = int(active.removeprefix("season-"))
-        except ValueError:
-            return
-        self._populate_season_page(record, season_index)
-        self._load_tmdb_season_details_async(record, season_index)
-
     def _on_episode_activated(
         self,
         _list_box: Gtk.ListBox,
@@ -10365,16 +11354,62 @@ class CineShelfWindow:
         episode_index = getattr(row, "episode_index", None)
         if record is None or season_index is None or episode_index is None:
             return
+        season_index = int(season_index)
+        if not self._season_episode_details_ready(record, season_index):
+            self._toast("Wait for all episode details to finish loading")
+            self._load_tmdb_season_details_async(record, season_index)
+            return
         self._populate_episode_page(
             record,
-            int(season_index),
+            season_index,
             int(episode_index),
         )
         self.detail_navigation.push_by_tag("episode")
         self._load_tmdb_episode_details_async(
             record,
-            int(season_index),
+            season_index,
             int(episode_index),
+        )
+
+    def _on_episode_row_watched_clicked(
+        self,
+        _button: Gtk.Button,
+        record_id: str,
+        season_index: int,
+        episode_number: int,
+    ) -> None:
+        """Toggle one episode without navigating away from the season page."""
+        record = self.records_by_id.get(record_id)
+        if record is None:
+            return
+        seasons = self._series_seasons(record)
+        if not (0 <= season_index < len(seasons)):
+            return
+        episode = next(
+            (
+                item
+                for item in self._episodes_for_season(record, season_index)
+                if item.number == episode_number
+            ),
+            None,
+        )
+        if episode is None:
+            return
+        if self._episode_is_watched(record, season_index, episode):
+            self._unmark_episode_watched(record, season_index, episode)
+            return
+        season = seasons[season_index]
+        self._show_watched_time_dialog(
+            title_text=record.title,
+            subtitle_text=(
+                f"S{season.number:02d}E{episode.number:02d} · {episode.title}"
+            ),
+            on_confirm=lambda iso: self._mark_episode_watched(
+                record,
+                season_index,
+                episode.number,
+                iso,
+            ),
         )
 
     @staticmethod
@@ -10579,6 +11614,7 @@ class CineShelfWindow:
     def _refresh_season_watched_ui(
         self, record: TitleRecord, season_index: int
     ) -> None:
+        record = self.records_by_id.get(record.id, record)
         season_scroll = self.season_details_scroller.get_vadjustment().get_value()
         self._populate_series(record)
         self._populate_season_page(record, season_index)
@@ -10596,6 +11632,17 @@ class CineShelfWindow:
             )
         if self.active_destination == "profile":
             self._refresh_profile()
+        else:
+            self._defer_library_refresh_for_detail_mutation()
+
+    def _defer_library_refresh_for_detail_mutation(self) -> None:
+        """Keep the open title stable, then refresh its filter after closing."""
+        if self.active_destination != "library":
+            return
+        if getattr(self, "details_open", False):
+            self._library_results_dirty = True
+            return
+        self._refresh_results()
 
     def _mark_season_watched(
         self,
@@ -10615,6 +11662,8 @@ class CineShelfWindow:
             return
 
         def apply() -> None:
+            if self._local_mode_active():
+                self._ensure_local_library_record(record)
             for episode in newly_watched:
                 key = self._episode_key(record, season_index, episode)
                 self.episode_status_overrides[key] = True
@@ -10623,8 +11672,11 @@ class CineShelfWindow:
             self._refresh_season_watched_ui(record, season_index)
 
         if not self._simkl_writable():
-            apply()
-            self._toast("Season watched time saved locally (not synced)")
+            if self._local_mode_active():
+                apply()
+                self._toast("Season watched time saved locally (not synced)")
+            else:
+                self._toast("Connect Simkl to change episode history")
             return
         outcome_box: dict[str, simkl_client.HistorySyncResult] = {}
 
@@ -10681,8 +11733,11 @@ class CineShelfWindow:
             self._refresh_season_watched_ui(record, season_index)
 
         if not self._simkl_writable():
-            apply()
-            self._toast("Season marked as unwatched locally (not synced)")
+            if self._local_mode_active():
+                apply()
+                self._toast("Season marked as unwatched locally (not synced)")
+            else:
+                self._toast("Connect Simkl to change episode history")
             return
         self._run_simkl_mutation(
             f"{record.id}:s{season.number}:unwatched",
@@ -10752,32 +11807,40 @@ class CineShelfWindow:
         key = self._episode_key(record, season_index, match)
 
         def apply() -> None:
+            current_record = self.records_by_id.get(record.id, record)
+            if self._local_mode_active():
+                self._ensure_local_library_record(current_record)
             self.episode_status_overrides[key] = True
             self.episode_watched_at[key] = iso_timestamp
             self._save_user_state()
-            self._populate_series(record)
+            self._populate_series(current_record)
             season_scroll = (
                 self.season_details_scroller.get_vadjustment().get_value()
             )
             self._populate_season_page(
-                record,
+                current_record,
                 season_index,
                 reset_scroll=False,
             )
             self._scroll_to_value(self.season_details_scroller, season_scroll)
-            episodes = self._episodes_for_season(record, season_index)
+            episodes = self._episodes_for_season(current_record, season_index)
             if 0 <= self.current_episode_index < len(episodes):
                 self._update_episode_watch_controls(
-                    record,
+                    current_record,
                     season_index,
                     episodes[self.current_episode_index],
                 )
             if self.active_destination == "profile":
                 self._refresh_profile()
+            else:
+                self._defer_library_refresh_for_detail_mutation()
 
         if not self._simkl_writable():
-            apply()
-            self._toast("Episode watched time saved locally (not synced)")
+            if self._local_mode_active():
+                apply()
+                self._toast("Episode watched time saved locally (not synced)")
+            else:
+                self._toast("Connect Simkl to change episode history")
             return
         outcome_box: dict[str, simkl_client.HistorySyncResult] = {}
 
@@ -10827,33 +11890,39 @@ class CineShelfWindow:
         key = self._episode_key(record, season_index, episode)
 
         def apply() -> None:
+            current_record = self.records_by_id.get(record.id, record)
             self.episode_status_overrides[key] = False
             self.episode_watched_at.pop(key, None)
             self._invalidate_simkl_snapshot_after_mutation()
             self._save_user_state()
-            self._populate_series(record)
+            self._populate_series(current_record)
             season_scroll = (
                 self.season_details_scroller.get_vadjustment().get_value()
             )
             self._populate_season_page(
-                record,
+                current_record,
                 season_index,
                 reset_scroll=False,
             )
             self._scroll_to_value(self.season_details_scroller, season_scroll)
-            episodes = self._episodes_for_season(record, season_index)
+            episodes = self._episodes_for_season(current_record, season_index)
             if 0 <= self.current_episode_index < len(episodes):
                 self._update_episode_watch_controls(
-                    record,
+                    current_record,
                     season_index,
                     episodes[self.current_episode_index],
                 )
             if self.active_destination == "profile":
                 self._refresh_profile()
+            else:
+                self._defer_library_refresh_for_detail_mutation()
 
         if not self._simkl_writable():
-            apply()
-            self._toast("Episode marked as unwatched locally (not synced)")
+            if self._local_mode_active():
+                apply()
+                self._toast("Episode marked as unwatched locally (not synced)")
+            else:
+                self._toast("Connect Simkl to change episode history")
             return
         self._run_simkl_mutation(
             f"{key}:unwatched",
@@ -11036,6 +12105,10 @@ class CineShelfWindow:
     def _on_details_transition_complete(self) -> bool:
         self._details_resize_source_id = 0
         self._pending_details_mode = None
+        if not self.details_open and getattr(self, "_library_results_dirty", False):
+            self._library_results_dirty = False
+            if self.active_destination == "library":
+                self._refresh_results()
         self._queue_explore_resize()
         self._queue_responsive_layout()
         return GLib.SOURCE_REMOVE
@@ -11151,9 +12224,75 @@ class CineShelfWindow:
         return ids
 
     def _simkl_writable(self) -> bool:
-        return bool(
-            self.simkl_client_id and self.simkl_token and self.simkl_connected
+        mode = getattr(
+            self,
+            "library_mode",
+            LIBRARY_MODE_SIMKL
+            if getattr(self, "simkl_connected", False)
+            else LIBRARY_MODE_LOCAL,
         )
+        return bool(
+            mode == LIBRARY_MODE_SIMKL
+            and self.simkl_client_id
+            and self.simkl_token
+            and self.simkl_connected
+        )
+
+    def _local_mode_active(self) -> bool:
+        return (
+            getattr(
+                self,
+                "library_mode",
+                LIBRARY_MODE_SIMKL
+                if getattr(self, "simkl_connected", False)
+                else LIBRARY_MODE_LOCAL,
+            )
+            == LIBRARY_MODE_LOCAL
+        )
+
+    def _ensure_local_library_record(self, record: TitleRecord) -> str:
+        """Keep a complete, restart-safe copy of a locally managed title."""
+        canonical = self._canonical_record_id(record)
+        local_record = replace(
+            record,
+            id=canonical,
+            status=self.status_overrides.get(canonical, record.status),
+            user_rating=self.ratings.get(canonical, record.user_rating),
+            discover_period="All releases",
+            featured=False,
+        )
+        if not hasattr(self, "local_library_records"):
+            self.local_library_records = {}
+        self.local_library_records[canonical] = local_record
+        library_records = getattr(self, "_library_records_by_canonical", {})
+        if canonical not in library_records:
+            self.records = (*getattr(self, "records", ()), local_record)
+            if not hasattr(self, "library_ids"):
+                self.library_ids = set()
+            self.library_ids.add(canonical)
+            self.records_by_id[canonical] = local_record
+            self._rebuild_record_aliases()
+        return canonical
+
+    def _remove_unused_local_library_record(self, canonical: str) -> None:
+        if (
+            canonical in self.bookmarks
+            or canonical in self.completed
+            or canonical in self.ratings
+            or canonical in self.status_overrides
+        ):
+            return
+        if canonical not in self.local_library_records:
+            return
+        self.local_library_records.pop(canonical, None)
+        self.records = tuple(
+            item
+            for item in self.records
+            if self._canonical_record_id(item) != canonical
+        )
+        self.library_ids = {record.id for record in self.records}
+        self.records_by_id.pop(canonical, None)
+        self._rebuild_record_aliases()
 
     def _post_simkl_history(
         self, description: str, operation: Any
@@ -11177,6 +12316,8 @@ class CineShelfWindow:
         }.get(status or "")
 
     def _invalidate_simkl_snapshot_after_mutation(self) -> None:
+        if getattr(self, "library_mode", LIBRARY_MODE_SIMKL) == LIBRARY_MODE_LOCAL:
+            return
         self._simkl_state_generation = getattr(self, "_simkl_state_generation", 0) + 1
         try:
             simkl_client.invalidate_snapshot()
@@ -11228,7 +12369,7 @@ class CineShelfWindow:
         on_success: Any,
         success_message: str,
     ) -> None:
-        if not self.simkl_client_id or not self.simkl_token or not self.simkl_connected:
+        if not self._simkl_writable():
             self._update_details()
             self._toast("Connect Simkl to change ratings or lists")
             return
@@ -11306,6 +12447,19 @@ class CineShelfWindow:
         adding: bool,
         on_success: Any,
     ) -> None:
+        if (
+            getattr(self, "library_mode", LIBRARY_MODE_SIMKL)
+            == LIBRARY_MODE_LOCAL
+        ):
+            self._ensure_local_library_record(record)
+            on_success()
+            self._toast(
+                "Saved to your local watchlist"
+                if adding
+                else "Removed from your local watchlist"
+            )
+            return
+
         if adding:
             operation = lambda: simkl_client.set_list_status(
                 self.simkl_client_id or "",
@@ -11321,6 +12475,7 @@ class CineShelfWindow:
                 self._simkl_group(record),
                 self._simkl_ids(record),
             )
+
         def checked_operation() -> dict[str, Any]:
             result = operation()
             raw_not_found = result.get("not_found") if isinstance(result, dict) else None
@@ -11341,6 +12496,9 @@ class CineShelfWindow:
         if self.selected_id is None:
             return
         record = self.records_by_id[self.selected_id]
+        self._activate_record_watched(record)
+
+    def _activate_record_watched(self, record: TitleRecord) -> None:
         watched = not self._is_record_completed(record)
         if not watched:
             self._show_watched_title_actions(record)
@@ -11355,7 +12513,12 @@ class CineShelfWindow:
         """Offer date correction and unwatch as separate, explicit operations."""
         dialog = Adw.AlertDialog(
             heading=record.title,
-            body="This title is already watched on Simkl.",
+            body=(
+                "This title is already watched in your local library."
+                if getattr(self, "library_mode", LIBRARY_MODE_LOCAL)
+                == LIBRARY_MODE_LOCAL
+                else "This title is already watched on Simkl."
+            ),
         )
         dialog.add_response("cancel", "Cancel")
         dialog.add_response("change-date", "Change watched date")
@@ -11373,7 +12536,7 @@ class CineShelfWindow:
                 self._show_watched_time_dialog(
                     title_text=f"Change watched date — {record.title}",
                     subtitle_text=(
-                        "This replaces the Simkl history date; it is not a rewatch."
+                        "This replaces the existing watch date; it is not a rewatch."
                     ),
                     on_confirm=lambda iso: self._change_title_watched_date(record, iso),
                 )
@@ -11384,7 +12547,7 @@ class CineShelfWindow:
         dialog.present(self.window)
 
     def _mark_title_unwatched(self, record: TitleRecord) -> None:
-        """Remove watched history and move the title back to Simkl's watchlist."""
+        """Remove watched history and return the title to the active watchlist."""
         canonical = self._canonical_record_id(record)
 
         def apply() -> None:
@@ -11408,8 +12571,11 @@ class CineShelfWindow:
                 self._refresh_results()
 
         if not self._simkl_writable():
-            apply()
-            self._toast("Marked as unwatched locally (not synced)")
+            if self._local_mode_active():
+                apply()
+                self._toast("Marked as unwatched locally (not synced)")
+            else:
+                self._toast("Connect Simkl to change watch history")
             return
         self._run_simkl_mutation(
             f"{canonical}:unwatched",
@@ -11443,8 +12609,12 @@ class CineShelfWindow:
             )
 
         if not self._simkl_writable():
-            apply_watched()
-            self._toast("Watched time saved locally (not synced)")
+            if self._local_mode_active():
+                self._ensure_local_library_record(record)
+                apply_watched()
+                self._toast("Watched time saved locally (not synced)")
+            else:
+                self._toast("Connect Simkl to change watch history")
             return
         write_outcome: dict[str, simkl_client.HistorySyncResult] = {}
 
@@ -11496,6 +12666,17 @@ class CineShelfWindow:
         previous = self.title_watched_at.get(canonical)
         outcome_box: dict[str, simkl_client.HistorySyncResult] = {}
 
+        if getattr(self, "library_mode", LIBRARY_MODE_LOCAL) == LIBRARY_MODE_LOCAL:
+            self._ensure_local_library_record(record)
+            self.title_watched_at[canonical] = iso_timestamp
+            self.completed.add(canonical)
+            self.status_overrides[canonical] = "Watched"
+            self._save_user_state()
+            self._update_details()
+            self._refresh_results()
+            self._toast("Watch date changed locally")
+            return
+
         def operation() -> simkl_client.HistorySyncResult:
             self._app_log("Changing Simkl watched date for %s.", canonical)
             outcome = simkl_client.change_watched_date(
@@ -11526,10 +12707,19 @@ class CineShelfWindow:
             return
         record = self.records_by_id[self.selected_id]
         adding = button.get_active()
+        self._set_record_bookmarked(record, adding)
+
+    def _set_record_bookmarked(
+        self,
+        record: TitleRecord,
+        adding: bool,
+    ) -> None:
 
         def apply_bookmark() -> None:
             canonical = self._canonical_record_id(record)
             if adding:
+                if getattr(self, "library_mode", LIBRARY_MODE_LOCAL) == LIBRARY_MODE_LOCAL:
+                    canonical = self._ensure_local_library_record(record)
                 self.bookmarks.add(canonical)
                 self.completed.discard(canonical)
                 if self._effective_status(record) != "Watchlist":
@@ -11538,7 +12728,9 @@ class CineShelfWindow:
                 self.bookmarks.discard(canonical)
                 self.status_overrides.pop(canonical, None)
                 self.completed.discard(canonical)
-                if record.id in self.library_ids and record.id not in self.explore_ids:
+                if getattr(self, "library_mode", LIBRARY_MODE_LOCAL) == LIBRARY_MODE_LOCAL:
+                    self._remove_unused_local_library_record(canonical)
+                elif record.id in self.library_ids and record.id not in self.explore_ids:
                     self.records = tuple(
                         item for item in self.records if item.id != record.id
                     )
@@ -11567,8 +12759,13 @@ class CineShelfWindow:
             return
         self.rating_popover.popdown()
         record = self.records_by_id[self.selected_id]
+        self._set_record_rating(record, score)
+
+    def _set_record_rating(self, record: TitleRecord, score: int) -> None:
 
         def apply_rating() -> None:
+            if getattr(self, "library_mode", LIBRARY_MODE_LOCAL) == LIBRARY_MODE_LOCAL:
+                self._ensure_local_library_record(record)
             self.ratings[self._canonical_record_id(record)] = score
             sources = tuple(
                 source
@@ -11590,6 +12787,11 @@ class CineShelfWindow:
                 self._refresh_profile()
             else:
                 self._refresh_results()
+
+        if getattr(self, "library_mode", LIBRARY_MODE_LOCAL) == LIBRARY_MODE_LOCAL:
+            apply_rating()
+            self._toast(f"Your local rating is now {score}/10")
+            return
 
         self._run_simkl_mutation(
             f"{self._canonical_record_id(record)}:rating",

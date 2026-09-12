@@ -7,7 +7,7 @@ import threading
 import unittest
 from dataclasses import replace
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 SOURCE_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SOURCE_DIR))
@@ -17,7 +17,9 @@ from cineshelf.services import tmdb_client
 
 
 def _base_record() -> cineshelf.TitleRecord:
-    records, _explore, _totals = cineshelf.load_catalog()
+    records, _explore, _totals = cineshelf.load_catalog(
+        include_sample_data=True
+    )
     base = next(record for record in records if record.media_type == "Shows")
     return base
 
@@ -232,6 +234,17 @@ class SeasonRequestTests(unittest.TestCase):
             no_id._load_tmdb_season_details_async(no_id_record, 0)
         thread.assert_not_called()
 
+    def test_episode_opening_waits_for_the_complete_season_response(self) -> None:
+        record = self._record()
+        controller = _controller_for(record)
+
+        self.assertFalse(controller._season_episode_details_ready(record, 0))
+        controller._tmdb_season_details_loaded.add("test-title:s1")
+        self.assertTrue(controller._season_episode_details_ready(record, 0))
+
+        local_only = _controller_for(record, token=None)
+        self.assertTrue(local_only._season_episode_details_ready(record, 0))
+
     def test_episode_loader_skipped_after_season_loaded_or_loading(self) -> None:
         record = self._record()
         controller = _controller_for(record)
@@ -245,16 +258,22 @@ class SeasonRequestTests(unittest.TestCase):
             controller._load_tmdb_episode_details_async(record, 0, 0)
         thread.assert_not_called()
 
-    def test_season_preload_starts_from_both_season_entry_points(self) -> None:
+    def test_season_preload_starts_from_season_entry_point(self) -> None:
         source = Path(cineshelf.__file__).read_text(encoding="utf-8")
         season_activated = source.split("def _on_season_activated")[1].split(
-            "def _on_season_switch_changed"
-        )[0]
-        switch_changed = source.split("def _on_season_switch_changed")[1].split(
             "def _on_episode_activated"
         )[0]
         self.assertIn("_load_tmdb_season_details_async", season_activated)
-        self.assertIn("_load_tmdb_season_details_async", switch_changed)
+        self.assertNotIn("def _on_season_switch_changed", source)
+
+        episode_activated = source.split("def _on_episode_activated")[1].split(
+            "def _on_episode_row_watched_clicked"
+        )[0]
+        self.assertIn("_season_episode_details_ready", episode_activated)
+        self.assertIn(
+            "Wait for all episode details to finish loading",
+            episode_activated,
+        )
 
     def test_apply_marks_episode_keys_loaded(self) -> None:
         record = self._record()
@@ -282,6 +301,110 @@ class SeasonRequestTests(unittest.TestCase):
         }
         self.assertEqual(titles[1], "One")
         self.assertEqual(titles[2], "Two")
+
+    def test_season_is_published_only_after_pending_stills_finish(self) -> None:
+        record = self._record()
+        controller = _controller_for(record)
+        scheduled: list[tuple[object, tuple[object, ...]]] = []
+        payload = {
+            "episodes": [
+                {
+                    "episode_number": 1,
+                    "name": "One",
+                    "air_date": "2026-01-01",
+                    "overview": "Overview",
+                    "runtime": 45,
+                    "guest_stars": [],
+                    "still_path": "/one.jpg",
+                }
+            ]
+        }
+
+        with (
+            patch.object(cineshelf.tmdb_client, "fetch_season_details", return_value=payload),
+            patch.object(cineshelf.tmdb_client, "cached_image", return_value=None),
+            patch.object(cineshelf.tmdb_client, "cache_image", return_value="/cache/one.jpg"),
+            patch.object(
+                cineshelf.GLib,
+                "idle_add",
+                side_effect=lambda callback, *args: scheduled.append((callback, args)),
+            ),
+        ):
+            controller._load_tmdb_season_details_worker(
+                record.id,
+                "token",
+                record.tmdb_id or 0,
+                1,
+                "test-title:s1",
+            )
+
+        self.assertEqual(len(scheduled), 1)
+        callback, arguments = scheduled[0]
+        self.assertEqual(callback.__name__, "_apply_tmdb_season_details")
+        updates = arguments[-1]
+        self.assertEqual(updates[0][-1], "/cache/one.jpg")
+
+    def test_background_update_cannot_switch_the_open_episode(self) -> None:
+        record = self._record()
+        controller = _controller_for(record)
+        controller.detail_record_id = record.id
+        controller.current_season_index = 0
+        controller.current_episode_index = 0
+        controller.detail_navigation = type(
+            "Navigation",
+            (),
+            {"get_visible_page_tag": lambda self: "episode"},
+        )()
+
+        with patch.object(controller, "_populate_episode_page") as populate:
+            controller._refresh_visible_episode_page(record, 1, 2)
+            populate.assert_not_called()
+            controller._refresh_visible_episode_page(record, 1, 1)
+            populate.assert_called_once_with(
+                record,
+                0,
+                0,
+                reset_scroll=False,
+            )
+
+    def test_background_title_refresh_does_not_close_open_episode(self) -> None:
+        record = self._record()
+        controller = _controller_for(record)
+        controller.selected_id = record.id
+        controller.detail_record_id = record.id
+        controller.detail_box = MagicMock()
+        controller.detail_poster_host = MagicMock()
+        controller.detail_status_label = MagicMock()
+        controller.detail_overline = MagicMock()
+        controller.detail_title = MagicMock()
+        controller.community_rating = MagicMock()
+        controller.watched_button = MagicMock()
+        controller.runtime_label = MagicMock()
+        controller.genres_label = MagicMock()
+        controller.overview_label = MagicMock()
+        controller.creator_row = MagicMock()
+        controller.release_row = MagicMock()
+        controller.country_row = MagicMock()
+        controller.activity_row = MagicMock()
+        controller.bookmark_button = MagicMock()
+        controller.rating_buttons = {}
+        controller.rating_value = MagicMock()
+        controller.rating_button = MagicMock()
+        controller.details_scroller = MagicMock()
+        controller.bookmarks = set()
+        controller.ratings = {}
+
+        with (
+            patch.object(controller, "_reset_detail_navigation") as reset,
+            patch.object(controller, "_build_detail_hero"),
+            patch.object(controller, "_populate_detail_sections"),
+            patch.object(controller, "_effective_status", return_value="Watching"),
+            patch.object(controller, "_is_record_bookmarked", return_value=False),
+            patch.object(controller, "_effective_record_rating", return_value=None),
+        ):
+            controller._update_details()
+
+        reset.assert_not_called()
 
 
 class EpisodePositionRemovalTests(unittest.TestCase):
@@ -317,6 +440,30 @@ class EpisodePositionRemovalTests(unittest.TestCase):
             first_append,
             "self.episode_detail_box.append(self.episode_hero_host)",
         )
+
+    def test_episode_details_follow_the_title_details_visual_hierarchy(self) -> None:
+        source = self._source()
+        builder = source.split("def _build_episode_navigation_pages")[1].split(
+            "def _detail_navigation_action"
+        )[0]
+        episode_layout = builder.split("self.episode_detail_box = Gtk.Box")[1]
+
+        for component in (
+            "self.episode_hero_host",
+            "self.episode_status_label",
+            "episode_identity",
+            "episode_actions",
+            "self.episode_watched_at_label",
+            "episode_facts",
+            "episode_overview",
+            "self.episode_cast_section",
+        ):
+            self.assertIn(
+                f"self.episode_detail_box.append({component})",
+                episode_layout,
+            )
+        self.assertNotIn("self.episode_detail_box.append(Gtk.Separator())", episode_layout)
+        self.assertIn('add_css_class("detail-tint-content")', episode_layout)
 
 
 if __name__ == "__main__":

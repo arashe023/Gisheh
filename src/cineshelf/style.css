@@ -45,8 +45,93 @@
   color: @accent_color;
 }
 
+.detail-title-link {
+  color: @accent_color;
+}
+
 .success {
   color: @success_color;
+}
+
+.welcome-page {
+  padding: 16px 30px 10px;
+}
+
+.welcome-emoji {
+  font-size: 4rem;
+  line-height: 1;
+}
+
+.welcome-feature-emoji {
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.welcome-choice-emoji {
+  min-width: 32px;
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.welcome-title {
+  font-size: 2em;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+.welcome-choice-title {
+  font-size: 1.42em;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+
+.welcome-eyebrow {
+  color: @accent_color;
+  font-size: 0.76em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.welcome-body {
+  color: alpha(@window_fg_color, 0.72);
+  font-size: 1.02em;
+}
+
+.welcome-choice {
+  padding: 10px 14px;
+  border-radius: 14px;
+  background-color: alpha(@card_bg_color, 0.78);
+  box-shadow: inset 0 0 0 1px alpha(@window_fg_color, 0.09);
+}
+
+.welcome-choice:hover {
+  background-color: alpha(@card_bg_color, 0.96);
+}
+
+.welcome-choice:checked {
+  background-color: alpha(@accent_bg_color, 0.14);
+  box-shadow: inset 0 0 0 2px @accent_bg_color;
+}
+
+.welcome-choice-check {
+  opacity: 0;
+}
+
+.welcome-choice .dim-label {
+  font-size: 0.92em;
+}
+
+.welcome-choice:checked .welcome-choice-check {
+  color: @accent_color;
+  opacity: 1;
+}
+
+.welcome-footer {
+  padding: 8px 18px 12px;
+}
+
+.welcome-footer button {
+  min-width: 88px;
 }
 
 .row-rating,
@@ -266,12 +351,6 @@
   font-weight: 700;
 }
 
-.detail-action-button {
-  min-width: 64px;
-  padding: 8px 2px;
-  border-radius: 12px;
-}
-
 .cast-card {
   min-width: 82px;
 }
@@ -292,14 +371,21 @@
   min-height: 78px;
 }
 
-.episode-number-badge {
-  min-width: 18px;
-  padding: 2px 5px;
-  border-radius: 999px;
-  color: white;
-  background-color: alpha(black, 0.72);
-  font-size: 10px;
-  font-weight: 700;
+.episode-artwork .rounded-media {
+  border-radius: 8px;
+}
+
+button.episode-watch-button {
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  background-color: transparent;
+  box-shadow: none;
+}
+
+button.episode-watch-button:hover {
+  background-color: transparent;
+  box-shadow: none;
 }
 
 .detail-media-card {
@@ -365,7 +451,6 @@ progressbar progress {
   min-height: 8px;
 }
 
-.profile-hero,
 .profile-card,
 .profile-metric-card {
   border-radius: 16px;
@@ -412,14 +497,6 @@ progressbar progress {
 .calendar-skeleton {
   border-radius: 12px;
   background-color: alpha(@window_fg_color, 0.08);
-}
-
-.profile-hero {
-  padding: 18px 20px;
-}
-
-.profile-avatar {
-  border-radius: 999px;
 }
 
 .profile-card {

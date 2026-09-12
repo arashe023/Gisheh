@@ -318,7 +318,9 @@ def _titled_controller() -> cineshelf.CineShelfWindow:
 
 class TitleWatchedFlowTests(unittest.TestCase):
     def _record(self) -> cineshelf.TitleRecord:
-        records, _explore, _totals = cineshelf.load_catalog()
+        records, _explore, _totals = cineshelf.load_catalog(
+            include_sample_data=True
+        )
         base = next(record for record in records if record.media_type == "Movies")
         return replace(base, tmdb_id=20, tmdb_media_type="movie")
 
@@ -489,7 +491,9 @@ class TitleWatchedFlowTests(unittest.TestCase):
 
     def test_watched_explore_record_is_promoted_to_library_views(self) -> None:
         controller = _titled_controller()
-        records, _explore, _totals = cineshelf.load_catalog()
+        records, _explore, _totals = cineshelf.load_catalog(
+            include_sample_data=True
+        )
         library_record = next(
             record for record in records if record.media_type == "Movies"
         )
@@ -671,7 +675,9 @@ class TitleWatchedFlowTests(unittest.TestCase):
 
 class SeasonEpisodeWatchedFlowTests(unittest.TestCase):
     def _show(self) -> tuple[cineshelf.TitleRecord, cineshelf.CineShelfWindow]:
-        records, _explore, _totals = cineshelf.load_catalog()
+        records, _explore, _totals = cineshelf.load_catalog(
+            include_sample_data=True
+        )
         base = next(record for record in records if record.media_type == "Shows")
         season = cineshelf.SeasonInfo(
             id="s1",
@@ -719,6 +725,49 @@ class SeasonEpisodeWatchedFlowTests(unittest.TestCase):
             self.assertEqual(
                 controller.episode_watched_at.get(key), "2026-09-04T21:35:00+03:30"
             )
+
+    def test_local_watched_episode_moves_show_into_watching(self) -> None:
+        record, controller = self._show()
+        record = replace(record, status="Watchlist")
+        controller.records_by_id = {record.id: record}
+        controller.selected_id = record.id
+        controller.detail_record_id = record.id
+        controller.details_open = True
+        controller._library_results_dirty = False
+        controller.library_mode = cineshelf.LIBRARY_MODE_LOCAL
+        controller.records = ()
+        controller.library_ids = set()
+        controller._tmdb_record_aliases = {}
+        controller._library_records_by_canonical = {}
+        result_refreshes: list[str] = []
+        controller._refresh_results = lambda: result_refreshes.append("refresh")
+
+        controller._mark_episode_watched(
+            record,
+            0,
+            2,
+            "2026-09-04T21:35:00+03:30",
+        )
+
+        canonical = controller._canonical_record_id(record)
+        self.assertIn(canonical, controller.local_library_records)
+        self.assertEqual(controller._effective_status(record), "Watching")
+        self.assertFalse(controller._is_record_completed(record))
+        self.assertEqual(controller.selected_id, record.id)
+        self.assertEqual(controller.detail_record_id, record.id)
+        self.assertEqual(result_refreshes, [])
+        self.assertTrue(controller._library_results_dirty)
+
+        controller._unmark_episode_watched(
+            record,
+            0,
+            record.seasons[0].episode_items[1],
+        )
+        self.assertEqual(controller._effective_status(record), "Watchlist")
+        self.assertEqual(controller.selected_id, record.id)
+        self.assertEqual(controller.detail_record_id, record.id)
+        self.assertEqual(result_refreshes, [])
+        self.assertTrue(controller._library_results_dirty)
 
     def test_episode_mutation_is_episode_scoped(self) -> None:
         record, controller = self._show()

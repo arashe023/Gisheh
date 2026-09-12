@@ -181,6 +181,77 @@ class DetailsBackActionTests(unittest.TestCase):
         self.assertEqual(cineshelf.details_back_action("other"), "close")
 
 
+class RecordContextMenuTests(unittest.TestCase):
+    @staticmethod
+    def _record() -> cineshelf.TitleRecord:
+        records, _explore, _totals = cineshelf.load_catalog(
+            include_sample_data=True
+        )
+        return records[0]
+
+    def test_menu_contains_watch_watchlist_and_rating_controls(self) -> None:
+        from gi.repository import Gio, Gtk
+
+        controller = object.__new__(cineshelf.CineShelfWindow)
+        controller.completed = set()
+        controller.bookmarks = set()
+        controller.ratings = {}
+        popover = controller._record_context_popover(self._record())
+        self.assertIsInstance(popover, Gtk.PopoverMenu)
+        model = popover.get_menu_model()
+        self.assertEqual(model.get_n_items(), 2)
+        labels: list[str] = []
+        for section_index in range(model.get_n_items()):
+            section = model.get_item_link(section_index, Gio.MENU_LINK_SECTION)
+            self.assertIsNotNone(section)
+            for item_index in range(section.get_n_items()):
+                label = section.get_item_attribute_value(
+                    item_index,
+                    Gio.MENU_ATTRIBUTE_LABEL,
+                    None,
+                )
+                labels.append(label.get_string())
+        self.assertEqual(
+            labels,
+            ["Mark as watched", "Add to Watchlist", "Rate…  (6/10)"],
+        )
+
+    def test_context_actions_target_the_clicked_record(self) -> None:
+        record = self._record()
+        controller = object.__new__(cineshelf.CineShelfWindow)
+        controller.records_by_id = {record.id: record}
+        calls: list[tuple[object, ...]] = []
+        controller._activate_record_watched = (
+            lambda item: calls.append(("watched", item.id))
+        )
+        controller._set_record_bookmarked = (
+            lambda item, adding: calls.append(("watchlist", item.id, adding))
+        )
+        controller._set_record_rating = (
+            lambda item, score: calls.append(("rating", item.id, score))
+        )
+        controller._show_record_rating_dialog = (
+            lambda item: calls.append(("rating-dialog", item.id))
+        )
+
+        controller._activate_context_watched(record.id)
+        controller._activate_context_watchlist(record.id, True)
+        controller._activate_context_rating(record.id)
+
+        self.assertIn(("watched", record.id), calls)
+        self.assertIn(("watchlist", record.id, True), calls)
+        self.assertIn(("rating-dialog", record.id), calls)
+
+    def test_rating_is_saved_from_a_separate_dialog(self) -> None:
+        source = Path(cineshelf.__file__).read_text(encoding="utf-8")
+        dialog = source.split("def _show_record_rating_dialog")[1].split(
+            "\n    def "
+        )[0]
+        self.assertIn('dialog.add_response("save", "Save rating")', dialog)
+        self.assertIn('dialog.set_response_enabled("save"', dialog)
+        self.assertIn("self._set_record_rating(current, score)", dialog)
+
+
 class ExploreColumnTests(unittest.TestCase):
     def test_very_narrow_width_returns_one_column(self) -> None:
         self.assertEqual(
@@ -230,7 +301,7 @@ class ExploreColumnTests(unittest.TestCase):
             height = controller._explore_card_height(kind, 1)
             self.assertGreater(height, 0)
 
-    def test_small_allocations_in_one_bucket_do_not_rebuild_explore(self) -> None:
+    def test_only_column_changes_rebuild_explore(self) -> None:
         width = {"value": 640}
         rebuilds: list[int] = []
         controller = object.__new__(cineshelf.CineShelfWindow)
@@ -257,15 +328,27 @@ class ExploreColumnTests(unittest.TestCase):
         controller._apply_explore_resize()
         width["value"] = 700
         controller._apply_explore_resize()
-        self.assertEqual(rebuilds, [640])
+        self.assertEqual(rebuilds, [])
 
         width["value"] = 720
         controller._apply_explore_resize()
-        self.assertEqual(rebuilds, [640, 720])
+        self.assertEqual(rebuilds, [])
 
         width["value"] = 760
         controller._apply_explore_resize()
-        self.assertEqual(rebuilds, [640, 720, 760])
+        self.assertEqual(rebuilds, [])
+
+        width["value"] = 780
+        controller._apply_explore_resize()
+        self.assertEqual(rebuilds, [780])
+
+        width["value"] = 750
+        controller._apply_explore_resize()
+        self.assertEqual(rebuilds, [780])
+
+        width["value"] = 739
+        controller._apply_explore_resize()
+        self.assertEqual(rebuilds, [780, 739])
 
     def test_flexible_artwork_has_no_horizontal_minimum_or_natural_width(self) -> None:
         from gi.repository import Gtk
@@ -302,6 +385,30 @@ class ExploreColumnTests(unittest.TestCase):
             discover_layout="poster",
         )
         artwork = cineshelf.PosterWidget(record, 480, 270, flexible_width=True)
+        minimum, natural, _minimum_baseline, _natural_baseline = artwork.measure(
+            Gtk.Orientation.HORIZONTAL, -1
+        )
+        self.assertEqual((minimum, natural), (0, 0))
+
+    def test_async_explore_artwork_replacement_stays_horizontally_flexible(self) -> None:
+        from gi.repository import Gtk
+
+        records, _explore, _totals = cineshelf.load_catalog(
+            include_sample_data=True
+        )
+        record = records[0]
+        overlay = Gtk.Overlay()
+        overlay.set_child(Gtk.Box())
+        button = Gtk.Button(child=overlay)
+        controller = object.__new__(cineshelf.CineShelfWindow)
+        controller._explore_card_buttons = {record.id: button}
+        controller._explore_card_layouts = {record.id: ("hero", 2)}
+        controller._explore_card_height = lambda _kind, _span: 180
+
+        controller._update_explore_card_artwork(record)
+
+        artwork = overlay.get_child()
+        self.assertIsInstance(artwork, cineshelf.PosterWidget)
         minimum, natural, _minimum_baseline, _natural_baseline = artwork.measure(
             Gtk.Orientation.HORIZONTAL, -1
         )
@@ -489,6 +596,7 @@ class ResponsiveStructureTests(unittest.TestCase):
         source = self._source()
         self.assertIn("Back to content", source)
         self.assertIn("_on_mobile_title_back", source)
+        self.assertNotIn('mobile_back_button.set_label("Back")', source)
 
     def test_filter_controls_have_no_hard_minimum(self) -> None:
         properties = self._ui_properties("explore_filter_controls")
@@ -911,6 +1019,26 @@ class NarrowSizingTests(unittest.TestCase):
         self.assertNotIn("388", builder)
         self.assertNotIn("384", builder)
         self.assertNotIn("280", builder)
+
+    def test_detail_hero_fills_the_available_width_and_prefers_backdrop(self) -> None:
+        root = ET.parse(cineshelf.UI_FILE).getroot()
+        host = root.find(".//object[@id='detail_poster_host']")
+        self.assertIsNotNone(host)
+        properties = {
+            item.get("name"): (item.text or "").strip()
+            for item in host.findall("property")
+        }
+        self.assertEqual(properties.get("halign"), "fill")
+        self.assertEqual(properties.get("hexpand"), "true")
+
+        source = self._source()
+        hero = source.split("def _build_detail_hero")[1].split("\n    def ")[0]
+        self.assertIn("overlay.set_hexpand(True)", hero)
+        self.assertIn("overlay.set_halign(Gtk.Align.FILL)", hero)
+        self.assertLess(
+            hero.index("record.backdrop_file"),
+            hero.index("trailer_info.thumbnail_file"),
+        )
 
 
 if __name__ == "__main__":
