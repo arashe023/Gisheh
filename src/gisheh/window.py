@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""گیشه: a lightweight native GTK4/libadwaita movie library."""
+"""Gisheh: a lightweight native GTK4/libadwaita movie library."""
 
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ from .state_store import (  # noqa: E402
 
 
 APP_ID = "io.github.gisheh.Gisheh"
-APP_NAME = "گیشه"
+APP_NAME = "Gisheh"
 APP_VERSION = "1.3.0"
 RESOURCE_DIR = Path(__file__).resolve().parent
 RESOURCE_PREFIX = "/io/github/gisheh/Gisheh"
@@ -281,7 +281,7 @@ def clear_application_logs() -> None:
 
 
 def clear_desktop_preferences() -> None:
-    """Reset any GSettings values left by this or an earlier گیشه build."""
+    """Reset any GSettings values left by this or an earlier Gisheh build."""
     source = Gio.SettingsSchemaSource.get_default()
     schema = source.lookup(APP_ID, True) if source is not None else None
     if schema is None:
@@ -894,7 +894,7 @@ class TitleRecord:
                     else "Airing" if media_type != "Movies" else "Released",
                 )
             ),
-            network=str(raw.get("network", "گیشه")),
+            network=str(raw.get("network", "Gisheh")),
             external_ratings=tuple(
                 (str(item["source"]), str(item["value"]))
                 for item in raw.get("externalRatings", ())
@@ -2033,7 +2033,7 @@ class MediaViewer(Gtk.Overlay):
         header.add_css_class("media-viewer-header")
 
         close_button = Gtk.Button.new_from_icon_name("go-previous-symbolic")
-        close_button.set_tooltip_text("Back to گیشه")
+        close_button.set_tooltip_text("Back to Gisheh")
         close_button.connect("clicked", lambda *_args: self.close())
         header.pack_start(close_button)
 
@@ -2491,7 +2491,7 @@ class GishehWindow:
         self.state_file = user_state_file()
         self._load_user_state()
         self._apply_color_scheme()
-        application_logger().info("گیشه %s started", APP_VERSION)
+        application_logger().info("Gisheh %s started", APP_VERSION)
 
         self._updating = False
         self._updating_details = False
@@ -2851,7 +2851,7 @@ class GishehWindow:
         except FileNotFoundError:
             return
         except (OSError, ValueError, TypeError) as error:
-            print(f"گیشه could not read user state: {error}", file=sys.stderr)
+            print(f"Gisheh could not read user state: {error}", file=sys.stderr)
             return
 
         preferences = payload.get("preferences", {})
@@ -3019,7 +3019,7 @@ class GishehWindow:
         try:
             write_state(payload, self.state_file)
         except OSError as error:
-            print(f"گیشه could not save user state: {error}", file=sys.stderr)
+            print(f"Gisheh could not save user state: {error}", file=sys.stderr)
 
     def _build_header_controls(self) -> None:
         self.sidebar_toggle_button = Gtk.ToggleButton(
@@ -3086,7 +3086,7 @@ class GishehWindow:
         menu.append("Preferences", "win.preferences")
         menu.append("Application Log", "app.logs")
         menu.append("Credits & Data Sources", "app.credits")
-        menu.append("About گیشه", "app.about")
+        menu.append("About Gisheh", "app.about")
         menu.append("Quit", "app.quit")
         self.main_menu_button.set_menu_model(menu)
 
@@ -4113,7 +4113,7 @@ class GishehWindow:
             uri,
             heading="Open an external link?",
             body=(
-                f"گیشه will open the TMDB page for “{record.title}” "
+                f"Gisheh will open the TMDB page for “{record.title}” "
                 "in your default web browser."
             ),
         )
@@ -4169,7 +4169,7 @@ class GishehWindow:
         if not self.simkl_client_id:
             self.calendar_content.append(self._calendar_status(
                 "dialog-error-symbolic", "Simkl integration is unavailable",
-                "This build does not include گیشه's public Simkl application ID.",
+                "This build does not include Gisheh's public Simkl application ID.",
             ))
             return
         if loading and snapshot is None:
@@ -4256,7 +4256,7 @@ class GishehWindow:
 
         ownership = Adw.PreferencesGroup(
             title="Data ownership",
-            description="Choose where گیشه keeps your personal library state.",
+            description="Choose where Gisheh keeps your personal library state.",
         )
         self.settings_library_mode_row = Adw.ActionRow(title="Library mode")
         self.settings_library_mode_button = Gtk.Button(label="Change…")
@@ -4272,11 +4272,11 @@ class GishehWindow:
 
         appearance = Adw.PreferencesGroup(
             title="Appearance",
-            description="Choose how گیشه looks on this device.",
+            description="Choose how Gisheh looks on this device.",
         )
         self.settings_color_scheme_row = Adw.ComboRow(
             title="Color scheme",
-            subtitle="Use the system style or override it for گیشه.",
+            subtitle="Use the system style or override it for Gisheh.",
         )
         self.settings_color_scheme_row.set_model(
             Gtk.StringList.new(list(COLOR_SCHEME_LABELS))
@@ -4293,7 +4293,7 @@ class GishehWindow:
 
         library = Adw.PreferencesGroup(
             title="Library",
-            description="Set the view گیشه uses when it starts.",
+            description="Set the view Gisheh uses when it starts.",
         )
         self.settings_media_row = Adw.ComboRow(
             title="Default media type",
@@ -4322,11 +4322,11 @@ class GishehWindow:
 
         accounts = Adw.PreferencesGroup(
             title="Accounts &amp; Sync",
-            description="گیشه uses Simkl for your library and TMDB for metadata.",
+            description="Gisheh uses Simkl for your library and TMDB for metadata.",
         )
         self.settings_auto_sync_row = Adw.SwitchRow(
             title="Sync Simkl on startup",
-            subtitle="Refresh cloud library state whenever گیشه starts.",
+            subtitle="Refresh cloud library state whenever Gisheh starts.",
         )
         self.settings_auto_sync_row.set_active(self.auto_sync)
         self.settings_auto_sync_row.connect(
@@ -4427,10 +4427,10 @@ class GishehWindow:
 
         reset_group = Adw.PreferencesGroup(
             title="Reset",
-            description="Erase local گیشه data and return to first-run setup.",
+            description="Erase local Gisheh data and return to first-run setup.",
         )
         self.settings_factory_reset_row = Adw.ActionRow(
-            title="Reset گیشه",
+            title="Reset Gisheh",
             subtitle="Delete your library, preferences, accounts, caches and logs.",
         )
         self.settings_factory_reset_button = Gtk.Button(label="Reset…")
@@ -4604,7 +4604,7 @@ class GishehWindow:
         dialog = Adw.AlertDialog(
             heading="Clear Calendar cache?",
             body=(
-                "Downloaded Simkl schedules will be removed. گیشه can "
+                "Downloaded Simkl schedules will be removed. Gisheh can "
                 "download them again when Calendar is opened."
             ),
         )
@@ -4637,7 +4637,7 @@ class GishehWindow:
             heading="Clear downloaded TMDB data?",
             body=(
                 "Downloaded posters, backdrops, cast photos and metadata will "
-                "be removed. گیشه can download them again when needed."
+                "be removed. Gisheh can download them again when needed."
             ),
         )
         dialog.add_response("cancel", "Cancel")
@@ -4666,12 +4666,12 @@ class GishehWindow:
 
     def _on_factory_reset_clicked(self, _button: Gtk.Button) -> None:
         dialog = Adw.AlertDialog(
-            heading="Reset گیشه completely?",
+            heading="Reset Gisheh completely?",
             body=(
                 "Your local library, watch history, ratings, preferences, "
                 "connected accounts, downloaded artwork, metadata, Calendar "
                 "cache and application logs will be permanently deleted. "
-                "گیشه will restart at the Welcome screen."
+                "Gisheh will restart at the Welcome screen."
             ),
         )
         dialog.add_response("cancel", "Cancel")
@@ -4694,7 +4694,7 @@ class GishehWindow:
         except OSError as error:
             self.settings_factory_reset_button.set_sensitive(True)
             failure = Adw.AlertDialog(
-                heading="گیشه could not be fully reset",
+                heading="Gisheh could not be fully reset",
                 body=str(error),
             )
             failure.add_response("close", "Close")
@@ -4705,15 +4705,15 @@ class GishehWindow:
         except OSError as error:
             self.settings_factory_reset_button.set_sensitive(True)
             failure = Adw.AlertDialog(
-                heading="گیشه was reset but could not restart",
-                body=f"Close and open گیشه again.\n\n{error}",
+                heading="Gisheh was reset but could not restart",
+                body=f"Close and open Gisheh again.\n\n{error}",
             )
             failure.add_response("close", "Close")
             failure.present(self.settings_dialog)
 
     @staticmethod
     def _restart_application() -> None:
-        """Replace this process with a clean first-run گیشه process."""
+        """Replace this process with a clean first-run Gisheh process."""
         simkl_client.close_image_http_client()
         environment = os.environ.copy()
         python_paths = [entry for entry in sys.path if entry]
@@ -5351,7 +5351,7 @@ class GishehWindow:
             dialog = Adw.AlertDialog(
                 heading="Simkl is unavailable in this build",
                 body=(
-                    "The distributor must register گیشه with Simkl and include "
+                    "The distributor must register Gisheh with Simkl and include "
                     "the public Client ID when building the application. You never "
                     "need to create a developer app or enter a Client Secret."
                 ),
@@ -5400,7 +5400,7 @@ class GishehWindow:
             heading="Enter this code on Simkl",
             body=(
                 "The browser has been opened. Sign in to Simkl and enter the "
-                "code below. گیشه will finish automatically after approval."
+                "code below. Gisheh will finish automatically after approval."
             ),
         )
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
@@ -7560,7 +7560,7 @@ class GishehWindow:
             return GLib.SOURCE_REMOVE
         self._tmdb_explore_pages_loading.difference_update(MEDIA_TYPES)
         self._sync_explore_loading_indicator()
-        print(f"گیشه TMDB: {message}", file=sys.stderr)
+        print(f"Gisheh TMDB: {message}", file=sys.stderr)
         self._toast("TMDB is unavailable — Explore could not be loaded")
         return GLib.SOURCE_REMOVE
 
@@ -8773,7 +8773,7 @@ class GishehWindow:
         self._tmdb_details_loading.discard(record_id)
         self._tmdb_cast_images_loading.pop(record_id, None)
         self._tmdb_gallery_images_loading.pop(record_id, None)
-        print(f"گیشه TMDB details: {message}", file=sys.stderr)
+        print(f"Gisheh TMDB details: {message}", file=sys.stderr)
         return GLib.SOURCE_REMOVE
 
     def _on_preferences_clicked(self, _button: Gtk.Button | None) -> None:
@@ -8797,7 +8797,7 @@ class GishehWindow:
                 else "Configure this development build"
             ),
             body=(
-                "Public releases should include گیشه's approved TMDB credential. "
+                "Public releases should include Gisheh's approved TMDB credential. "
                 "For local development only, you can enter your own API Read Access "
                 "Token; it will be stored only for this user."
             ),
@@ -8829,7 +8829,7 @@ class GishehWindow:
         try:
             tmdb_client.store_token(token)
         except tmdb_client.TmdbError as error:
-            print(f"گیشه TMDB token: {error}", file=sys.stderr)
+            print(f"Gisheh TMDB token: {error}", file=sys.stderr)
             self._toast("Could not save the TMDB token")
             return
 
@@ -9846,7 +9846,7 @@ class GishehWindow:
                         video.url or "",
                         heading="Open the trailer?",
                         body=(
-                            f"گیشه will open “{video.title}” on YouTube "
+                            f"Gisheh will open “{video.title}” on YouTube "
                             "in your default web browser."
                         ),
                     )
@@ -9861,7 +9861,7 @@ class GishehWindow:
         if record.external_ratings:
             return record.external_ratings[:4]
         return (
-            ("گیشه", f"{record.rating:.1f}"),
+            ("Gisheh", f"{record.rating:.1f}"),
             ("IMDb", f"{min(10.0, record.rating + 0.1):.1f}"),
             ("Meta", str(min(99, round(record.rating * 10)))),
             ("Match", f"{min(99, round(record.rating * 10 + 8))}%"),
@@ -10539,7 +10539,7 @@ class GishehWindow:
                     item.url or "",
                     heading="Open the video?",
                     body=(
-                        f"گیشه will open “{item.title}” on YouTube "
+                        f"Gisheh will open “{item.title}” on YouTube "
                         "in your default web browser."
                     ),
                 ),

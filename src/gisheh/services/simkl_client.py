@@ -792,7 +792,7 @@ def _store_keyring_token(token: str) -> bool:
                 schema,
                 _secret_attributes(),
                 secret.COLLECTION_DEFAULT,
-                "گیشه Simkl access token",
+                "Gisheh Simkl access token",
                 token,
                 None,
             )

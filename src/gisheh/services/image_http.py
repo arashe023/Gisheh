@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Shared pooled HTTP transport for گیشه image downloads."""
+"""Shared pooled HTTP transport for Gisheh image downloads."""
 
 from __future__ import annotations
 

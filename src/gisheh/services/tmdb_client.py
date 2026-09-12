@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Small dependency-free TMDB client used by the native گیشه app."""
+"""Small dependency-free TMDB client used by the native Gisheh app."""
 
 from __future__ import annotations
 

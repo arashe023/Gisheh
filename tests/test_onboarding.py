@@ -324,7 +324,7 @@ class WelcomeTourStructureTests(unittest.TestCase):
         )
         window = (root / "src/gisheh/window.py").read_text(encoding="utf-8")
 
-        self.assertIn("Welcome to گیشه", onboarding)
+        self.assertIn("Welcome to Gisheh", onboarding)
         self.assertIn("Local-first", onboarding)
         self.assertIn("Sync with Simkl", onboarding)
         self.assertIn("Adw.Carousel()", onboarding)

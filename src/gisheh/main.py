@@ -1,4 +1,4 @@
-"""Installed and development entry point for گیشه."""
+"""Installed and development entry point for Gisheh."""
 
 from __future__ import annotations
 

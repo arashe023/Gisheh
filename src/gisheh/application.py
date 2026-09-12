@@ -1,4 +1,4 @@
-"""Application lifecycle and global actions for گیشه."""
+"""Application lifecycle and global actions for Gisheh."""
 
 from __future__ import annotations
 
@@ -84,13 +84,13 @@ class GishehApplication(Adw.Application):
         try:
             self.controller = GishehWindow(self, library_mode=library_mode)
         except Exception as error:
-            print(f"گیشه failed to start: {error}", file=sys.stderr)
+            print(f"Gisheh failed to start: {error}", file=sys.stderr)
             window = Adw.ApplicationWindow(application=self, title=APP_NAME)
             window.set_default_size(720, 480)
             window.set_content(
                 Adw.StatusPage(
                     icon_name="dialog-error-symbolic",
-                    title="Unable to start گیشه",
+                    title="Unable to start Gisheh",
                     description=str(error),
                 )
             )
@@ -173,7 +173,7 @@ class GishehApplication(Adw.Application):
         dialog = Adw.AboutDialog(
             application_name=APP_NAME,
             application_icon=APP_ID,
-            developer_name="گیشه",
+            developer_name="Gisheh",
             version=APP_VERSION,
             comments="A native GTK4 and Libadwaita media tracker.",
             license_type=Gtk.License.MIT_X11,
@@ -203,7 +203,7 @@ class GishehApplication(Adw.Application):
 
         dialog = Adw.AlertDialog(
             heading="Credits & Data Sources",
-            body="گیشه uses the following independent data services.",
+            body="Gisheh uses the following independent data services.",
         )
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
 

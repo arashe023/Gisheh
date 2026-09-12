@@ -90,7 +90,7 @@ def save_library_mode(mode: str, path: Path | None = None) -> Path:
 
 
 def clear_state(path: Path | None = None) -> None:
-    """Remove all persisted گیشه preferences and personal library state."""
+    """Remove all persisted Gisheh preferences and personal library state."""
     destination = path or user_state_file()
     try:
         destination.unlink()

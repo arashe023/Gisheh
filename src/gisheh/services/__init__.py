@@ -1,1 +1,1 @@
-"""Network and persistence services used by گیشه."""
+"""Network and persistence services used by Gisheh."""

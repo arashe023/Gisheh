@@ -376,7 +376,7 @@ class SettingsDialogTests(unittest.TestCase):
         self.assertFalse(controller.settings_tmdb_disconnect_button.get_visible())
         self.assertEqual(
             controller.settings_factory_reset_row.get_title(),
-            "Reset گیشه",
+            "Reset Gisheh",
         )
         self.assertTrue(
             controller.settings_factory_reset_button.has_css_class(

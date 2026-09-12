@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
   <id>io.github.gisheh.Gisheh</id>
-  <name>گیشه</name>
+  <name>Gisheh</name>
   <summary>Browse and track movies, shows and anime</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <description>
     <p>
-      گیشه is a native GNOME application for exploring and tracking movies,
+      Gisheh is a native GNOME application for exploring and tracking movies,
       television shows and anime with TMDB metadata and Simkl watch history.
     </p>
   </description>
