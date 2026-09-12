@@ -8,14 +8,14 @@ from pathlib import Path
 from typing import Any
 
 
-APP_ID = "io.github.cineshelf.CineShelf"
+APP_ID = "io.github.gisheh.Gisheh"
 LIBRARY_MODE_LOCAL = "local"
 LIBRARY_MODE_SIMKL = "simkl"
 LIBRARY_MODES = (LIBRARY_MODE_LOCAL, LIBRARY_MODE_SIMKL)
 
 
 def user_state_file() -> Path:
-    configured = os.environ.get("CINESHELF_STATE_FILE")
+    configured = os.environ.get("GISHEH_STATE_FILE")
     if configured:
         return Path(configured).expanduser()
     state_home = os.environ.get("XDG_STATE_HOME")
@@ -90,7 +90,7 @@ def save_library_mode(mode: str, path: Path | None = None) -> Path:
 
 
 def clear_state(path: Path | None = None) -> None:
-    """Remove all persisted CineShelf preferences and personal library state."""
+    """Remove all persisted گیشه preferences and personal library state."""
     destination = path or user_state_file()
     try:
         destination.unlink()

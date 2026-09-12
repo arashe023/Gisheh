@@ -27,12 +27,12 @@ except ImportError:
     BUNDLED_SIMKL_CLIENT_ID = ""
 
 
-APP_ID = "io.github.cineshelf.CineShelf"
-APP_NAME = "cineshelf"
+APP_ID = "io.github.gisheh.Gisheh"
+APP_NAME = "gisheh"
 APP_VERSION = "1.3.0"
 API_ROOT = "https://api.simkl.com"
 CALENDAR_ROOT = "https://data.simkl.in/calendar/v2"
-USER_AGENT = f"CineShelf/{APP_VERSION}"
+USER_AGENT = f"Gisheh/{APP_VERSION}"
 CALENDAR_SCHEMA_VERSION = 1
 CALENDAR_CACHE_MAX_AGE = timedelta(hours=5)
 CALENDAR_MEDIA_FILES = {
@@ -792,7 +792,7 @@ def _store_keyring_token(token: str) -> bool:
                 schema,
                 _secret_attributes(),
                 secret.COLLECTION_DEFAULT,
-                "CineShelf Simkl access token",
+                "گیشه Simkl access token",
                 token,
                 None,
             )

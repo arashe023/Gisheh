@@ -1,12 +1,12 @@
 [Desktop Entry]
-Name=CineShelf
+Name=گیشه
 Comment=Browse and track movies, shows and anime
 Exec=@EXECUTABLE@
-Icon=io.github.cineshelf.CineShelf
+Icon=io.github.gisheh.Gisheh
 Terminal=false
 Type=Application
 Categories=AudioVideo;Video;
 PrefersNonDefaultGPU=true
 Keywords=Movies;Shows;Anime;Watchlist;
 StartupNotify=true
-StartupWMClass=io.github.cineshelf.CineShelf
+StartupWMClass=io.github.gisheh.Gisheh

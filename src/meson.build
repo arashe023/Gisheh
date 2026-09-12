@@ -1,11 +1,11 @@
-app_id = 'io.github.cineshelf.CineShelf'
-python_package_dir = python.get_install_dir() / 'cineshelf'
+app_id = 'io.github.gisheh.Gisheh'
+python_package_dir = python.get_install_dir() / 'gisheh'
 
 build_configuration = configuration_data()
 build_configuration.set_quoted('SIMKL_CLIENT_ID', get_option('simkl_client_id'))
 build_configuration.set_quoted('TMDB_READ_TOKEN', get_option('tmdb_read_token'))
 configured_build_module = configure_file(
-  input: 'cineshelf/_build_config.py.in',
+  input: 'gisheh/_build_config.py.in',
   output: '_build_config.py',
   configuration: build_configuration,
   install: true,
@@ -14,39 +14,39 @@ configured_build_module = configure_file(
 
 python.install_sources(
   files(
-    'cineshelf/__init__.py',
-    'cineshelf/application.py',
-    'cineshelf/main.py',
-    'cineshelf/onboarding.py',
-    'cineshelf/state_store.py',
-    'cineshelf/window.py',
+    'gisheh/__init__.py',
+    'gisheh/application.py',
+    'gisheh/main.py',
+    'gisheh/onboarding.py',
+    'gisheh/state_store.py',
+    'gisheh/window.py',
   ),
-  subdir: 'cineshelf',
+  subdir: 'gisheh',
 )
 
 python.install_sources(
   files(
-    'cineshelf/services/__init__.py',
-    'cineshelf/services/image_http.py',
-    'cineshelf/services/simkl_client.py',
-    'cineshelf/services/tmdb_client.py',
+    'gisheh/services/__init__.py',
+    'gisheh/services/image_http.py',
+    'gisheh/services/simkl_client.py',
+    'gisheh/services/tmdb_client.py',
   ),
-  subdir: 'cineshelf/services',
+  subdir: 'gisheh/services',
 )
 
 launcher_configuration = configuration_data()
 launcher_configuration.set('PYTHON', python.full_path())
 launcher_configuration.set('PYTHON_PACKAGE_ROOT', python.get_install_dir())
 configured_launcher = configure_file(
-  input: 'cineshelf.in',
-  output: 'cineshelf-configured',
+  input: 'gisheh.in',
+  output: 'gisheh-configured',
   configuration: launcher_configuration,
 )
 
-cineshelf_launcher = custom_target(
-  'cineshelf',
+gisheh_launcher = custom_target(
+  'gisheh',
   input: configured_launcher,
-  output: 'cineshelf',
+  output: 'gisheh',
   command: [
     python,
     meson.project_source_root() / 'build-aux/prepare-launcher.py',
@@ -60,19 +60,19 @@ cineshelf_launcher = custom_target(
 )
 
 glib_compile_resources = find_program('glib-compile-resources')
-cineshelf_resources = custom_target(
-  'cineshelf-resources',
-  input: 'cineshelf/io.github.cineshelf.CineShelf.gresource.xml',
+gisheh_resources = custom_target(
+  'gisheh-resources',
+  input: 'gisheh/io.github.gisheh.Gisheh.gresource.xml',
   depend_files: files(
-    'cineshelf/ui/window.ui',
-    'cineshelf/style.css',
-    'cineshelf/library.json',
-    'cineshelf/assets/tmdb-logo.svg',
+    'gisheh/ui/window.ui',
+    'gisheh/style.css',
+    'gisheh/library.json',
+    'gisheh/assets/tmdb-logo.svg',
   ),
-  output: 'cineshelf.gresource',
+  output: 'gisheh.gresource',
   command: [
     glib_compile_resources,
-    '--sourcedir', meson.current_source_dir() / 'cineshelf',
+    '--sourcedir', meson.current_source_dir() / 'gisheh',
     '--target', '@OUTPUT@',
     '@INPUT@',
   ],

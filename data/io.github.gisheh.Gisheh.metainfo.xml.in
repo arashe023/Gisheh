@@ -1,25 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>io.github.cineshelf.CineShelf</id>
-  <name>CineShelf</name>
+  <id>io.github.gisheh.Gisheh</id>
+  <name>گیشه</name>
   <summary>Browse and track movies, shows and anime</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <description>
     <p>
-      CineShelf is a native GNOME application for exploring and tracking movies,
+      گیشه is a native GNOME application for exploring and tracking movies,
       television shows and anime with TMDB metadata and Simkl watch history.
     </p>
   </description>
-  <launchable type="desktop-id">io.github.cineshelf.CineShelf.desktop</launchable>
+  <launchable type="desktop-id">io.github.gisheh.Gisheh.desktop</launchable>
   <provides>
-    <binary>cineshelf</binary>
+    <binary>gisheh</binary>
   </provides>
   <categories>
     <category>AudioVideo</category>
     <category>Video</category>
   </categories>
-  <url type="homepage">https://github.com/cineshelf/CineShelf</url>
+  <url type="homepage">https://github.com/gisheh/Gisheh</url>
   <content_rating type="oars-1.1"/>
   <releases>
     <release version="1.3.0" date="2026-09-02"/>

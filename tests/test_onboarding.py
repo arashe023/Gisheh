@@ -14,9 +14,9 @@ from unittest.mock import patch
 SOURCE_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SOURCE_DIR))
 
-from cineshelf import state_store
-from cineshelf import window as cineshelf
-from cineshelf.services import simkl_client, tmdb_client
+from gisheh import state_store
+from gisheh import window as gisheh
+from gisheh.services import simkl_client, tmdb_client
 
 
 class LibraryModeStateTests(unittest.TestCase):
@@ -60,19 +60,19 @@ class LibraryModeStateTests(unittest.TestCase):
 
 class LocalFirstLibraryTests(unittest.TestCase):
     def test_new_profile_starts_without_sample_library_or_profile_totals(self) -> None:
-        records, explore, totals = cineshelf.load_catalog()
+        records, explore, totals = gisheh.load_catalog()
 
         self.assertEqual(records, ())
         self.assertEqual(explore, ())
         self.assertEqual(
             totals,
             {
-                media_type: {status: 0 for status in cineshelf.LIBRARY_FILTERS}
-                for media_type in cineshelf.MEDIA_TYPES
+                media_type: {status: 0 for status in gisheh.LIBRARY_FILTERS}
+                for media_type in gisheh.MEDIA_TYPES
             },
         )
 
-        controller = object.__new__(cineshelf.CineShelfWindow)
+        controller = object.__new__(gisheh.GishehWindow)
         controller.records = records
         controller.completed = set()
         controller.ratings = {}
@@ -104,9 +104,9 @@ class LocalFirstLibraryTests(unittest.TestCase):
                 "TMDB_TOKEN_FILE": str(config_home / "tmdb-token"),
             }
             with (
-                patch.dict(cineshelf.os.environ, environment, clear=False),
+                patch.dict(gisheh.os.environ, environment, clear=False),
                 patch.object(simkl_client, "_clear_keyring_token", return_value=True),
-                patch.object(cineshelf, "clear_desktop_preferences"),
+                patch.object(gisheh, "clear_desktop_preferences"),
             ):
                 state_store.write_state({"bookmarks": ["one"]}, state_file)
                 tmdb_client.store_token("developer-token")
@@ -127,11 +127,11 @@ class LocalFirstLibraryTests(unittest.TestCase):
                 (simkl_client.calendar_cache_dir() / "calendar.json").write_text(
                     "{}", encoding="utf-8"
                 )
-                log_file = cineshelf.application_log_file()
+                log_file = gisheh.application_log_file()
                 log_file.parent.mkdir(parents=True, exist_ok=True)
                 log_file.write_text("log", encoding="utf-8")
 
-                cineshelf.clear_all_user_data(state_file)
+                gisheh.clear_all_user_data(state_file)
 
                 self.assertFalse(state_file.exists())
                 self.assertFalse(tmdb_client.token_file().exists())
@@ -146,25 +146,25 @@ class LocalFirstLibraryTests(unittest.TestCase):
     def test_factory_reset_restart_replaces_the_current_process(self) -> None:
         with (
             patch.object(simkl_client, "close_image_http_client") as close_client,
-            patch.object(cineshelf.os, "execvpe") as exec_process,
+            patch.object(gisheh.os, "execvpe") as exec_process,
         ):
-            cineshelf.CineShelfWindow._restart_application()
+            gisheh.GishehWindow._restart_application()
 
         close_client.assert_called_once_with()
         exec_process.assert_called_once()
         executable, arguments, environment = exec_process.call_args.args
-        self.assertEqual(executable, cineshelf.sys.executable)
-        self.assertEqual(arguments[:3], [cineshelf.sys.executable, "-m", "cineshelf.main"])
+        self.assertEqual(executable, gisheh.sys.executable)
+        self.assertEqual(arguments[:3], [gisheh.sys.executable, "-m", "gisheh.main"])
         self.assertIn("PYTHONPATH", environment)
 
     @staticmethod
-    def _controller() -> tuple[cineshelf.CineShelfWindow, cineshelf.TitleRecord]:
-        records, explore, _totals = cineshelf.load_catalog(
+    def _controller() -> tuple[gisheh.GishehWindow, gisheh.TitleRecord]:
+        records, explore, _totals = gisheh.load_catalog(
             include_sample_data=True
         )
         record = explore[0]
-        controller = object.__new__(cineshelf.CineShelfWindow)
-        controller.library_mode = cineshelf.LIBRARY_MODE_LOCAL
+        controller = object.__new__(gisheh.GishehWindow)
+        controller.library_mode = gisheh.LIBRARY_MODE_LOCAL
         controller.records = records
         controller.explore_records = explore
         controller.explore_search_records = ()
@@ -212,8 +212,8 @@ class LocalFirstLibraryTests(unittest.TestCase):
 
     def test_local_record_round_trip_preserves_catalog_identity(self) -> None:
         _controller, record = self._controller()
-        restored = cineshelf.TitleRecord.from_mapping(
-            cineshelf.title_record_to_mapping(record)
+        restored = gisheh.TitleRecord.from_mapping(
+            gisheh.title_record_to_mapping(record)
         )
 
         self.assertEqual(restored.id, record.id)
@@ -244,7 +244,7 @@ class LocalFirstLibraryTests(unittest.TestCase):
 
             # A later cloud session may replace the active state, but must not
             # overwrite the independently owned Local-first profile.
-            controller.library_mode = cineshelf.LIBRARY_MODE_SIMKL
+            controller.library_mode = gisheh.LIBRARY_MODE_SIMKL
             controller.bookmarks = set()
             controller.completed = set()
             controller.ratings = {}
@@ -254,16 +254,16 @@ class LocalFirstLibraryTests(unittest.TestCase):
             self.assertTrue(cloud_payload["localLibrary"])
             self.assertIn(canonical, cloud_payload["localProfile"]["bookmarks"])
             state_store.save_library_mode(
-                cineshelf.LIBRARY_MODE_LOCAL,
+                gisheh.LIBRARY_MODE_LOCAL,
                 destination,
             )
 
-            records, explore, _totals = cineshelf.load_catalog(
+            records, explore, _totals = gisheh.load_catalog(
                 include_sample_data=True
             )
-            reader = object.__new__(cineshelf.CineShelfWindow)
+            reader = object.__new__(gisheh.GishehWindow)
             reader.state_file = destination
-            reader.library_mode = cineshelf.LIBRARY_MODE_LOCAL
+            reader.library_mode = gisheh.LIBRARY_MODE_LOCAL
             reader.records = records
             reader.explore_records = explore
             reader.explore_search_records = ()
@@ -302,12 +302,12 @@ class LocalFirstLibraryTests(unittest.TestCase):
         self.assertEqual(reader.records_by_id[canonical].title, record.title)
 
     def test_local_mode_refuses_background_simkl_sync(self) -> None:
-        controller = object.__new__(cineshelf.CineShelfWindow)
-        controller.library_mode = cineshelf.LIBRARY_MODE_LOCAL
+        controller = object.__new__(gisheh.GishehWindow)
+        controller.library_mode = gisheh.LIBRARY_MODE_LOCAL
         controller.simkl_client_id = "client"
         controller.simkl_token = "token"
 
-        with patch.object(cineshelf.threading, "Thread") as worker:
+        with patch.object(gisheh.threading, "Thread") as worker:
             controller._start_simkl_sync()
 
         worker.assert_not_called()
@@ -316,15 +316,15 @@ class LocalFirstLibraryTests(unittest.TestCase):
 class WelcomeTourStructureTests(unittest.TestCase):
     def test_tour_explains_both_modes_without_a_main_menu_entry(self) -> None:
         root = Path(__file__).resolve().parents[1]
-        onboarding = (root / "src/cineshelf/onboarding.py").read_text(
+        onboarding = (root / "src/gisheh/onboarding.py").read_text(
             encoding="utf-8"
         )
-        application = (root / "src/cineshelf/application.py").read_text(
+        application = (root / "src/gisheh/application.py").read_text(
             encoding="utf-8"
         )
-        window = (root / "src/cineshelf/window.py").read_text(encoding="utf-8")
+        window = (root / "src/gisheh/window.py").read_text(encoding="utf-8")
 
-        self.assertIn("Welcome to CineShelf", onboarding)
+        self.assertIn("Welcome to گیشه", onboarding)
         self.assertIn("Local-first", onboarding)
         self.assertIn("Sync with Simkl", onboarding)
         self.assertIn("Adw.Carousel()", onboarding)
@@ -333,7 +333,7 @@ class WelcomeTourStructureTests(unittest.TestCase):
 
     def test_tour_uses_emoji_instead_of_svg_icon_widgets(self) -> None:
         onboarding = (
-            Path(__file__).resolve().parents[1] / "src/cineshelf/onboarding.py"
+            Path(__file__).resolve().parents[1] / "src/gisheh/onboarding.py"
         ).read_text(encoding="utf-8")
 
         for emoji in ("🎬", "🔒", "✅", "💾", "☁️"):
@@ -342,7 +342,7 @@ class WelcomeTourStructureTests(unittest.TestCase):
         self.assertNotIn("welcome-icon-surface", onboarding)
 
         stylesheet = (
-            Path(__file__).resolve().parents[1] / "src/cineshelf/style.css"
+            Path(__file__).resolve().parents[1] / "src/gisheh/style.css"
         ).read_text(
             encoding="utf-8"
         )
@@ -350,7 +350,7 @@ class WelcomeTourStructureTests(unittest.TestCase):
 
     def test_simkl_choice_requires_pin_authorization_before_completion(self) -> None:
         onboarding = (
-            Path(__file__).resolve().parents[1] / "src/cineshelf/onboarding.py"
+            Path(__file__).resolve().parents[1] / "src/gisheh/onboarding.py"
         ).read_text(encoding="utf-8")
 
         self.assertIn('"Continue to Simkl sign in"', onboarding)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Shared pooled HTTP transport for CineShelf image downloads."""
+"""Shared pooled HTTP transport for گیشه image downloads."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from typing import Iterable
 import httpx
 
 
-USER_AGENT = "CineShelf/1.3.0"
+USER_AGENT = "Gisheh/1.3.0"
 DEFAULT_RETRY_DELAYS = (0.0, 0.5, 2.0)
 _CLIENT: httpx.Client | None = None
 _CLIENT_LOCK = threading.Lock()

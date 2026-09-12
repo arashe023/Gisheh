@@ -18,7 +18,7 @@ from .services import simkl_client
 from .state_store import LIBRARY_MODE_LOCAL, LIBRARY_MODE_SIMKL
 
 
-RESOURCE_PREFIX = "/io/github/cineshelf/CineShelf"
+RESOURCE_PREFIX = "/io/github/gisheh/Gisheh"
 CSS_RESOURCE = f"{RESOURCE_PREFIX}/style.css"
 CSS_FILE = Path(__file__).resolve().parent / "style.css"
 
@@ -34,7 +34,7 @@ class WelcomeTour(Adw.ApplicationWindow):
         on_complete: Callable[[str], None],
         initial_mode: str = LIBRARY_MODE_LOCAL,
     ) -> None:
-        super().__init__(application=application, title="Welcome to CineShelf")
+        super().__init__(application=application, title="Welcome to گیشه")
         self.set_default_size(720, 560)
         self.set_size_request(420, 460)
         self._on_complete = on_complete
@@ -62,7 +62,7 @@ class WelcomeTour(Adw.ApplicationWindow):
         toolbar = Adw.ToolbarView()
         header = Adw.HeaderBar()
         header.set_show_start_title_buttons(False)
-        header.set_title_widget(Adw.WindowTitle(title="CineShelf", subtitle="Welcome"))
+        header.set_title_widget(Adw.WindowTitle(title="گیشه", subtitle="Welcome"))
         toolbar.add_top_bar(header)
 
         layout = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -74,7 +74,7 @@ class WelcomeTour(Adw.ApplicationWindow):
         self.carousel.append(
             self._tour_page(
                 "🎬",
-                "Welcome to CineShelf",
+                "Welcome to گیشه",
                 "Keep films, shows and anime in one calm, native library built "
                 "for the GNOME desktop.",
                 (
@@ -88,7 +88,7 @@ class WelcomeTour(Adw.ApplicationWindow):
             self._tour_page(
                 "🔒",
                 "Your library stays yours",
-                "CineShelf can work entirely on this device, or keep your watch "
+                "گیشه can work entirely on this device, or keep your watch "
                 "activity synchronized through Simkl. You can change this later.",
                 (
                     "Local-first never requires an account",
@@ -243,7 +243,7 @@ class WelcomeTour(Adw.ApplicationWindow):
         eyebrow = Gtk.Label(label="ONE CHOICE BEFORE YOU START")
         eyebrow.add_css_class("welcome-eyebrow")
         content.append(eyebrow)
-        title = Gtk.Label(label="How should CineShelf manage your library?")
+        title = Gtk.Label(label="How should گیشه manage your library?")
         title.add_css_class("welcome-choice-title")
         title.set_wrap(True)
         title.set_justify(Gtk.Justification.CENTER)
@@ -321,7 +321,7 @@ class WelcomeTour(Adw.ApplicationWindow):
         elif self._selected_mode == LIBRARY_MODE_SIMKL:
             self.next_button.set_label("Continue to Simkl sign in")
         else:
-            self.next_button.set_label("Start using CineShelf")
+            self.next_button.set_label("Start using گیشه")
 
     def _go_back(self, _button: Gtk.Button) -> None:
         if self._page_index > 0:
@@ -354,7 +354,7 @@ class WelcomeTour(Adw.ApplicationWindow):
         client_id = simkl_client.read_client_id()
         if not client_id:
             self._show_sign_in_error(
-                "This build does not include CineShelf's public Simkl Client ID."
+                "This build does not include گیشه's public Simkl Client ID."
             )
             return
         self._simkl_auth_generation += 1
@@ -363,7 +363,7 @@ class WelcomeTour(Adw.ApplicationWindow):
         threading.Thread(
             target=self._request_simkl_pin,
             args=(client_id, generation),
-            name="cineshelf-welcome-simkl-pin",
+            name="gisheh-welcome-simkl-pin",
             daemon=True,
         ).start()
 
@@ -394,7 +394,7 @@ class WelcomeTour(Adw.ApplicationWindow):
             heading="Sign in to Simkl",
             body=(
                 "The Simkl page has been opened in your browser. Sign in and "
-                "enter this code; CineShelf will continue automatically."
+                "enter this code; گیشه will continue automatically."
             ),
         )
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
@@ -422,7 +422,7 @@ class WelcomeTour(Adw.ApplicationWindow):
         threading.Thread(
             target=self._poll_simkl_pin,
             args=(client_id, user_code, interval, expires_in, generation),
-            name="cineshelf-welcome-simkl-poll",
+            name="gisheh-welcome-simkl-poll",
             daemon=True,
         ).start()
         return GLib.SOURCE_REMOVE

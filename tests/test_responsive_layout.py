@@ -12,179 +12,179 @@ from types import SimpleNamespace
 SOURCE_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SOURCE_DIR))
 
-from cineshelf import window as cineshelf
+from gisheh import window as gisheh
 
 
 class ResponsiveDecisionTests(unittest.TestCase):
     def test_very_wide_width_uses_expanded_sidebar_and_inline_details(self) -> None:
         for width in (1200, 1360, 2000):
-            layout = cineshelf.responsive_layout_for_width(
+            layout = gisheh.responsive_layout_for_width(
                 width, details_open=True
             )
-            self.assertEqual(layout.sidebar_mode, cineshelf.SIDEBAR_EXPANDED)
-            self.assertEqual(layout.details_mode, cineshelf.DETAILS_INLINE)
+            self.assertEqual(layout.sidebar_mode, gisheh.SIDEBAR_EXPANDED)
+            self.assertEqual(layout.details_mode, gisheh.DETAILS_INLINE)
 
     def test_medium_width_uses_hidden_sidebar_and_inline_details(self) -> None:
         for width in (980, 1100, 1199):
-            layout = cineshelf.responsive_layout_for_width(
+            layout = gisheh.responsive_layout_for_width(
                 width, details_open=True
             )
-            self.assertEqual(layout.sidebar_mode, cineshelf.SIDEBAR_HIDDEN)
-            self.assertEqual(layout.details_mode, cineshelf.DETAILS_INLINE)
+            self.assertEqual(layout.sidebar_mode, gisheh.SIDEBAR_HIDDEN)
+            self.assertEqual(layout.details_mode, gisheh.DETAILS_INLINE)
 
     def test_narrow_width_uses_hidden_sidebar_and_overlay_details(self) -> None:
         for width in (720, 900, 979):
-            layout = cineshelf.responsive_layout_for_width(
+            layout = gisheh.responsive_layout_for_width(
                 width, details_open=True
             )
-            self.assertEqual(layout.sidebar_mode, cineshelf.SIDEBAR_HIDDEN)
-            self.assertEqual(layout.details_mode, cineshelf.DETAILS_OVERLAY)
+            self.assertEqual(layout.sidebar_mode, gisheh.SIDEBAR_HIDDEN)
+            self.assertEqual(layout.details_mode, gisheh.DETAILS_OVERLAY)
 
     def test_very_narrow_width_uses_hidden_sidebar_and_navigation(self) -> None:
         for width in (360, 480, 719):
-            layout = cineshelf.responsive_layout_for_width(
+            layout = gisheh.responsive_layout_for_width(
                 width, details_open=True
             )
-            self.assertEqual(layout.sidebar_mode, cineshelf.SIDEBAR_HIDDEN)
+            self.assertEqual(layout.sidebar_mode, gisheh.SIDEBAR_HIDDEN)
             self.assertEqual(
-                layout.details_mode, cineshelf.DETAILS_NAVIGATION
+                layout.details_mode, gisheh.DETAILS_NAVIGATION
             )
 
     def test_exact_threshold_boundaries(self) -> None:
         self.assertEqual(
-            cineshelf.responsive_layout_for_width(1200).sidebar_mode,
-            cineshelf.SIDEBAR_EXPANDED,
+            gisheh.responsive_layout_for_width(1200).sidebar_mode,
+            gisheh.SIDEBAR_EXPANDED,
         )
         self.assertEqual(
-            cineshelf.responsive_layout_for_width(1199).sidebar_mode,
-            cineshelf.SIDEBAR_HIDDEN,
+            gisheh.responsive_layout_for_width(1199).sidebar_mode,
+            gisheh.SIDEBAR_HIDDEN,
         )
         self.assertEqual(
-            cineshelf.responsive_layout_for_width(
+            gisheh.responsive_layout_for_width(
                 980, details_open=True
             ).details_mode,
-            cineshelf.DETAILS_INLINE,
+            gisheh.DETAILS_INLINE,
         )
         self.assertEqual(
-            cineshelf.responsive_layout_for_width(
+            gisheh.responsive_layout_for_width(
                 979, details_open=True
             ).details_mode,
-            cineshelf.DETAILS_OVERLAY,
+            gisheh.DETAILS_OVERLAY,
         )
         self.assertEqual(
-            cineshelf.responsive_layout_for_width(
+            gisheh.responsive_layout_for_width(
                 720, details_open=True
             ).details_mode,
-            cineshelf.DETAILS_OVERLAY,
+            gisheh.DETAILS_OVERLAY,
         )
         self.assertEqual(
-            cineshelf.responsive_layout_for_width(719).sidebar_mode,
-            cineshelf.SIDEBAR_HIDDEN,
+            gisheh.responsive_layout_for_width(719).sidebar_mode,
+            gisheh.SIDEBAR_HIDDEN,
         )
         self.assertEqual(
-            cineshelf.responsive_layout_for_width(
+            gisheh.responsive_layout_for_width(
                 719, details_open=True
             ).details_mode,
-            cineshelf.DETAILS_NAVIGATION,
+            gisheh.DETAILS_NAVIGATION,
         )
 
     def test_compact_mode_never_returned(self) -> None:
         for width in list(range(0, 2001, 7)) + [719, 720, 979, 980, 1199, 1200]:
             for details_open in (False, True):
-                layout = cineshelf.responsive_layout_for_width(
+                layout = gisheh.responsive_layout_for_width(
                     width, details_open=details_open
                 )
                 self.assertNotEqual(layout.sidebar_mode, "compact")
 
     def test_decision_is_stable_and_state_free(self) -> None:
-        first = cineshelf.responsive_layout_for_width(1024, details_open=True)
-        second = cineshelf.responsive_layout_for_width(1024, details_open=True)
+        first = gisheh.responsive_layout_for_width(1024, details_open=True)
+        second = gisheh.responsive_layout_for_width(1024, details_open=True)
         self.assertEqual(first, second)
-        closed = cineshelf.responsive_layout_for_width(900, details_open=False)
-        opened = cineshelf.responsive_layout_for_width(900, details_open=True)
-        self.assertEqual(closed.details_mode, cineshelf.DETAILS_INLINE)
-        self.assertEqual(opened.details_mode, cineshelf.DETAILS_OVERLAY)
+        closed = gisheh.responsive_layout_for_width(900, details_open=False)
+        opened = gisheh.responsive_layout_for_width(900, details_open=True)
+        self.assertEqual(closed.details_mode, gisheh.DETAILS_INLINE)
+        self.assertEqual(opened.details_mode, gisheh.DETAILS_OVERLAY)
 
     def test_docked_sidebar_and_inline_details_require_three_regions(self) -> None:
         required = (
-            cineshelf.SIDEBAR_EXPANDED_MIN_WIDTH
-            + cineshelf.DETAILS_INLINE_WIDTH
-            + cineshelf.EXPLORE_SAFE_CONTENT_WIDTH
-            + cineshelf.RESPONSIVE_LAYOUT_GAPS
+            gisheh.SIDEBAR_EXPANDED_MIN_WIDTH
+            + gisheh.DETAILS_INLINE_WIDTH
+            + gisheh.EXPLORE_SAFE_CONTENT_WIDTH
+            + gisheh.RESPONSIVE_LAYOUT_GAPS
         )
-        too_small = cineshelf.responsive_layout_for_width(
+        too_small = gisheh.responsive_layout_for_width(
             required - 1, details_open=True
         )
-        large_enough = cineshelf.responsive_layout_for_width(
-            max(required, cineshelf.RESPONSIVE_WIDE_ENTER_WIDTH),
+        large_enough = gisheh.responsive_layout_for_width(
+            max(required, gisheh.RESPONSIVE_WIDE_ENTER_WIDTH),
             details_open=True,
         )
-        self.assertEqual(too_small.sidebar_mode, cineshelf.SIDEBAR_HIDDEN)
-        self.assertEqual(large_enough.sidebar_mode, cineshelf.SIDEBAR_EXPANDED)
-        self.assertEqual(large_enough.details_mode, cineshelf.DETAILS_INLINE)
+        self.assertEqual(too_small.sidebar_mode, gisheh.SIDEBAR_HIDDEN)
+        self.assertEqual(large_enough.sidebar_mode, gisheh.SIDEBAR_EXPANDED)
+        self.assertEqual(large_enough.details_mode, gisheh.DETAILS_INLINE)
 
     def test_hysteresis_retains_modes_inside_the_safe_band(self) -> None:
-        wide = cineshelf.ResponsiveLayout(
-            cineshelf.SIDEBAR_EXPANDED, cineshelf.DETAILS_INLINE
+        wide = gisheh.ResponsiveLayout(
+            gisheh.SIDEBAR_EXPANDED, gisheh.DETAILS_INLINE
         )
-        retained_wide = cineshelf.responsive_layout_for_width(
-            cineshelf.RESPONSIVE_WIDE_EXIT_WIDTH,
+        retained_wide = gisheh.responsive_layout_for_width(
+            gisheh.RESPONSIVE_WIDE_EXIT_WIDTH,
             details_open=True,
             current_layout=wide,
         )
-        self.assertEqual(retained_wide.sidebar_mode, cineshelf.SIDEBAR_EXPANDED)
+        self.assertEqual(retained_wide.sidebar_mode, gisheh.SIDEBAR_EXPANDED)
         self.assertEqual(
-            cineshelf.responsive_layout_for_width(
-                cineshelf.RESPONSIVE_WIDE_EXIT_WIDTH - 1,
+            gisheh.responsive_layout_for_width(
+                gisheh.RESPONSIVE_WIDE_EXIT_WIDTH - 1,
                 details_open=True,
                 current_layout=wide,
             ).sidebar_mode,
-            cineshelf.SIDEBAR_HIDDEN,
+            gisheh.SIDEBAR_HIDDEN,
         )
-        inline = cineshelf.ResponsiveLayout(
-            cineshelf.SIDEBAR_HIDDEN, cineshelf.DETAILS_INLINE
+        inline = gisheh.ResponsiveLayout(
+            gisheh.SIDEBAR_HIDDEN, gisheh.DETAILS_INLINE
         )
         self.assertEqual(
-            cineshelf.responsive_layout_for_width(
-                cineshelf.RESPONSIVE_INLINE_EXIT_WIDTH,
+            gisheh.responsive_layout_for_width(
+                gisheh.RESPONSIVE_INLINE_EXIT_WIDTH,
                 details_open=True,
                 current_layout=inline,
             ).details_mode,
-            cineshelf.DETAILS_INLINE,
+            gisheh.DETAILS_INLINE,
         )
-        navigation = cineshelf.ResponsiveLayout(
-            cineshelf.SIDEBAR_HIDDEN, cineshelf.DETAILS_NAVIGATION
+        navigation = gisheh.ResponsiveLayout(
+            gisheh.SIDEBAR_HIDDEN, gisheh.DETAILS_NAVIGATION
         )
         self.assertEqual(
-            cineshelf.responsive_layout_for_width(
-                cineshelf.RESPONSIVE_NARROW_EXIT_WIDTH - 1,
+            gisheh.responsive_layout_for_width(
+                gisheh.RESPONSIVE_NARROW_EXIT_WIDTH - 1,
                 details_open=True,
                 current_layout=navigation,
             ).details_mode,
-            cineshelf.DETAILS_NAVIGATION,
+            gisheh.DETAILS_NAVIGATION,
         )
 
 
 class DetailsBackActionTests(unittest.TestCase):
     def test_episode_back_returns_to_season(self) -> None:
         self.assertEqual(
-            cineshelf.details_back_action("episode"), "pop-season"
+            gisheh.details_back_action("episode"), "pop-season"
         )
 
     def test_season_back_returns_to_title(self) -> None:
         self.assertEqual(
-            cineshelf.details_back_action("season"), "pop-title"
+            gisheh.details_back_action("season"), "pop-title"
         )
 
     def test_title_back_closes_details(self) -> None:
-        self.assertEqual(cineshelf.details_back_action("title"), "close")
-        self.assertEqual(cineshelf.details_back_action("other"), "close")
+        self.assertEqual(gisheh.details_back_action("title"), "close")
+        self.assertEqual(gisheh.details_back_action("other"), "close")
 
 
 class RecordContextMenuTests(unittest.TestCase):
     @staticmethod
-    def _record() -> cineshelf.TitleRecord:
-        records, _explore, _totals = cineshelf.load_catalog(
+    def _record() -> gisheh.TitleRecord:
+        records, _explore, _totals = gisheh.load_catalog(
             include_sample_data=True
         )
         return records[0]
@@ -192,7 +192,7 @@ class RecordContextMenuTests(unittest.TestCase):
     def test_menu_contains_watch_watchlist_and_rating_controls(self) -> None:
         from gi.repository import Gio, Gtk
 
-        controller = object.__new__(cineshelf.CineShelfWindow)
+        controller = object.__new__(gisheh.GishehWindow)
         controller.completed = set()
         controller.bookmarks = set()
         controller.ratings = {}
@@ -218,7 +218,7 @@ class RecordContextMenuTests(unittest.TestCase):
 
     def test_context_actions_target_the_clicked_record(self) -> None:
         record = self._record()
-        controller = object.__new__(cineshelf.CineShelfWindow)
+        controller = object.__new__(gisheh.GishehWindow)
         controller.records_by_id = {record.id: record}
         calls: list[tuple[object, ...]] = []
         controller._activate_record_watched = (
@@ -243,7 +243,7 @@ class RecordContextMenuTests(unittest.TestCase):
         self.assertIn(("rating-dialog", record.id), calls)
 
     def test_rating_is_saved_from_a_separate_dialog(self) -> None:
-        source = Path(cineshelf.__file__).read_text(encoding="utf-8")
+        source = Path(gisheh.__file__).read_text(encoding="utf-8")
         dialog = source.split("def _show_record_rating_dialog")[1].split(
             "\n    def "
         )[0]
@@ -255,44 +255,44 @@ class RecordContextMenuTests(unittest.TestCase):
 class ExploreColumnTests(unittest.TestCase):
     def test_very_narrow_width_returns_one_column(self) -> None:
         self.assertEqual(
-            cineshelf.CineShelfWindow._explore_columns_for_width(279), 1
+            gisheh.GishehWindow._explore_columns_for_width(279), 1
         )
         self.assertEqual(
-            cineshelf.CineShelfWindow._explore_columns_for_width(200), 1
+            gisheh.GishehWindow._explore_columns_for_width(200), 1
         )
 
     def test_narrow_width_returns_two_columns(self) -> None:
         self.assertEqual(
-            cineshelf.CineShelfWindow._explore_columns_for_width(280), 2
+            gisheh.GishehWindow._explore_columns_for_width(280), 2
         )
         self.assertEqual(
-            cineshelf.CineShelfWindow._explore_columns_for_width(389), 2
+            gisheh.GishehWindow._explore_columns_for_width(389), 2
         )
 
     def test_medium_widths_return_three_or_four_columns(self) -> None:
         self.assertEqual(
-            cineshelf.CineShelfWindow._explore_columns_for_width(390), 3
+            gisheh.GishehWindow._explore_columns_for_width(390), 3
         )
         self.assertEqual(
-            cineshelf.CineShelfWindow._explore_columns_for_width(539), 3
+            gisheh.GishehWindow._explore_columns_for_width(539), 3
         )
         self.assertEqual(
-            cineshelf.CineShelfWindow._explore_columns_for_width(540), 4
+            gisheh.GishehWindow._explore_columns_for_width(540), 4
         )
         self.assertEqual(
-            cineshelf.CineShelfWindow._explore_columns_for_width(759), 4
+            gisheh.GishehWindow._explore_columns_for_width(759), 4
         )
 
     def test_wide_width_returns_five_columns(self) -> None:
         self.assertEqual(
-            cineshelf.CineShelfWindow._explore_columns_for_width(760), 5
+            gisheh.GishehWindow._explore_columns_for_width(760), 5
         )
         self.assertEqual(
-            cineshelf.CineShelfWindow._explore_columns_for_width(1200), 5
+            gisheh.GishehWindow._explore_columns_for_width(1200), 5
         )
 
     def test_card_height_supports_one_column(self) -> None:
-        controller = object.__new__(cineshelf.CineShelfWindow)
+        controller = object.__new__(gisheh.GishehWindow)
         controller._last_explore_layout_width = 300
         controller.explore_pane = SimpleNamespace(get_width=lambda: 0)
         controller.library_pane = SimpleNamespace(get_width=lambda: 0)
@@ -304,7 +304,7 @@ class ExploreColumnTests(unittest.TestCase):
     def test_only_column_changes_rebuild_explore(self) -> None:
         width = {"value": 640}
         rebuilds: list[int] = []
-        controller = object.__new__(cineshelf.CineShelfWindow)
+        controller = object.__new__(gisheh.GishehWindow)
         controller._explore_resize_source_id = 1
         controller._details_resize_source_id = 0
         controller._sidebar_resize_source_id = 0
@@ -353,7 +353,7 @@ class ExploreColumnTests(unittest.TestCase):
     def test_flexible_artwork_has_no_horizontal_minimum_or_natural_width(self) -> None:
         from gi.repository import Gtk
 
-        record = cineshelf.TitleRecord(
+        record = gisheh.TitleRecord(
             id="measure-test",
             title="Measurement",
             media_type="Movies",
@@ -384,7 +384,7 @@ class ExploreColumnTests(unittest.TestCase):
             release_rank=0,
             discover_layout="poster",
         )
-        artwork = cineshelf.PosterWidget(record, 480, 270, flexible_width=True)
+        artwork = gisheh.PosterWidget(record, 480, 270, flexible_width=True)
         minimum, natural, _minimum_baseline, _natural_baseline = artwork.measure(
             Gtk.Orientation.HORIZONTAL, -1
         )
@@ -393,14 +393,14 @@ class ExploreColumnTests(unittest.TestCase):
     def test_async_explore_artwork_replacement_stays_horizontally_flexible(self) -> None:
         from gi.repository import Gtk
 
-        records, _explore, _totals = cineshelf.load_catalog(
+        records, _explore, _totals = gisheh.load_catalog(
             include_sample_data=True
         )
         record = records[0]
         overlay = Gtk.Overlay()
         overlay.set_child(Gtk.Box())
         button = Gtk.Button(child=overlay)
-        controller = object.__new__(cineshelf.CineShelfWindow)
+        controller = object.__new__(gisheh.GishehWindow)
         controller._explore_card_buttons = {record.id: button}
         controller._explore_card_layouts = {record.id: ("hero", 2)}
         controller._explore_card_height = lambda _kind, _span: 180
@@ -408,7 +408,7 @@ class ExploreColumnTests(unittest.TestCase):
         controller._update_explore_card_artwork(record)
 
         artwork = overlay.get_child()
-        self.assertIsInstance(artwork, cineshelf.PosterWidget)
+        self.assertIsInstance(artwork, gisheh.PosterWidget)
         minimum, natural, _minimum_baseline, _natural_baseline = artwork.measure(
             Gtk.Orientation.HORIZONTAL, -1
         )
@@ -428,7 +428,7 @@ class ExploreColumnTests(unittest.TestCase):
             ) -> None:
                 self.attached.append((str(card), column, row, span))
 
-        controller = object.__new__(cineshelf.CineShelfWindow)
+        controller = object.__new__(gisheh.GishehWindow)
         feed = object()
         grid = FakeGrid(feed)
         old_card_a = object()
@@ -464,7 +464,7 @@ class ExploreColumnTests(unittest.TestCase):
     def test_loading_footer_fits_a_single_text_line(self) -> None:
         from gi.repository import Gtk
 
-        footer, _spinner = cineshelf.CineShelfWindow._build_explore_loading_footer()
+        footer, _spinner = gisheh.GishehWindow._build_explore_loading_footer()
         footer.set_visible(True)
         minimum, _natural, _min_baseline, _natural_baseline = footer.measure(
             Gtk.Orientation.VERTICAL, -1
@@ -476,32 +476,32 @@ class ExploreColumnTests(unittest.TestCase):
 class CompactRemovalTests(unittest.TestCase):
     @staticmethod
     def _source() -> str:
-        return Path(cineshelf.__file__).read_text(encoding="utf-8")
+        return Path(gisheh.__file__).read_text(encoding="utf-8")
 
     @staticmethod
     def _css() -> str:
-        return (Path(cineshelf.__file__).parent / "style.css").read_text(
+        return (Path(gisheh.__file__).parent / "style.css").read_text(
             encoding="utf-8"
         )
 
     def test_compact_sidebar_constants_are_gone(self) -> None:
-        self.assertFalse(hasattr(cineshelf, "SIDEBAR_COMPACT"))
+        self.assertFalse(hasattr(gisheh, "SIDEBAR_COMPACT"))
         self.assertFalse(
-            hasattr(cineshelf, "SIDEBAR_COMPACT_MIN_WIDTH")
+            hasattr(gisheh, "SIDEBAR_COMPACT_MIN_WIDTH")
         )
         self.assertFalse(
-            hasattr(cineshelf, "SIDEBAR_COMPACT_MAX_WIDTH")
+            hasattr(gisheh, "SIDEBAR_COMPACT_MAX_WIDTH")
         )
 
     def test_compact_sidebar_implementation_is_gone(self) -> None:
         self.assertFalse(
-            hasattr(cineshelf.CineShelfWindow, "_build_compact_sidebar")
+            hasattr(gisheh.GishehWindow, "_build_compact_sidebar")
         )
         self.assertFalse(
-            hasattr(cineshelf.CineShelfWindow, "_on_compact_rail_clicked")
+            hasattr(gisheh.GishehWindow, "_on_compact_rail_clicked")
         )
         self.assertFalse(
-            hasattr(cineshelf.CineShelfWindow, "_sync_compact_sidebar_selection")
+            hasattr(gisheh.GishehWindow, "_sync_compact_sidebar_selection")
         )
         source = self._source()
         self.assertNotIn("compact_rail_buttons", source)
@@ -515,11 +515,11 @@ class CompactRemovalTests(unittest.TestCase):
 class ResponsiveStructureTests(unittest.TestCase):
     @staticmethod
     def _ui_root() -> ET.Element:
-        return ET.parse(cineshelf.UI_FILE).getroot()
+        return ET.parse(gisheh.UI_FILE).getroot()
 
     @staticmethod
     def _ui_object_classes() -> dict[str, str]:
-        root = ET.parse(cineshelf.UI_FILE).getroot()
+        root = ET.parse(gisheh.UI_FILE).getroot()
         return {
             item.get("id"): item.get("class")
             for item in root.iter("object")
@@ -528,7 +528,7 @@ class ResponsiveStructureTests(unittest.TestCase):
 
     @staticmethod
     def _ui_properties(object_id: str) -> dict[str, str]:
-        root = ET.parse(cineshelf.UI_FILE).getroot()
+        root = ET.parse(gisheh.UI_FILE).getroot()
         for item in root.iter("object"):
             if item.get("id") == object_id:
                 return {
@@ -539,7 +539,7 @@ class ResponsiveStructureTests(unittest.TestCase):
 
     @staticmethod
     def _source() -> str:
-        return Path(cineshelf.__file__).read_text(encoding="utf-8")
+        return Path(gisheh.__file__).read_text(encoding="utf-8")
 
     def test_root_sidebar_is_an_overlay_drawer(self) -> None:
         classes = self._ui_object_classes()
@@ -616,7 +616,7 @@ class ResponsiveStructureTests(unittest.TestCase):
         self.assertEqual(
             self._ui_object_classes()["detail_ratings_host"], "GtkGrid"
         )
-        inner_width = cineshelf.DETAILS_INLINE_WIDTH - 32
+        inner_width = gisheh.DETAILS_INLINE_WIDTH - 32
         natural = int(properties.get("natural-line-length", "0") or 0)
         self.assertLessEqual(natural, inner_width)
         self.assertEqual(properties.get("hexpand"), "true")
@@ -646,58 +646,58 @@ class ResponsiveStructureTests(unittest.TestCase):
 
         self.assertIn(
             "flexible_width",
-            inspect.signature(cineshelf.PosterWidget.__init__).parameters,
+            inspect.signature(gisheh.PosterWidget.__init__).parameters,
         )
         source = self._source()
         self.assertIn("flexible_width=True", source)
 
     def test_responsive_modes_are_explicit(self) -> None:
-        self.assertEqual(cineshelf.SIDEBAR_EXPANDED, "expanded")
-        self.assertEqual(cineshelf.SIDEBAR_HIDDEN, "hidden")
-        self.assertEqual(cineshelf.DETAILS_INLINE, "inline")
-        self.assertEqual(cineshelf.DETAILS_OVERLAY, "overlay")
-        self.assertEqual(cineshelf.DETAILS_NAVIGATION, "navigation")
+        self.assertEqual(gisheh.SIDEBAR_EXPANDED, "expanded")
+        self.assertEqual(gisheh.SIDEBAR_HIDDEN, "hidden")
+        self.assertEqual(gisheh.DETAILS_INLINE, "inline")
+        self.assertEqual(gisheh.DETAILS_OVERLAY, "overlay")
+        self.assertEqual(gisheh.DETAILS_NAVIGATION, "navigation")
 
 
 class PanelWidthTests(unittest.TestCase):
     def test_inline_width_is_constant(self) -> None:
         for available in (0, 200, 360, 1100, 2000):
             self.assertEqual(
-                cineshelf.CineShelfWindow._details_panel_preferred_width(
-                    cineshelf.DETAILS_INLINE, available
+                gisheh.GishehWindow._details_panel_preferred_width(
+                    gisheh.DETAILS_INLINE, available
                 ),
                 384,
             )
 
     def test_inline_width_ignores_media_type(self) -> None:
         widths = {
-            cineshelf.CineShelfWindow._details_panel_preferred_width(
-                cineshelf.DETAILS_INLINE, 480
+            gisheh.GishehWindow._details_panel_preferred_width(
+                gisheh.DETAILS_INLINE, 480
             )
             for _media_type in ("Movies", "Shows", "Anime")
         }
         self.assertEqual(widths, {384})
-        self.assertEqual(cineshelf.DETAILS_INLINE_WIDTH, 384)
+        self.assertEqual(gisheh.DETAILS_INLINE_WIDTH, 384)
 
     def test_overlay_width_is_clamped_to_available_width(self) -> None:
-        panel = cineshelf.CineShelfWindow._details_panel_preferred_width
-        self.assertEqual(panel(cineshelf.DETAILS_OVERLAY, 0), 280)
-        self.assertEqual(panel(cineshelf.DETAILS_OVERLAY, 100), 280)
-        self.assertEqual(panel(cineshelf.DETAILS_OVERLAY, 328), 280)
-        self.assertEqual(panel(cineshelf.DETAILS_OVERLAY, 329), 281)
-        self.assertEqual(panel(cineshelf.DETAILS_OVERLAY, 436), 388)
-        self.assertEqual(panel(cineshelf.DETAILS_OVERLAY, 2000), 388)
+        panel = gisheh.GishehWindow._details_panel_preferred_width
+        self.assertEqual(panel(gisheh.DETAILS_OVERLAY, 0), 280)
+        self.assertEqual(panel(gisheh.DETAILS_OVERLAY, 100), 280)
+        self.assertEqual(panel(gisheh.DETAILS_OVERLAY, 328), 280)
+        self.assertEqual(panel(gisheh.DETAILS_OVERLAY, 329), 281)
+        self.assertEqual(panel(gisheh.DETAILS_OVERLAY, 436), 388)
+        self.assertEqual(panel(gisheh.DETAILS_OVERLAY, 2000), 388)
 
     def test_navigation_mode_applies_no_desktop_panel_width(self) -> None:
         self.assertEqual(
-            cineshelf.CineShelfWindow._details_panel_preferred_width(
-                cineshelf.DETAILS_NAVIGATION, 480
+            gisheh.GishehWindow._details_panel_preferred_width(
+                gisheh.DETAILS_NAVIGATION, 480
             ),
             0,
         )
 
     def test_panel_width_does_not_measure_content(self) -> None:
-        source = Path(cineshelf.__file__).read_text(encoding="utf-8")
+        source = Path(gisheh.__file__).read_text(encoding="utf-8")
         body = source.split("def _details_panel_preferred_width")[1].split(
             "\n    def "
         )[0]
@@ -705,7 +705,7 @@ class PanelWidthTests(unittest.TestCase):
         self.assertNotIn("details_surface", body)
 
     def test_episode_cards_can_wrap(self) -> None:
-        source = Path(cineshelf.__file__).read_text(encoding="utf-8")
+        source = Path(gisheh.__file__).read_text(encoding="utf-8")
         builder = source.split("self.episode_cards_box = ")[1].split("\n")[0]
         self.assertIn("WrapBox", builder)
         card = source.split("def _episode_card")[1].split("\n    def ")[0]
@@ -786,9 +786,9 @@ def _sync_controller(
     mode: str,
     revealer_parent: object | None = None,
 ) -> tuple[
-    cineshelf.CineShelfWindow, FakeNavigation, FakeWidget, FakeWidget, list[str]
+    gisheh.GishehWindow, FakeNavigation, FakeWidget, FakeWidget, list[str]
 ]:
-    controller = object.__new__(cineshelf.CineShelfWindow)
+    controller = object.__new__(gisheh.GishehWindow)
     navigation = FakeNavigation(visible_tag)
     surface = FakeWidget()
     home = FakeWidget()
@@ -808,7 +808,7 @@ def _sync_controller(
     controller._responsive_window_width = lambda: 480  # type: ignore[method-assign]
     controller._sync_details_mode_chrome = lambda: events.append("chrome")  # type: ignore[method-assign]
     controller._sync_mobile_back_visibility = lambda: events.append("back")  # type: ignore[method-assign]
-    surface.set_parent(home if mode != cineshelf.DETAILS_NAVIGATION else mobile_host)
+    surface.set_parent(home if mode != gisheh.DETAILS_NAVIGATION else mobile_host)
     return controller, navigation, surface, revealer, events
 
 
@@ -818,7 +818,7 @@ class DetailsSyncTests(unittest.TestCase):
             _sync_controller(
                 visible_tag="browser",
                 details_open=False,
-                mode=cineshelf.DETAILS_NAVIGATION,
+                mode=gisheh.DETAILS_NAVIGATION,
             )
         )
         controller._sync_details_presentation()
@@ -830,7 +830,7 @@ class DetailsSyncTests(unittest.TestCase):
             _sync_controller(
                 visible_tag="browser",
                 details_open=True,
-                mode=cineshelf.DETAILS_NAVIGATION,
+                mode=gisheh.DETAILS_NAVIGATION,
             )
         )
         controller._sync_details_presentation()
@@ -843,7 +843,7 @@ class DetailsSyncTests(unittest.TestCase):
             _sync_controller(
                 visible_tag="details",
                 details_open=True,
-                mode=cineshelf.DETAILS_NAVIGATION,
+                mode=gisheh.DETAILS_NAVIGATION,
             )
         )
         controller._sync_details_presentation()
@@ -853,7 +853,7 @@ class DetailsSyncTests(unittest.TestCase):
         controller, _navigation, surface, revealer, _events = _sync_controller(
             visible_tag="browser",
             details_open=True,
-            mode=cineshelf.DETAILS_OVERLAY,
+            mode=gisheh.DETAILS_OVERLAY,
             revealer_parent=None,
         )
         controller._sync_details_presentation()
@@ -864,7 +864,7 @@ class DetailsSyncTests(unittest.TestCase):
         self.assertEqual(revealer.calls, first_revealer_calls)
 
     def test_opening_an_already_open_details_panel_does_not_restart_transition(self) -> None:
-        controller = object.__new__(cineshelf.CineShelfWindow)
+        controller = object.__new__(gisheh.GishehWindow)
         controller.details_open = True
         synchronized: list[str] = []
         controller._sync_details_presentation = lambda: synchronized.append("sync")
@@ -876,7 +876,7 @@ class DetailsSyncTests(unittest.TestCase):
             _sync_controller(
                 visible_tag="details",
                 details_open=False,
-                mode=cineshelf.DETAILS_NAVIGATION,
+                mode=gisheh.DETAILS_NAVIGATION,
             )
         )
         controller._sync_details_presentation()
@@ -891,19 +891,19 @@ class DetailsSyncTests(unittest.TestCase):
             _sync_controller(
                 visible_tag="browser",
                 details_open=True,
-                mode=cineshelf.DETAILS_NAVIGATION,
+                mode=gisheh.DETAILS_NAVIGATION,
             )
         )
         controller._sync_details_presentation()
         self.assertEqual(navigation.tag, "details")
 
     def test_no_duplicate_pushed_flag_exists(self) -> None:
-        self.assertFalse(hasattr(cineshelf.CineShelfWindow, "_mobile_details_pushed"))
-        controller = object.__new__(cineshelf.CineShelfWindow)
+        self.assertFalse(hasattr(gisheh.GishehWindow, "_mobile_details_pushed"))
+        controller = object.__new__(gisheh.GishehWindow)
         self.assertFalse(hasattr(controller, "_mobile_details_pushed"))
 
     def test_open_path_synchronizes_without_timeout(self) -> None:
-        source = Path(cineshelf.__file__).read_text(encoding="utf-8")
+        source = Path(gisheh.__file__).read_text(encoding="utf-8")
         opener = source.split("def _set_details_open")[1].split(
             "\n    def "
         )[0]
@@ -914,7 +914,7 @@ class DetailsSyncTests(unittest.TestCase):
             _sync_controller(
                 visible_tag="browser",
                 details_open=True,
-                mode=cineshelf.DETAILS_NAVIGATION,
+                mode=gisheh.DETAILS_NAVIGATION,
             )
         )
         restored: list[str] = []
@@ -932,7 +932,7 @@ class DetailsSyncTests(unittest.TestCase):
             _sync_controller(
                 visible_tag="browser",
                 details_open=False,
-                mode=cineshelf.DETAILS_NAVIGATION,
+                mode=gisheh.DETAILS_NAVIGATION,
             )
         )
         controller._restore_details_return_focus = lambda: None  # type: ignore[method-assign]
@@ -945,7 +945,7 @@ class DetailsSyncTests(unittest.TestCase):
             _sync_controller(
                 visible_tag="details",
                 details_open=True,
-                mode=cineshelf.DETAILS_OVERLAY,
+                mode=gisheh.DETAILS_OVERLAY,
             )
         )
         revealer.set_parent(controller.main_workspace)
@@ -962,7 +962,7 @@ class DetailsSyncTests(unittest.TestCase):
 class NarrowSizingTests(unittest.TestCase):
     @staticmethod
     def _source() -> str:
-        return Path(cineshelf.__file__).read_text(encoding="utf-8")
+        return Path(gisheh.__file__).read_text(encoding="utf-8")
 
     def test_stacks_do_not_enforce_homogeneous_sizing(self) -> None:
         import gi
@@ -994,7 +994,7 @@ class NarrowSizingTests(unittest.TestCase):
         self.assertIn("set_vhomogeneous(False)", navigation)
 
     def test_library_controls_can_wrap(self) -> None:
-        root = ET.parse(cineshelf.UI_FILE).getroot()
+        root = ET.parse(gisheh.UI_FILE).getroot()
         parents: dict[str, str] = {}
         for item in root.iter("object"):
             for child in item.findall("child"):
@@ -1021,7 +1021,7 @@ class NarrowSizingTests(unittest.TestCase):
         self.assertNotIn("280", builder)
 
     def test_detail_hero_fills_the_available_width_and_prefers_backdrop(self) -> None:
-        root = ET.parse(cineshelf.UI_FILE).getroot()
+        root = ET.parse(gisheh.UI_FILE).getroot()
         host = root.find(".//object[@id='detail_poster_host']")
         self.assertIsNotNone(host)
         properties = {

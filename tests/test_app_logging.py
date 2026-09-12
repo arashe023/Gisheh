@@ -11,16 +11,16 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from cineshelf import window as cineshelf
+from gisheh import window as gisheh
 
 
 class ApplicationLoggingTests(unittest.TestCase):
     def tearDown(self) -> None:
-        logger = logging.getLogger(cineshelf.APP_ID)
+        logger = logging.getLogger(gisheh.APP_ID)
         for handler in tuple(logger.handlers):
             handler.close()
             logger.removeHandler(handler)
-        cineshelf._APP_LOGGER = None
+        gisheh._APP_LOGGER = None
 
     def test_log_is_private_and_readable_in_application(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -29,10 +29,10 @@ class ApplicationLoggingTests(unittest.TestCase):
                 {"XDG_STATE_HOME": temporary_directory},
                 clear=False,
             ):
-                cineshelf.application_logger().info("Simkl sync test entry")
-                path = cineshelf.application_log_file()
+                gisheh.application_logger().info("Simkl sync test entry")
+                path = gisheh.application_log_file()
                 self.assertEqual(path.stat().st_mode & 0o777, 0o600)
-                self.assertIn("Simkl sync test entry", cineshelf.read_application_log())
+                self.assertIn("Simkl sync test entry", gisheh.read_application_log())
 
 
 if __name__ == "__main__":

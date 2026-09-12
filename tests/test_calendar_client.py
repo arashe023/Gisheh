@@ -11,8 +11,8 @@ from unittest import mock
 from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlsplit
 
-from cineshelf.services import simkl_client
-from cineshelf.window import CineShelfWindow
+from gisheh.services import simkl_client
+from gisheh.window import GishehWindow
 
 
 TV_PAYLOAD = {
@@ -57,7 +57,7 @@ class CalendarUrlTests(unittest.TestCase):
                     parse_qs(parsed.query),
                     {
                         "client_id": ["client"],
-                        "app-name": ["cineshelf"],
+                        "app-name": ["gisheh"],
                         "app-version": [simkl_client.APP_VERSION],
                     },
                 )
@@ -171,7 +171,7 @@ class CalendarIdentityAndFilterTests(unittest.TestCase):
         )
 
     def controller(self):
-        controller = CineShelfWindow.__new__(CineShelfWindow)
+        controller = GishehWindow.__new__(GishehWindow)
         library = self.record("simkl-shows-3437", tmdb_id=1434, status="Watching")
         explore = self.record("tmdb-tv-1434", tmdb_id=1434, status="Watchlist")
         controller.records = (library,)
@@ -259,7 +259,7 @@ class CalendarIdentityAndFilterTests(unittest.TestCase):
         self.assertEqual(groups[1][1], (original, later_same_day))
 
     def test_timeline_day_heading_has_relative_date_week_and_weekday(self) -> None:
-        heading = CineShelfWindow._calendar_day_heading(
+        heading = GishehWindow._calendar_day_heading(
             date(2026, 9, 5), today=date(2026, 9, 5)
         )
         self.assertEqual(

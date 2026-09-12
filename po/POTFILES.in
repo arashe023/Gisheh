@@ -1,6 +1,6 @@
-data/io.github.cineshelf.CineShelf.desktop.in
-data/io.github.cineshelf.CineShelf.metainfo.xml.in
-data/io.github.cineshelf.CineShelf.gschema.xml
-src/cineshelf/application.py
-src/cineshelf/window.py
-src/cineshelf/ui/window.ui
+data/io.github.gisheh.Gisheh.desktop.in
+data/io.github.gisheh.Gisheh.metainfo.xml.in
+data/io.github.gisheh.Gisheh.gschema.xml
+src/gisheh/application.py
+src/gisheh/window.py
+src/gisheh/ui/window.ui

@@ -1,9 +1,9 @@
 {
-  "app-id": "io.github.cineshelf.CineShelf",
+  "app-id": "io.github.gisheh.Gisheh",
   "runtime": "org.gnome.Platform",
   "runtime-version": "50",
   "sdk": "org.gnome.Sdk",
-  "command": "cineshelf",
+  "command": "gisheh",
   "finish-args": [
     "--share=ipc",
     "--share=network",
@@ -36,7 +36,7 @@
       ]
     },
     {
-      "name": "cineshelf",
+      "name": "gisheh",
       "buildsystem": "meson",
       "config-opts": ["-Dtests=false"],
       "sources": [

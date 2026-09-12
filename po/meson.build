@@ -1,1 +1,1 @@
-i18n.gettext('cineshelf', preset: 'glib')
+i18n.gettext('gisheh', preset: 'glib')

@@ -1,6 +1,6 @@
 
 (python3:328517): Adwaita-WARNING **: 01:17:32.616: Using GtkSettings:gtk-application-prefer-dark-theme with libadwaita is unsupported. Please use AdwStyleManager:color-scheme instead.
-2026-09-04 01:17:32  INFO  CineShelf 1.3.0 started
+2026-09-04 01:17:32  INFO  گیشه 1.3.0 started
 2026-09-04 01:17:33  WARNING  Incomplete Simkl snapshot detected; scheduling state repair.
 
 (python3:328517): Gdk-WARNING **: 01:17:33.540: Vulkan: Loader Message: setup_loader_term_phys_devs:  Failed to detect any valid GPUs in the current config

@@ -14,7 +14,7 @@ from unittest.mock import patch
 SOURCE_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SOURCE_DIR))
 
-from cineshelf import window as cineshelf
+from gisheh import window as gisheh
 
 
 class ExploreLayoutTests(unittest.TestCase):
@@ -27,24 +27,24 @@ class ExploreLayoutTests(unittest.TestCase):
             type("Record", (), {"id": record_id})()
             for record_id in ("new-high", "b", "a", "c", "new-low")
         )
-        merged = cineshelf.preserve_explore_page_prefix(existing, filtered)
+        merged = gisheh.preserve_explore_page_prefix(existing, filtered)
         self.assertEqual(
             tuple(record.id for record in merged),
             ("a", "b", "c", "new-high", "new-low"),
         )
 
     def test_library_grid_columns_follow_real_card_width(self) -> None:
-        self.assertEqual(cineshelf.grid_columns_for_width(120), 1)
-        self.assertEqual(cineshelf.grid_columns_for_width(320), 2)
-        self.assertEqual(cineshelf.grid_columns_for_width(620), 4)
-        self.assertEqual(cineshelf.grid_columns_for_width(820), 5)
-        self.assertEqual(cineshelf.grid_columns_for_width(990), 6)
-        self.assertEqual(cineshelf.grid_columns_for_width(2000), 6)
+        self.assertEqual(gisheh.grid_columns_for_width(120), 1)
+        self.assertEqual(gisheh.grid_columns_for_width(320), 2)
+        self.assertEqual(gisheh.grid_columns_for_width(620), 4)
+        self.assertEqual(gisheh.grid_columns_for_width(820), 5)
+        self.assertEqual(gisheh.grid_columns_for_width(990), 6)
+        self.assertEqual(gisheh.grid_columns_for_width(2000), 6)
 
     def test_rows_fill_without_using_a_full_width_card(self) -> None:
         for columns in (2, 3, 4, 5):
             for count in range(1, 24):
-                plan = cineshelf.build_explore_layout_plan(count, columns, seed=91)
+                plan = gisheh.build_explore_layout_plan(count, columns, seed=91)
                 self.assertEqual(sum(len(row) for row in plan), count)
                 for row_index, row in enumerate(plan):
                     used_columns = sum(span for _kind, span in row)
@@ -56,8 +56,8 @@ class ExploreLayoutTests(unittest.TestCase):
                         self.assertLessEqual(span / columns, 3 / 5)
 
     def test_plan_is_varied_and_stable_for_a_seed(self) -> None:
-        first = cineshelf.build_explore_layout_plan(18, 4, seed=2026)
-        second = cineshelf.build_explore_layout_plan(18, 4, seed=2026)
+        first = gisheh.build_explore_layout_plan(18, 4, seed=2026)
+        second = gisheh.build_explore_layout_plan(18, 4, seed=2026)
         self.assertEqual(first, second)
         kinds = {kind for row in first for kind, _span in row}
         self.assertGreaterEqual(len(kinds), 2)
@@ -65,7 +65,7 @@ class ExploreLayoutTests(unittest.TestCase):
     def test_initial_explore_loading_uses_content_skeletons(self) -> None:
         from gi.repository import Gtk
 
-        view = cineshelf.CineShelfWindow._build_explore_loading_view()
+        view = gisheh.GishehWindow._build_explore_loading_view()
         self.assertIn("explore-loading-view", view.get_css_classes())
         placeholders = view.get_last_child()
         self.assertIsInstance(placeholders, Gtk.FlowBox)
@@ -78,13 +78,13 @@ class ExploreLayoutTests(unittest.TestCase):
         self.assertEqual(count, 5)
 
     def test_detail_loading_uses_media_and_cast_skeleton_shapes(self) -> None:
-        media = cineshelf.CineShelfWindow._loading_media_placeholder(
+        media = gisheh.GishehWindow._loading_media_placeholder(
             96, 144, "Loading poster"
         )
         self.assertIn("content-skeleton-surface", media.get_css_classes())
         self.assertEqual(media.get_tooltip_text(), "Loading poster")
 
-        cast = cineshelf.CineShelfWindow._loading_cast_placeholder()
+        cast = gisheh.GishehWindow._loading_cast_placeholder()
         avatar = cast.get_first_child()
         self.assertIsNotNone(avatar)
         assert avatar is not None
@@ -93,7 +93,7 @@ class ExploreLayoutTests(unittest.TestCase):
     def test_missing_artwork_uses_loading_surface_instead_of_generated_cover(self) -> None:
         from gi.repository import Gtk
 
-        records, _explore, _totals = cineshelf.load_catalog(
+        records, _explore, _totals = gisheh.load_catalog(
             include_sample_data=True
         )
         record = replace(
@@ -102,7 +102,7 @@ class ExploreLayoutTests(unittest.TestCase):
             poster_file=None,
             backdrop_file=None,
         )
-        poster = cineshelf.PosterWidget(record, 140, 210)
+        poster = gisheh.PosterWidget(record, 140, 210)
         media = poster.get_first_child()
 
         self.assertIsInstance(media, Gtk.Box)
@@ -115,11 +115,11 @@ class ExploreLayoutTests(unittest.TestCase):
     ) -> None:
         from gi.repository import Gtk
 
-        records, _explore, _totals = cineshelf.load_catalog(
+        records, _explore, _totals = gisheh.load_catalog(
             include_sample_data=True
         )
         record = next(item for item in records if item.media_type == "Shows")
-        episode = cineshelf.EpisodeInfo(
+        episode = gisheh.EpisodeInfo(
             id="episode-1",
             number=1,
             title="Pilot",
@@ -128,7 +128,7 @@ class ExploreLayoutTests(unittest.TestCase):
             watched=False,
             image_variant=0,
         )
-        controller = object.__new__(cineshelf.CineShelfWindow)
+        controller = object.__new__(gisheh.GishehWindow)
         artwork = controller._episode_artwork(record, episode, 112, 63)
 
         self.assertEqual(artwork.get_size_request(), (112, 63))
@@ -139,21 +139,21 @@ class ExploreLayoutTests(unittest.TestCase):
     def test_episode_watch_controls_use_native_adwaita_button_styles(self) -> None:
         from gi.repository import Gtk
 
-        row_button = cineshelf.CineShelfWindow._episode_watch_button(False)
+        row_button = gisheh.GishehWindow._episode_watch_button(False)
         self.assertIn("circular", row_button.get_css_classes())
         self.assertIn("flat", row_button.get_css_classes())
         self.assertIn("episode-watch-button", row_button.get_css_classes())
         self.assertIsInstance(row_button.get_child(), Gtk.Image)
         self.assertEqual(row_button.get_child().get_pixel_size(), 14)
 
-        watched_button = cineshelf.CineShelfWindow._episode_watch_button(True)
+        watched_button = gisheh.GishehWindow._episode_watch_button(True)
         watched_icon = watched_button.get_child()
         self.assertIsInstance(watched_icon, Gtk.Image)
         self.assertEqual(watched_icon.get_icon_name(), "object-select-symbolic")
         self.assertIn("success", watched_icon.get_css_classes())
 
         stylesheet = (
-            Path(__file__).resolve().parents[1] / "src/cineshelf/style.css"
+            Path(__file__).resolve().parents[1] / "src/gisheh/style.css"
         ).read_text(encoding="utf-8")
         compact_rule = stylesheet.split(
             "button.episode-watch-button {"
@@ -167,7 +167,7 @@ class ExploreLayoutTests(unittest.TestCase):
         self.assertIn("background-color: transparent", hover_rule)
         self.assertIn("box-shadow: none", hover_rule)
 
-        detail_button = cineshelf.CineShelfWindow._detail_navigation_action(
+        detail_button = gisheh.GishehWindow._detail_navigation_action(
             "object-select-symbolic", "Mark watched"
         )
         self.assertNotIn("pill", detail_button.get_css_classes())
@@ -180,7 +180,7 @@ class ExploreLayoutTests(unittest.TestCase):
         from gi.repository import Gtk, Pango
 
         label = Gtk.Label(label="A very long unbroken carousel title " * 4)
-        cineshelf.CineShelfWindow._configure_bounded_card_label(label, 13)
+        gisheh.GishehWindow._configure_bounded_card_label(label, 13)
 
         self.assertTrue(label.get_wrap())
         self.assertEqual(label.get_wrap_mode(), Pango.WrapMode.WORD_CHAR)
@@ -191,7 +191,7 @@ class ExploreLayoutTests(unittest.TestCase):
         self.assertFalse(label.get_hexpand())
 
         short_label = Gtk.Label(label="Short title")
-        cineshelf.CineShelfWindow._configure_bounded_card_label(short_label, 13)
+        gisheh.GishehWindow._configure_bounded_card_label(short_label, 13)
         self.assertEqual(
             label.measure(Gtk.Orientation.HORIZONTAL, -1),
             short_label.measure(Gtk.Orientation.HORIZONTAL, -1),
@@ -201,7 +201,7 @@ class ExploreLayoutTests(unittest.TestCase):
         from gi.repository import Gtk, Pango
 
         label = Gtk.Label(label="A very long role or video title")
-        cineshelf.CineShelfWindow._configure_bounded_card_label(
+        gisheh.GishehWindow._configure_bounded_card_label(
             label,
             11,
             lines=1,
@@ -214,7 +214,7 @@ class ExploreLayoutTests(unittest.TestCase):
 
 class DetailActionLayoutTests(unittest.TestCase):
     def test_section_counts_and_redundant_add_button_are_not_in_the_ui(self) -> None:
-        root = ET.parse(cineshelf.UI_FILE).getroot()
+        root = ET.parse(gisheh.UI_FILE).getroot()
         objects = {
             item.get("id"): item.get("class")
             for item in root.iter("object")
@@ -227,17 +227,17 @@ class DetailActionLayoutTests(unittest.TestCase):
         self.assertEqual(objects["activity_progress_card"], "AdwBin")
 
     def test_completion_progress_is_only_shown_for_episodic_media(self) -> None:
-        self.assertFalse(cineshelf.should_show_completion_progress("Movies"))
-        self.assertTrue(cineshelf.should_show_completion_progress("Shows"))
-        self.assertTrue(cineshelf.should_show_completion_progress("Anime"))
+        self.assertFalse(gisheh.should_show_completion_progress("Movies"))
+        self.assertTrue(gisheh.should_show_completion_progress("Shows"))
+        self.assertTrue(gisheh.should_show_completion_progress("Anime"))
 
     def test_season_completion_requires_at_least_one_episode(self) -> None:
-        self.assertFalse(cineshelf.is_episode_group_complete(0, 0))
-        self.assertFalse(cineshelf.is_episode_group_complete(5, 6))
-        self.assertTrue(cineshelf.is_episode_group_complete(6, 6))
+        self.assertFalse(gisheh.is_episode_group_complete(0, 0))
+        self.assertFalse(gisheh.is_episode_group_complete(5, 6))
+        self.assertTrue(gisheh.is_episode_group_complete(6, 6))
 
     def test_rating_popover_and_native_secondary_menu_have_no_custom_rows(self) -> None:
-        root = ET.parse(cineshelf.UI_FILE).getroot()
+        root = ET.parse(gisheh.UI_FILE).getroot()
         objects = {
             item.get("id"): item.get("class")
             for item in root.iter("object")
@@ -258,7 +258,7 @@ class DetailActionLayoutTests(unittest.TestCase):
         self.assertNotIn("storage_progress", objects)
 
     def test_removed_actions_have_no_code_or_labels(self) -> None:
-        source = Path(cineshelf.__file__).read_text(encoding="utf-8")
+        source = Path(gisheh.__file__).read_text(encoding="utf-8")
         for token in (
             "season_comments_button",
             "episode_comments_button",
@@ -275,7 +275,7 @@ class DetailActionLayoutTests(unittest.TestCase):
             "12.4 / 18 GB",
         ):
             self.assertNotIn(token, source)
-        ui_text = Path(cineshelf.UI_FILE).read_text(encoding="utf-8")
+        ui_text = Path(gisheh.UI_FILE).read_text(encoding="utf-8")
         for token in (
             "add_sidebar_button",
             "storage_button",
@@ -291,7 +291,7 @@ class DetailActionLayoutTests(unittest.TestCase):
             self.assertNotIn(token, ui_text)
 
     def test_season_and_episode_actions_keep_only_watched(self) -> None:
-        source = Path(cineshelf.__file__).read_text(encoding="utf-8")
+        source = Path(gisheh.__file__).read_text(encoding="utf-8")
         season_block = source.split("season_actions = Gtk.Box(")[1].split(
             'episodes_title = Gtk.Label(label="Episodes", xalign=0)'
         )[0]
@@ -305,7 +305,7 @@ class DetailActionLayoutTests(unittest.TestCase):
         self.assertNotIn("Check in", episode_block)
 
     def test_season_page_has_no_redundant_switcher_or_episode_count(self) -> None:
-        source = Path(cineshelf.__file__).read_text(encoding="utf-8")
+        source = Path(gisheh.__file__).read_text(encoding="utf-8")
         builder = source.split("def _build_episode_navigation_pages")[1].split(
             "def _detail_navigation_action"
         )[0]
@@ -319,7 +319,7 @@ class DetailActionLayoutTests(unittest.TestCase):
         self.assertIn("self.season_detail_box.append(episodes_title)", builder)
 
     def test_profile_avatar_is_a_direct_navigation_button(self) -> None:
-        root = ET.parse(cineshelf.UI_FILE).getroot()
+        root = ET.parse(gisheh.UI_FILE).getroot()
         objects = {
             item.get("id"): item.get("class")
             for item in root.iter("object")
@@ -335,11 +335,11 @@ class DetailActionLayoutTests(unittest.TestCase):
 
 class SettingsDialogTests(unittest.TestCase):
     @staticmethod
-    def _controller() -> cineshelf.CineShelfWindow:
-        controller = object.__new__(cineshelf.CineShelfWindow)
+    def _controller() -> gisheh.GishehWindow:
+        controller = object.__new__(gisheh.GishehWindow)
         controller.simkl_connected = False
         controller.simkl_client_id = "public-client-id"
-        controller.library_mode = cineshelf.LIBRARY_MODE_LOCAL
+        controller.library_mode = gisheh.LIBRARY_MODE_LOCAL
         controller.tmdb_token = None
         controller.auto_sync = True
         controller.color_scheme = "dark"
@@ -376,7 +376,7 @@ class SettingsDialogTests(unittest.TestCase):
         self.assertFalse(controller.settings_tmdb_disconnect_button.get_visible())
         self.assertEqual(
             controller.settings_factory_reset_row.get_title(),
-            "Reset CineShelf",
+            "Reset گیشه",
         )
         self.assertTrue(
             controller.settings_factory_reset_button.has_css_class(
@@ -386,7 +386,7 @@ class SettingsDialogTests(unittest.TestCase):
 
     def test_connected_services_are_reflected_in_settings(self) -> None:
         controller = self._controller()
-        controller.library_mode = cineshelf.LIBRARY_MODE_SIMKL
+        controller.library_mode = gisheh.LIBRARY_MODE_SIMKL
         controller.simkl_connected = True
         controller.tmdb_token = "secret-token"
 
@@ -401,7 +401,7 @@ class SettingsDialogTests(unittest.TestCase):
     def test_preferences_round_trip_through_user_state(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             state_file = Path(temporary_directory) / "state.json"
-            writer = object.__new__(cineshelf.CineShelfWindow)
+            writer = object.__new__(gisheh.GishehWindow)
             writer.state_file = state_file
             writer.bookmarks = set()
             writer.favorites = set()
@@ -417,7 +417,7 @@ class SettingsDialogTests(unittest.TestCase):
             writer.preferred_view_mode = "grid"
             writer._save_user_state()
 
-            reader = object.__new__(cineshelf.CineShelfWindow)
+            reader = object.__new__(gisheh.GishehWindow)
             reader.state_file = state_file
             reader.records_by_id = {}
             reader.simkl_token = None
@@ -449,15 +449,15 @@ class SettingsDialogTests(unittest.TestCase):
 class DataSourceCreditsTests(unittest.TestCase):
     def test_tmdb_attribution_and_official_logo_are_bundled(self) -> None:
         application_source = (
-            Path(__file__).resolve().parents[1] / "src/cineshelf/application.py"
+            Path(__file__).resolve().parents[1] / "src/gisheh/application.py"
         ).read_text(encoding="utf-8")
         resource_manifest = (
             Path(__file__).resolve().parents[1]
-            / "src/cineshelf/io.github.cineshelf.CineShelf.gresource.xml"
+            / "src/gisheh/io.github.gisheh.Gisheh.gresource.xml"
         ).read_text(encoding="utf-8")
         logo = (
             Path(__file__).resolve().parents[1]
-            / "src/cineshelf/assets/tmdb-logo.svg"
+            / "src/gisheh/assets/tmdb-logo.svg"
         )
 
         self.assertIn(
@@ -471,7 +471,7 @@ class DataSourceCreditsTests(unittest.TestCase):
 
     def test_simkl_release_flow_never_asks_users_for_developer_credentials(self) -> None:
         window_source = (
-            Path(__file__).resolve().parents[1] / "src/cineshelf/window.py"
+            Path(__file__).resolve().parents[1] / "src/gisheh/window.py"
         ).read_text(encoding="utf-8")
 
         self.assertNotIn("Create an app in Simkl Developer Settings", window_source)
@@ -483,51 +483,51 @@ class DataSourceCreditsTests(unittest.TestCase):
 class SeasonProgressTests(unittest.TestCase):
     @staticmethod
     def _record_with_seasons(
-        seasons: tuple[cineshelf.SeasonInfo, ...],
-    ) -> cineshelf.TitleRecord:
-        records, _explore, _totals = cineshelf.load_catalog(
+        seasons: tuple[gisheh.SeasonInfo, ...],
+    ) -> gisheh.TitleRecord:
+        records, _explore, _totals = gisheh.load_catalog(
             include_sample_data=True
         )
         base = next(record for record in records if record.media_type == "Shows")
         return replace(base, seasons=seasons)
 
     @staticmethod
-    def _controller() -> cineshelf.CineShelfWindow:
-        controller = object.__new__(cineshelf.CineShelfWindow)
+    def _controller() -> gisheh.GishehWindow:
+        controller = object.__new__(gisheh.GishehWindow)
         controller.completed = set()
         controller.episode_status_overrides = {}
         return controller
 
     def test_specials_are_excluded_from_regular_next_and_last_episode(self) -> None:
-        special = cineshelf.SeasonInfo("specials", 0, "Specials", 0, 2)
-        regular = cineshelf.SeasonInfo("s1", 1, "Season 1", 2, 2)
+        special = gisheh.SeasonInfo("specials", 0, "Specials", 0, 2)
+        regular = gisheh.SeasonInfo("s1", 1, "Season 1", 2, 2)
         record = self._record_with_seasons((special, regular))
         controller = self._controller()
 
         next_item, last_item = controller._episode_progress_items(record)
 
-        self.assertEqual(cineshelf.main_progress_season_indexes(record.seasons), (1,))
+        self.assertEqual(gisheh.main_progress_season_indexes(record.seasons), (1,))
         self.assertIsNone(next_item)
         self.assertIsNotNone(last_item)
         assert last_item is not None
         self.assertEqual(controller._episode_code(record, *last_item), "S1E2")
 
     def test_specials_only_catalog_is_used_as_progress_fallback(self) -> None:
-        special = cineshelf.SeasonInfo("specials", 0, "Specials", 0, 2)
+        special = gisheh.SeasonInfo("specials", 0, "Specials", 0, 2)
         record = self._record_with_seasons((special,))
         controller = self._controller()
 
         next_item, last_item = controller._episode_progress_items(record)
 
-        self.assertEqual(cineshelf.main_progress_season_indexes(record.seasons), (0,))
+        self.assertEqual(gisheh.main_progress_season_indexes(record.seasons), (0,))
         self.assertIsNone(last_item)
         self.assertIsNotNone(next_item)
         assert next_item is not None
         self.assertEqual(controller._episode_code(record, *next_item), "S0E1")
 
     def test_watched_special_does_not_move_regular_series_progress(self) -> None:
-        special = cineshelf.SeasonInfo("specials", 0, "Specials", 0, 1)
-        regular = cineshelf.SeasonInfo("s1", 1, "Season 1", 0, 2)
+        special = gisheh.SeasonInfo("specials", 0, "Specials", 0, 1)
+        regular = gisheh.SeasonInfo("s1", 1, "Season 1", 0, 2)
         record = self._record_with_seasons((special, regular))
         controller = self._controller()
         controller.episode_status_overrides[f"{record.id}/specials/e1"] = True
@@ -540,16 +540,16 @@ class SeasonProgressTests(unittest.TestCase):
         self.assertEqual(controller._episode_code(record, *next_item), "S1E1")
 
     def test_completion_progress_uses_actual_watched_episode_count(self) -> None:
-        special = cineshelf.SeasonInfo("specials", 0, "Specials", 1, 1)
-        first = cineshelf.SeasonInfo("s1", 1, "Season 1", 3, 8)
-        second = cineshelf.SeasonInfo("s2", 2, "Season 2", 2, 4)
+        special = gisheh.SeasonInfo("specials", 0, "Specials", 1, 1)
+        first = gisheh.SeasonInfo("s1", 1, "Season 1", 3, 8)
+        second = gisheh.SeasonInfo("s2", 2, "Season 2", 2, 4)
         record = self._record_with_seasons((special, first, second))
         controller = self._controller()
 
         self.assertEqual(controller._series_completion_progress(record), (5, 12))
 
     def test_completion_progress_reflects_episode_overrides(self) -> None:
-        season = cineshelf.SeasonInfo("s1", 1, "Season 1", 1, 4)
+        season = gisheh.SeasonInfo("s1", 1, "Season 1", 1, 4)
         record = self._record_with_seasons((season,))
         controller = self._controller()
         controller.episode_status_overrides[f"{record.id}/s1/e2"] = True
@@ -557,7 +557,7 @@ class SeasonProgressTests(unittest.TestCase):
         self.assertEqual(controller._series_completion_progress(record), (2, 4))
 
     def test_completed_series_reports_full_progress(self) -> None:
-        season = cineshelf.SeasonInfo("s1", 1, "Season 1", 2, 6)
+        season = gisheh.SeasonInfo("s1", 1, "Season 1", 2, 6)
         record = self._record_with_seasons((season,))
         controller = self._controller()
         controller.completed.add(record.id)
@@ -567,7 +567,7 @@ class SeasonProgressTests(unittest.TestCase):
     def test_activity_card_shows_partial_percentage_and_episode_counts(self) -> None:
         from gi.repository import Adw, Gtk
 
-        season = cineshelf.SeasonInfo("s1", 1, "Season 1", 5, 12)
+        season = gisheh.SeasonInfo("s1", 1, "Season 1", 5, 12)
         record = self._record_with_seasons((season,))
         controller = self._controller()
         controller.activity_progress_card = Adw.Bin()
@@ -607,10 +607,10 @@ class SeasonProgressTests(unittest.TestCase):
             ],
             "anime": [],
         }
-        record = cineshelf.title_records_from_simkl(payload)[0]
+        record = gisheh.title_records_from_simkl(payload)[0]
         record = replace(
             record,
-            seasons=(cineshelf.SeasonInfo("s1", 1, "Season 1", 9, 10),),
+            seasons=(gisheh.SeasonInfo("s1", 1, "Season 1", 9, 10),),
         )
         controller = self._controller()
 
@@ -648,17 +648,17 @@ class SeasonProgressTests(unittest.TestCase):
             ],
         }
 
-        record = cineshelf.title_records_from_simkl(payload)[0]
+        record = gisheh.title_records_from_simkl(payload)[0]
 
         self.assertEqual(
             record.episode_history,
-            (cineshelf.EpisodeWatch(season=2, episode=1),),
+            (gisheh.EpisodeWatch(season=2, episode=1),),
         )
 
 
 class MediaCollectionTests(unittest.TestCase):
     def test_media_items_keep_primary_first_and_remove_duplicates(self) -> None:
-        records, _explore, _totals = cineshelf.load_catalog(
+        records, _explore, _totals = gisheh.load_catalog(
             include_sample_data=True
         )
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -672,20 +672,20 @@ class MediaCollectionTests(unittest.TestCase):
                 gallery_posters=(str(first), str(second), "/missing.jpg"),
             )
 
-            items = cineshelf.CineShelfWindow._media_items(record, "posters")
+            items = gisheh.GishehWindow._media_items(record, "posters")
 
         self.assertEqual([path for path, _label in items], [str(first), str(second)])
         self.assertEqual(items[0][1], f"{record.title} — Poster 1")
 
 class ProfileFormattingTests(unittest.TestCase):
     def test_runtime_minutes_handles_catalog_durations(self) -> None:
-        self.assertEqual(cineshelf.runtime_minutes("2h 04m"), 124)
-        self.assertEqual(cineshelf.runtime_minutes("45m"), 45)
-        self.assertEqual(cineshelf.runtime_minutes("3 seasons"), 0)
+        self.assertEqual(gisheh.runtime_minutes("2h 04m"), 124)
+        self.assertEqual(gisheh.runtime_minutes("45m"), 45)
+        self.assertEqual(gisheh.runtime_minutes("3 seasons"), 0)
 
     def test_watch_time_and_dates_are_stable(self) -> None:
-        self.assertEqual(cineshelf.format_watch_time(6502), "4d 12h 22m")
-        parsed = cineshelf.parse_watched_date("Aug 8, 2026 at 2:49 AM")
+        self.assertEqual(gisheh.format_watch_time(6502), "4d 12h 22m")
+        parsed = gisheh.parse_watched_date("Aug 8, 2026 at 2:49 AM")
         self.assertEqual(parsed.isoformat() if parsed else None, "2026-08-08")
 
 
@@ -739,7 +739,7 @@ class SimklMappingTests(unittest.TestCase):
             ],
         }
 
-        records = cineshelf.title_records_from_simkl(payload)
+        records = gisheh.title_records_from_simkl(payload)
 
         by_id = {record.id: record for record in records}
         movie = by_id["simkl-movies-101"]
@@ -765,7 +765,7 @@ class SimklMappingTests(unittest.TestCase):
         self.assertEqual(paused.status, "On Hold")
 
     def test_watchlist_contains_only_plan_to_watch_items(self) -> None:
-        records = cineshelf.title_records_from_simkl(
+        records = gisheh.title_records_from_simkl(
             {
                 "movies": [
                     {
@@ -816,10 +816,10 @@ class SimklMappingTests(unittest.TestCase):
                 }
             ]
         }
-        self.assertEqual(cineshelf.title_records_from_simkl(payload), ())
+        self.assertEqual(gisheh.title_records_from_simkl(payload), ())
 
     def test_tmdb_enrichment_preserves_simkl_user_state(self) -> None:
-        record = cineshelf.title_records_from_simkl(
+        record = gisheh.title_records_from_simkl(
             {
                 "movies": [
                     {
@@ -844,11 +844,11 @@ class SimklMappingTests(unittest.TestCase):
             "poster_path": "/poster.jpg",
         }
         with patch.object(
-            cineshelf.tmdb_client,
+            gisheh.tmdb_client,
             "cached_image",
             return_value="/cache/poster.jpg",
         ):
-            enriched = cineshelf.enrich_record_from_tmdb(record, summary)
+            enriched = gisheh.enrich_record_from_tmdb(record, summary)
 
         self.assertEqual(enriched.title, "TMDB title")
         self.assertEqual(enriched.rating, 7.8)
@@ -862,7 +862,7 @@ class SimklMappingTests(unittest.TestCase):
         )
 
     def test_tv_runtime_falls_back_to_last_episode_when_average_is_missing(self) -> None:
-        record = cineshelf.title_record_from_tmdb(
+        record = gisheh.title_record_from_tmdb(
             {
                 "id": 81356,
                 "name": "Sex Education",
@@ -881,13 +881,13 @@ class SimklMappingTests(unittest.TestCase):
             "last_episode_to_air": {"runtime": 85},
         }
 
-        enriched = cineshelf.enrich_record_from_tmdb(record, summary)
+        enriched = gisheh.enrich_record_from_tmdb(record, summary)
 
         self.assertEqual(enriched.runtime, "1h 25m")
 
     def test_stats_refresh_is_skipped_when_activity_is_unchanged(self) -> None:
         self.assertFalse(
-            cineshelf.should_refresh_simkl_stats(
+            gisheh.should_refresh_simkl_stats(
                 has_incremental_state=True,
                 repairing_metadata=False,
                 cached_stats={"movies": {"completed": 12}},
@@ -896,7 +896,7 @@ class SimklMappingTests(unittest.TestCase):
             )
         )
         self.assertTrue(
-            cineshelf.should_refresh_simkl_stats(
+            gisheh.should_refresh_simkl_stats(
                 has_incremental_state=True,
                 repairing_metadata=False,
                 cached_stats={"movies": {"completed": 12}},
@@ -906,10 +906,10 @@ class SimklMappingTests(unittest.TestCase):
         )
 
     def test_watchlist_removal_executes_the_simkl_remove_request(self) -> None:
-        controller = object.__new__(cineshelf.CineShelfWindow)
+        controller = object.__new__(gisheh.GishehWindow)
         controller.simkl_client_id = "client"
         controller.simkl_token = "token"
-        record = cineshelf.title_records_from_simkl(
+        record = gisheh.title_records_from_simkl(
             {
                 "movies": [
                     {
@@ -929,12 +929,12 @@ class SimklMappingTests(unittest.TestCase):
 
         with (
             patch.object(
-                cineshelf.CineShelfWindow,
+                gisheh.GishehWindow,
                 "_run_simkl_mutation",
                 new=capture_mutation,
             ),
-            patch.object(cineshelf.simkl_client, "remove_from_library") as remove,
-            patch.object(cineshelf.simkl_client, "set_list_status") as add,
+            patch.object(gisheh.simkl_client, "remove_from_library") as remove,
+            patch.object(gisheh.simkl_client, "set_list_status") as add,
         ):
             controller._write_simkl_list_change(
                 record,
@@ -976,7 +976,7 @@ class TmdbCertificationTests(unittest.TestCase):
         }
 
         self.assertEqual(
-            cineshelf.certification_from_tmdb(payload, "movie"),
+            gisheh.certification_from_tmdb(payload, "movie"),
             "PG-13",
         )
 
@@ -997,21 +997,21 @@ class TmdbCertificationTests(unittest.TestCase):
         }
 
         self.assertEqual(
-            cineshelf.certification_from_tmdb(origin_payload, "tv"),
+            gisheh.certification_from_tmdb(origin_payload, "tv"),
             "G",
         )
         self.assertEqual(
-            cineshelf.certification_from_tmdb(fallback_payload, "tv"),
+            gisheh.certification_from_tmdb(fallback_payload, "tv"),
             "12",
         )
-        self.assertEqual(cineshelf.certification_from_tmdb({}, "movie"), "Unrated")
+        self.assertEqual(gisheh.certification_from_tmdb({}, "movie"), "Unrated")
 
 
 class TmdbProgressiveLoadingTests(unittest.TestCase):
     def test_detail_backdrop_does_not_replace_portrait_card_artwork(self) -> None:
-        controller = object.__new__(cineshelf.CineShelfWindow)
-        published: list[cineshelf.TitleRecord] = []
-        record = cineshelf.title_record_from_tmdb(
+        controller = object.__new__(gisheh.GishehWindow)
+        published: list[gisheh.TitleRecord] = []
+        record = gisheh.title_record_from_tmdb(
             {
                 "id": 42,
                 "title": "Stable cover",
@@ -1045,13 +1045,13 @@ class TmdbProgressiveLoadingTests(unittest.TestCase):
             return 1
 
         with (
-            patch.object(cineshelf.tmdb_client, "fetch_details", return_value=payload),
+            patch.object(gisheh.tmdb_client, "fetch_details", return_value=payload),
             patch.object(
-                cineshelf.tmdb_client,
+                gisheh.tmdb_client,
                 "cached_image",
                 side_effect=cached_image,
             ),
-            patch.object(cineshelf.GLib, "idle_add", side_effect=idle_add),
+            patch.object(gisheh.GLib, "idle_add", side_effect=idle_add),
         ):
             controller._load_tmdb_details_worker(record, "token", 1)
 
@@ -1061,9 +1061,9 @@ class TmdbProgressiveLoadingTests(unittest.TestCase):
         self.assertEqual(published[0].artwork_file, "/cache/poster.jpg")
 
     def test_simkl_library_record_is_enriched_from_tmdb_before_poster(self) -> None:
-        controller = object.__new__(cineshelf.CineShelfWindow)
+        controller = object.__new__(gisheh.GishehWindow)
         events: list[str] = []
-        record = cineshelf.title_records_from_simkl(
+        record = gisheh.title_records_from_simkl(
             {
                 "movies": [
                     {
@@ -1091,10 +1091,10 @@ class TmdbProgressiveLoadingTests(unittest.TestCase):
             return "/cache/poster.jpg"
 
         with (
-            patch.object(cineshelf.tmdb_client, "load_summary", return_value=None),
-            patch.object(cineshelf.tmdb_client, "fetch_summary", return_value=summary),
-            patch.object(cineshelf.tmdb_client, "cache_image", side_effect=cache_image),
-            patch.object(cineshelf.GLib, "idle_add", side_effect=idle_add),
+            patch.object(gisheh.tmdb_client, "load_summary", return_value=None),
+            patch.object(gisheh.tmdb_client, "fetch_summary", return_value=summary),
+            patch.object(gisheh.tmdb_client, "cache_image", side_effect=cache_image),
+            patch.object(gisheh.GLib, "idle_add", side_effect=idle_add),
         ):
             loaded = controller._load_tmdb_library_record(record, "token", 1)
 
@@ -1104,7 +1104,7 @@ class TmdbProgressiveLoadingTests(unittest.TestCase):
         self.assertEqual(events[2], "_apply_tmdb_library_poster")
 
     def test_explore_records_are_published_before_image_downloads(self) -> None:
-        controller = object.__new__(cineshelf.CineShelfWindow)
+        controller = object.__new__(gisheh.GishehWindow)
         events: list[str] = []
         payload = {
             "Movies": [
@@ -1129,10 +1129,10 @@ class TmdbProgressiveLoadingTests(unittest.TestCase):
             return f"/cache/{size}-{Path(path).name}"
 
         with (
-            patch.object(cineshelf.tmdb_client, "fetch_explore", return_value=payload),
-            patch.object(cineshelf.tmdb_client, "cached_image", return_value=None),
-            patch.object(cineshelf.tmdb_client, "cache_image", side_effect=cache_image),
-            patch.object(cineshelf.GLib, "idle_add", side_effect=idle_add),
+            patch.object(gisheh.tmdb_client, "fetch_explore", return_value=payload),
+            patch.object(gisheh.tmdb_client, "cached_image", return_value=None),
+            patch.object(gisheh.tmdb_client, "cache_image", side_effect=cache_image),
+            patch.object(gisheh.GLib, "idle_add", side_effect=idle_add),
         ):
             controller._load_tmdb_explore_worker("token", 1, "Movies")
 
@@ -1141,9 +1141,9 @@ class TmdbProgressiveLoadingTests(unittest.TestCase):
         self.assertIn("download:w780:/backdrop.jpg", events[1:])
 
     def test_detail_metadata_is_published_before_artwork_downloads(self) -> None:
-        controller = object.__new__(cineshelf.CineShelfWindow)
+        controller = object.__new__(gisheh.GishehWindow)
         events: list[str] = []
-        record = cineshelf.title_record_from_tmdb(
+        record = gisheh.title_record_from_tmdb(
             {
                 "id": 42,
                 "title": "Progressive details",
@@ -1183,10 +1183,10 @@ class TmdbProgressiveLoadingTests(unittest.TestCase):
             return f"/cache/{size}-{Path(path).name}"
 
         with (
-            patch.object(cineshelf.tmdb_client, "fetch_details", return_value=payload),
-            patch.object(cineshelf.tmdb_client, "cached_image", return_value=None),
-            patch.object(cineshelf.tmdb_client, "cache_image", side_effect=cache_image),
-            patch.object(cineshelf.GLib, "idle_add", side_effect=idle_add),
+            patch.object(gisheh.tmdb_client, "fetch_details", return_value=payload),
+            patch.object(gisheh.tmdb_client, "cached_image", return_value=None),
+            patch.object(gisheh.tmdb_client, "cache_image", side_effect=cache_image),
+            patch.object(gisheh.GLib, "idle_add", side_effect=idle_add),
         ):
             controller._load_tmdb_details_worker(record, "token", 1)
 

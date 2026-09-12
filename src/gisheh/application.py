@@ -1,4 +1,4 @@
-"""Application lifecycle and global actions for CineShelf."""
+"""Application lifecycle and global actions for گیشه."""
 
 from __future__ import annotations
 
@@ -19,24 +19,24 @@ from .state_store import (
     save_library_mode,
     selected_library_mode,
 )
-from .window import APP_ID, APP_NAME, APP_VERSION, CineShelfWindow
+from .window import APP_ID, APP_NAME, APP_VERSION, GishehWindow
 
 
 TMDB_URL = "https://www.themoviedb.org"
 SIMKL_URL = "https://simkl.com"
-TMDB_LOGO_RESOURCE = "/io/github/cineshelf/CineShelf/assets/tmdb-logo.svg"
+TMDB_LOGO_RESOURCE = "/io/github/gisheh/Gisheh/assets/tmdb-logo.svg"
 TMDB_NOTICE = (
     "This product uses the TMDB API but is not endorsed or certified by TMDB."
 )
 
 
-class CineShelfApplication(Adw.Application):
+class GishehApplication(Adw.Application):
     def __init__(self) -> None:
         super().__init__(
             application_id=APP_ID,
             flags=Gio.ApplicationFlags.DEFAULT_FLAGS,
         )
-        self.controller: CineShelfWindow | None = None
+        self.controller: GishehWindow | None = None
         self.welcome_window: WelcomeTour | None = None
 
     def do_startup(self) -> None:
@@ -82,15 +82,15 @@ class CineShelfApplication(Adw.Application):
         connect_simkl: bool = False,
     ) -> None:
         try:
-            self.controller = CineShelfWindow(self, library_mode=library_mode)
+            self.controller = GishehWindow(self, library_mode=library_mode)
         except Exception as error:
-            print(f"CineShelf failed to start: {error}", file=sys.stderr)
+            print(f"گیشه failed to start: {error}", file=sys.stderr)
             window = Adw.ApplicationWindow(application=self, title=APP_NAME)
             window.set_default_size(720, 480)
             window.set_content(
                 Adw.StatusPage(
                     icon_name="dialog-error-symbolic",
-                    title="Unable to start CineShelf",
+                    title="Unable to start گیشه",
                     description=str(error),
                 )
             )
@@ -173,7 +173,7 @@ class CineShelfApplication(Adw.Application):
         dialog = Adw.AboutDialog(
             application_name=APP_NAME,
             application_icon=APP_ID,
-            developer_name="CineShelf",
+            developer_name="گیشه",
             version=APP_VERSION,
             comments="A native GTK4 and Libadwaita media tracker.",
             license_type=Gtk.License.MIT_X11,
@@ -203,7 +203,7 @@ class CineShelfApplication(Adw.Application):
 
         dialog = Adw.AlertDialog(
             heading="Credits & Data Sources",
-            body="CineShelf uses the following independent data services.",
+            body="گیشه uses the following independent data services.",
         )
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
 

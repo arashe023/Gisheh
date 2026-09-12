@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Small dependency-free TMDB client used by the native CineShelf app."""
+"""Small dependency-free TMDB client used by the native گیشه app."""
 
 from __future__ import annotations
 
@@ -23,10 +23,10 @@ except ImportError:
     BUNDLED_TMDB_READ_TOKEN = ""
 
 
-APP_ID = "io.github.cineshelf.CineShelf"
+APP_ID = "io.github.gisheh.Gisheh"
 API_ROOT = "https://api.themoviedb.org/3"
 IMAGE_ROOT = "https://image.tmdb.org/t/p"
-USER_AGENT = "CineShelf/1.3.0"
+USER_AGENT = "Gisheh/1.3.0"
 
 
 class TmdbError(RuntimeError):

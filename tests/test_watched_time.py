@@ -13,8 +13,8 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from cineshelf import window as cineshelf
-from cineshelf.services import simkl_client
+from gisheh import window as gisheh
+from gisheh.services import simkl_client
 
 
 TEHRAN = timezone(timedelta(hours=3, minutes=30))
@@ -22,52 +22,52 @@ TEHRAN = timezone(timedelta(hours=3, minutes=30))
 
 class TimestampParsingTests(unittest.TestCase):
     def test_legacy_timestamp_still_parses(self) -> None:
-        parsed = cineshelf.parse_watched_datetime("Aug 8, 2026 at 2:49 AM")
+        parsed = gisheh.parse_watched_datetime("Aug 8, 2026 at 2:49 AM")
         self.assertIsNotNone(parsed)
         assert parsed is not None
         self.assertEqual((parsed.year, parsed.month, parsed.day), (2026, 8, 8))
         self.assertEqual((parsed.hour, parsed.minute), (2, 49))
         self.assertEqual(
-            cineshelf.parse_watched_date("Aug 8, 2026 at 2:49 AM").isoformat(),
+            gisheh.parse_watched_date("Aug 8, 2026 at 2:49 AM").isoformat(),
             "2026-08-08",
         )
 
     def test_iso_timestamp_with_offset_parses(self) -> None:
-        parsed = cineshelf.parse_watched_datetime("2026-09-04T21:35:00+03:30")
+        parsed = gisheh.parse_watched_datetime("2026-09-04T21:35:00+03:30")
         self.assertIsNotNone(parsed)
         assert parsed is not None
         self.assertEqual(parsed.utcoffset(), timedelta(hours=3, minutes=30))
         self.assertEqual(
-            cineshelf.parse_watched_date("2026-09-04T21:35:00+03:30").isoformat(),
+            gisheh.parse_watched_date("2026-09-04T21:35:00+03:30").isoformat(),
             "2026-09-04",
         )
 
     def test_zulu_timestamp_parses(self) -> None:
-        parsed = cineshelf.parse_watched_datetime("2026-09-04T18:05:00Z")
+        parsed = gisheh.parse_watched_datetime("2026-09-04T18:05:00Z")
         self.assertIsNotNone(parsed)
         assert parsed is not None
         self.assertEqual(parsed.utcoffset(), timedelta(0))
 
     def test_invalid_timestamp_returns_none(self) -> None:
-        self.assertIsNone(cineshelf.parse_watched_datetime(""))
-        self.assertIsNone(cineshelf.parse_watched_datetime("not a date"))
-        self.assertIsNone(cineshelf.parse_watched_date("not a date"))
+        self.assertIsNone(gisheh.parse_watched_datetime(""))
+        self.assertIsNone(gisheh.parse_watched_datetime("not a date"))
+        self.assertIsNone(gisheh.parse_watched_date("not a date"))
 
     def test_legacy_display_round_trip_is_stable(self) -> None:
         self.assertEqual(
-            cineshelf.format_watched_iso("Aug 8, 2026 at 2:49 AM"),
+            gisheh.format_watched_iso("Aug 8, 2026 at 2:49 AM"),
             "Aug 8, 2026 at 2:49 AM",
         )
 
     def test_iso_display_format_matches_legacy_shape(self) -> None:
         self.assertEqual(
-            cineshelf.format_watched_iso("2026-09-04T21:35:00+03:30"),
+            gisheh.format_watched_iso("2026-09-04T21:35:00+03:30"),
             "Sep 4, 2026 at 9:35 PM",
         )
 
     def test_now_is_timezone_aware_iso(self) -> None:
-        iso = cineshelf.watched_now_iso()
-        parsed = cineshelf.parse_watched_datetime(iso)
+        iso = gisheh.watched_now_iso()
+        parsed = gisheh.parse_watched_datetime(iso)
         self.assertIsNotNone(parsed)
         assert parsed is not None
         self.assertIsNotNone(parsed.tzinfo)
@@ -78,13 +78,13 @@ class TimestampParsingTests(unittest.TestCase):
 
 class TimestampConstructionTests(unittest.TestCase):
     def test_twelve_hour_conversion(self) -> None:
-        midnight = cineshelf.watched_datetime_from_parts(
+        midnight = gisheh.watched_datetime_from_parts(
             2026, 9, 4, 12, 0, hour_is_12h=True, is_pm=False
         )
-        noon = cineshelf.watched_datetime_from_parts(
+        noon = gisheh.watched_datetime_from_parts(
             2026, 9, 4, 12, 0, hour_is_12h=True, is_pm=True
         )
-        evening = cineshelf.watched_datetime_from_parts(
+        evening = gisheh.watched_datetime_from_parts(
             2026, 9, 4, 9, 35, hour_is_12h=True, is_pm=True
         )
         assert midnight is not None and noon is not None and evening is not None
@@ -94,53 +94,53 @@ class TimestampConstructionTests(unittest.TestCase):
         self.assertIsNotNone(midnight.tzinfo)
 
     def test_twenty_four_hour_passthrough(self) -> None:
-        moment = cineshelf.watched_datetime_from_parts(2026, 9, 4, 21, 35)
+        moment = gisheh.watched_datetime_from_parts(2026, 9, 4, 21, 35)
         assert moment is not None
         self.assertEqual((moment.hour, moment.minute), (21, 35))
 
     def test_invalid_parts_return_none(self) -> None:
-        self.assertIsNone(cineshelf.watched_datetime_from_parts(2026, 2, 30, 10, 0))
-        self.assertIsNone(cineshelf.watched_datetime_from_parts(2026, 9, 4, 25, 0))
-        self.assertIsNone(cineshelf.watched_datetime_from_parts(2026, 9, 4, 10, 61))
+        self.assertIsNone(gisheh.watched_datetime_from_parts(2026, 2, 30, 10, 0))
+        self.assertIsNone(gisheh.watched_datetime_from_parts(2026, 9, 4, 25, 0))
+        self.assertIsNone(gisheh.watched_datetime_from_parts(2026, 9, 4, 10, 61))
         self.assertIsNone(
-            cineshelf.watched_datetime_from_parts(
+            gisheh.watched_datetime_from_parts(
                 2026, 9, 4, 0, 0, hour_is_12h=True, is_pm=False
             )
         )
         self.assertIsNone(
-            cineshelf.watched_datetime_from_parts(
+            gisheh.watched_datetime_from_parts(
                 2026, 9, 4, 13, 0, hour_is_12h=True, is_pm=False
             )
         )
 
     def test_local_offset_is_preserved(self) -> None:
-        moment = cineshelf.watched_datetime_from_parts(2026, 9, 4, 21, 35)
+        moment = gisheh.watched_datetime_from_parts(2026, 9, 4, 21, 35)
         assert moment is not None
         self.assertEqual(
             moment.utcoffset(), datetime.now().astimezone().utcoffset()
         )
-        reparsed = cineshelf.parse_watched_datetime(moment.isoformat())
+        reparsed = gisheh.parse_watched_datetime(moment.isoformat())
         assert reparsed is not None
         self.assertEqual(reparsed.replace(tzinfo=None), moment.replace(tzinfo=None))
 
     def test_future_timestamp_is_rejected(self) -> None:
         now = datetime(2026, 9, 4, 12, 0, tzinfo=TEHRAN)
         self.assertIsNotNone(
-            cineshelf.validate_watched_iso("2026-09-04T13:00:00+03:30", now=now)
+            gisheh.validate_watched_iso("2026-09-04T13:00:00+03:30", now=now)
         )
         self.assertIsNone(
-            cineshelf.validate_watched_iso("2026-09-04T11:59:00+03:30", now=now)
+            gisheh.validate_watched_iso("2026-09-04T11:59:00+03:30", now=now)
         )
         self.assertIsNone(
-            cineshelf.validate_watched_iso("2026-09-04T12:00:00+03:30", now=now)
+            gisheh.validate_watched_iso("2026-09-04T12:00:00+03:30", now=now)
         )
 
     def test_invalid_timestamp_is_rejected(self) -> None:
-        self.assertIsNotNone(cineshelf.validate_watched_iso("garbage"))
+        self.assertIsNotNone(gisheh.validate_watched_iso("garbage"))
 
 
-def _dialog_controller() -> cineshelf.CineShelfWindow:
-    controller = object.__new__(cineshelf.CineShelfWindow)
+def _dialog_controller() -> gisheh.GishehWindow:
+    controller = object.__new__(gisheh.GishehWindow)
     return controller
 
 
@@ -201,7 +201,7 @@ class WatchedDialogTests(unittest.TestCase):
 
         provider = Gtk.CssProvider()
         provider.load_from_path(
-            str(Path(__file__).resolve().parents[1] / "src" / "cineshelf" / "style.css")
+            str(Path(__file__).resolve().parents[1] / "src" / "gisheh" / "style.css")
         )
         self.assertTrue(True)
 
@@ -216,7 +216,7 @@ class WatchedDialogTests(unittest.TestCase):
         dialog = self._build(confirmed)
         dialog.emit("response", "mark")
         self.assertEqual(len(confirmed), 1)
-        parsed = cineshelf.parse_watched_datetime(confirmed[0])
+        parsed = gisheh.parse_watched_datetime(confirmed[0])
         self.assertIsNotNone(parsed)
         assert parsed is not None
         self.assertIsNotNone(parsed.tzinfo)
@@ -277,8 +277,8 @@ class WatchedDialogTests(unittest.TestCase):
         self.assertEqual(confirmed, [])
 
 
-def _titled_controller() -> cineshelf.CineShelfWindow:
-    controller = object.__new__(cineshelf.CineShelfWindow)
+def _titled_controller() -> gisheh.GishehWindow:
+    controller = object.__new__(gisheh.GishehWindow)
     controller.completed = set()
     controller.status_overrides = {}
     controller.title_watched_at = {}
@@ -317,8 +317,8 @@ def _titled_controller() -> cineshelf.CineShelfWindow:
 
 
 class TitleWatchedFlowTests(unittest.TestCase):
-    def _record(self) -> cineshelf.TitleRecord:
-        records, _explore, _totals = cineshelf.load_catalog(
+    def _record(self) -> gisheh.TitleRecord:
+        records, _explore, _totals = gisheh.load_catalog(
             include_sample_data=True
         )
         base = next(record for record in records if record.media_type == "Movies")
@@ -491,7 +491,7 @@ class TitleWatchedFlowTests(unittest.TestCase):
 
     def test_watched_explore_record_is_promoted_to_library_views(self) -> None:
         controller = _titled_controller()
-        records, _explore, _totals = cineshelf.load_catalog(
+        records, _explore, _totals = gisheh.load_catalog(
             include_sample_data=True
         )
         library_record = next(
@@ -601,16 +601,16 @@ class TitleWatchedFlowTests(unittest.TestCase):
 
     def test_simkl_history_changed_detects_server_noop(self) -> None:
         self.assertTrue(
-            cineshelf.simkl_history_changed({"added": {"movies": 1}})
+            gisheh.simkl_history_changed({"added": {"movies": 1}})
         )
         self.assertFalse(
-            cineshelf.simkl_history_changed(
+            gisheh.simkl_history_changed(
                 {"added": {"movies": 0, "shows": 0, "episodes": 0}}
             )
         )
-        self.assertFalse(cineshelf.simkl_history_changed({"added": {}}))
-        self.assertFalse(cineshelf.simkl_history_changed({}))
-        self.assertFalse(cineshelf.simkl_history_changed(None))
+        self.assertFalse(gisheh.simkl_history_changed({"added": {}}))
+        self.assertFalse(gisheh.simkl_history_changed({}))
+        self.assertFalse(gisheh.simkl_history_changed(None))
 
     def test_noop_mark_guides_user_to_remark(self) -> None:
         controller = _titled_controller()
@@ -674,19 +674,19 @@ class TitleWatchedFlowTests(unittest.TestCase):
 
 
 class SeasonEpisodeWatchedFlowTests(unittest.TestCase):
-    def _show(self) -> tuple[cineshelf.TitleRecord, cineshelf.CineShelfWindow]:
-        records, _explore, _totals = cineshelf.load_catalog(
+    def _show(self) -> tuple[gisheh.TitleRecord, gisheh.GishehWindow]:
+        records, _explore, _totals = gisheh.load_catalog(
             include_sample_data=True
         )
         base = next(record for record in records if record.media_type == "Shows")
-        season = cineshelf.SeasonInfo(
+        season = gisheh.SeasonInfo(
             id="s1",
             number=1,
             title="Season 1",
             watched=0,
             episodes=3,
             episode_items=tuple(
-                cineshelf.EpisodeInfo(
+                gisheh.EpisodeInfo(
                     id=f"e{number}",
                     number=number,
                     title=f"Episode {number}",
@@ -734,7 +734,7 @@ class SeasonEpisodeWatchedFlowTests(unittest.TestCase):
         controller.detail_record_id = record.id
         controller.details_open = True
         controller._library_results_dirty = False
-        controller.library_mode = cineshelf.LIBRARY_MODE_LOCAL
+        controller.library_mode = gisheh.LIBRARY_MODE_LOCAL
         controller.records = ()
         controller.library_ids = set()
         controller._tmdb_record_aliases = {}

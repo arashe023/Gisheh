@@ -11,12 +11,12 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from cineshelf import window as cineshelf
-from cineshelf.services import tmdb_client
+from gisheh import window as gisheh
+from gisheh.services import tmdb_client
 
 
-def _parent(media_type: str = "Movies") -> cineshelf.TitleRecord:
-    records, _explore, _totals = cineshelf.load_catalog(
+def _parent(media_type: str = "Movies") -> gisheh.TitleRecord:
+    records, _explore, _totals = gisheh.load_catalog(
         include_sample_data=True
     )
     base = next(record for record in records if record.media_type == media_type)
@@ -54,7 +54,7 @@ class RecommendationNormalizationTests(unittest.TestCase):
         with patch.object(
             tmdb_client, "cached_image", return_value=None
         ):
-            records = cineshelf.recommendation_records_from_tmdb(
+            records = gisheh.recommendation_records_from_tmdb(
                 [_item(21, "First"), _item(22, "Second")], parent
             )
         self.assertEqual(len(records), 2)
@@ -74,7 +74,7 @@ class RecommendationNormalizationTests(unittest.TestCase):
             with patch.object(
                 tmdb_client, "cached_image", return_value=None
             ):
-                records = cineshelf.recommendation_records_from_tmdb(
+                records = gisheh.recommendation_records_from_tmdb(
                     [_item(31, "Series", media_type="tv")], parent
                 )
             self.assertEqual(len(records), 1)
@@ -87,7 +87,7 @@ class RecommendationNormalizationTests(unittest.TestCase):
             "cached_youtube_thumbnail",
             side_effect=lambda key: f"/cache/{key}.jpg",
         ):
-            videos = cineshelf.video_infos_from_tmdb(
+            videos = gisheh.video_infos_from_tmdb(
                 [
                     {"site": "YouTube", "key": "trailer_123", "name": "Trailer"},
                     {"site": "Vimeo", "key": "ignored", "name": "Ignored"},
@@ -106,11 +106,11 @@ class RecommendationNormalizationTests(unittest.TestCase):
         movie = _parent("Movies")
         show = _parent("Shows")
         self.assertEqual(
-            cineshelf.CineShelfWindow._title_external_url(movie),
+            gisheh.GishehWindow._title_external_url(movie),
             "https://www.themoviedb.org/movie/10",
         )
         self.assertEqual(
-            cineshelf.CineShelfWindow._title_external_url(show),
+            gisheh.GishehWindow._title_external_url(show),
             "https://www.themoviedb.org/tv/10",
         )
     def test_movie_item_under_show_parent_uses_movie_namespace(self) -> None:
@@ -118,7 +118,7 @@ class RecommendationNormalizationTests(unittest.TestCase):
         with patch.object(
             tmdb_client, "cached_image", return_value=None
         ):
-            records = cineshelf.recommendation_records_from_tmdb(
+            records = gisheh.recommendation_records_from_tmdb(
                 [_item(41, "Film", media_type="movie")], parent
             )
         self.assertEqual(records[0].media_type, "Movies")
@@ -129,7 +129,7 @@ class RecommendationNormalizationTests(unittest.TestCase):
         with patch.object(
             tmdb_client, "cached_image", return_value=None
         ):
-            records = cineshelf.recommendation_records_from_tmdb(
+            records = gisheh.recommendation_records_from_tmdb(
                 [
                     {"id": 10, "media_type": "movie", "title": "Parent"},
                     _item(51, "Kept"),
@@ -147,7 +147,7 @@ class RecommendationNormalizationTests(unittest.TestCase):
         with patch.object(
             tmdb_client, "cached_image", return_value=None
         ):
-            records = cineshelf.recommendation_records_from_tmdb(
+            records = gisheh.recommendation_records_from_tmdb(
                 [_item(100 + index, f"Title {index}") for index in range(20)],
                 parent,
             )
@@ -168,15 +168,15 @@ class RecommendationNormalizationTests(unittest.TestCase):
         with patch.object(
             tmdb_client, "cached_image", side_effect=fake_cached
         ):
-            records = cineshelf.recommendation_records_from_tmdb(
+            records = gisheh.recommendation_records_from_tmdb(
                 [_item(61, "Poster")], parent
             )
         self.assertEqual(records[0].poster_file, "/cache/w342-poster61.jpg")
         self.assertEqual(records[0].backdrop_file, "/cache/w780-backdrop61.jpg")
 
 
-def _controller() -> cineshelf.CineShelfWindow:
-    controller = object.__new__(cineshelf.CineShelfWindow)
+def _controller() -> gisheh.GishehWindow:
+    controller = object.__new__(gisheh.GishehWindow)
     controller.records_by_id = {}
     controller.library_ids = set()
     controller._tmdb_recommendations = {}
@@ -189,7 +189,7 @@ def _controller() -> cineshelf.CineShelfWindow:
 class RecommendationCacheTests(unittest.TestCase):
     def test_no_local_fallback_without_tmdb_data(self) -> None:
         controller = _controller()
-        records, _explore, _totals = cineshelf.load_catalog(
+        records, _explore, _totals = gisheh.load_catalog(
             include_sample_data=True
         )
         first = records[0]
@@ -202,7 +202,7 @@ class RecommendationCacheTests(unittest.TestCase):
         with patch.object(
             tmdb_client, "cached_image", return_value=None
         ):
-            items = cineshelf.recommendation_records_from_tmdb(
+            items = gisheh.recommendation_records_from_tmdb(
                 [_item(71, "One"), _item(72, "Two")], parent
             )
         controller.records_by_id = {parent.id: parent}
@@ -228,7 +228,7 @@ class RecommendationCacheTests(unittest.TestCase):
         with patch.object(
             tmdb_client, "cached_image", return_value=None
         ):
-            items = cineshelf.recommendation_records_from_tmdb(
+            items = gisheh.recommendation_records_from_tmdb(
                 [_item(81, "Cached")], parent
             )
         result = controller._apply_tmdb_recommendations(parent.id, 3, items)
@@ -251,7 +251,7 @@ class RecommendationCacheTests(unittest.TestCase):
         with patch.object(
             tmdb_client, "cached_image", return_value=None
         ):
-            items = cineshelf.recommendation_records_from_tmdb(
+            items = gisheh.recommendation_records_from_tmdb(
                 [_item(91, "Stale")], parent
             )
         controller._apply_tmdb_recommendations(parent.id, 3, items)
@@ -274,7 +274,7 @@ class RecommendationCacheTests(unittest.TestCase):
         controller = _controller()
         parent = _parent("Movies")
         with patch.object(tmdb_client, "cached_image", return_value=None):
-            item = cineshelf.recommendation_records_from_tmdb(
+            item = gisheh.recommendation_records_from_tmdb(
                 [_item(92, "Artwork")], parent
             )[0]
         controller.records_by_id = {parent.id: parent, item.id: item}
@@ -297,7 +297,7 @@ class RecommendationCacheTests(unittest.TestCase):
         with patch.object(
             tmdb_client, "cached_image", return_value=None
         ):
-            items = cineshelf.recommendation_records_from_tmdb(
+            items = gisheh.recommendation_records_from_tmdb(
                 [_item(101, "Open me")], parent
             )
         item = items[0]

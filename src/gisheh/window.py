@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CineShelf: a lightweight native GTK4/libadwaita movie library."""
+"""گیشه: a lightweight native GTK4/libadwaita movie library."""
 
 from __future__ import annotations
 
@@ -43,11 +43,11 @@ from .state_store import (  # noqa: E402
 )
 
 
-APP_ID = "io.github.cineshelf.CineShelf"
-APP_NAME = "CineShelf"
+APP_ID = "io.github.gisheh.Gisheh"
+APP_NAME = "گیشه"
 APP_VERSION = "1.3.0"
 RESOURCE_DIR = Path(__file__).resolve().parent
-RESOURCE_PREFIX = "/io/github/cineshelf/CineShelf"
+RESOURCE_PREFIX = "/io/github/gisheh/Gisheh"
 UI_RESOURCE = f"{RESOURCE_PREFIX}/ui/window.ui"
 CSS_RESOURCE = f"{RESOURCE_PREFIX}/style.css"
 LIBRARY_RESOURCE = f"{RESOURCE_PREFIX}/library.json"
@@ -210,7 +210,7 @@ def application_log_file() -> Path:
         if configured
         else Path.home() / ".local" / "state"
     )
-    return base / APP_ID / "cineshelf.log"
+    return base / APP_ID / "gisheh.log"
 
 
 def application_logger() -> logging.Logger:
@@ -281,7 +281,7 @@ def clear_application_logs() -> None:
 
 
 def clear_desktop_preferences() -> None:
-    """Reset any GSettings values left by this or an earlier CineShelf build."""
+    """Reset any GSettings values left by this or an earlier گیشه build."""
     source = Gio.SettingsSchemaSource.get_default()
     schema = source.lookup(APP_ID, True) if source is not None else None
     if schema is None:
@@ -894,7 +894,7 @@ class TitleRecord:
                     else "Airing" if media_type != "Movies" else "Released",
                 )
             ),
-            network=str(raw.get("network", "CineShelf")),
+            network=str(raw.get("network", "گیشه")),
             external_ratings=tuple(
                 (str(item["source"]), str(item["value"]))
                 for item in raw.get("externalRatings", ())
@@ -2033,7 +2033,7 @@ class MediaViewer(Gtk.Overlay):
         header.add_css_class("media-viewer-header")
 
         close_button = Gtk.Button.new_from_icon_name("go-previous-symbolic")
-        close_button.set_tooltip_text("Back to CineShelf")
+        close_button.set_tooltip_text("Back to گیشه")
         close_button.connect("clicked", lambda *_args: self.close())
         header.pack_start(close_button)
 
@@ -2323,7 +2323,7 @@ class SidebarRow(Gtk.ListBoxRow):
         self.set_child(content)
 
 
-class CineShelfWindow:
+class GishehWindow:
     """Controller for the Gtk.Builder-defined window."""
 
     def __init__(
@@ -2491,7 +2491,7 @@ class CineShelfWindow:
         self.state_file = user_state_file()
         self._load_user_state()
         self._apply_color_scheme()
-        application_logger().info("CineShelf %s started", APP_VERSION)
+        application_logger().info("گیشه %s started", APP_VERSION)
 
         self._updating = False
         self._updating_details = False
@@ -2851,7 +2851,7 @@ class CineShelfWindow:
         except FileNotFoundError:
             return
         except (OSError, ValueError, TypeError) as error:
-            print(f"CineShelf could not read user state: {error}", file=sys.stderr)
+            print(f"گیشه could not read user state: {error}", file=sys.stderr)
             return
 
         preferences = payload.get("preferences", {})
@@ -3019,7 +3019,7 @@ class CineShelfWindow:
         try:
             write_state(payload, self.state_file)
         except OSError as error:
-            print(f"CineShelf could not save user state: {error}", file=sys.stderr)
+            print(f"گیشه could not save user state: {error}", file=sys.stderr)
 
     def _build_header_controls(self) -> None:
         self.sidebar_toggle_button = Gtk.ToggleButton(
@@ -3086,7 +3086,7 @@ class CineShelfWindow:
         menu.append("Preferences", "win.preferences")
         menu.append("Application Log", "app.logs")
         menu.append("Credits & Data Sources", "app.credits")
-        menu.append("About CineShelf", "app.about")
+        menu.append("About گیشه", "app.about")
         menu.append("Quit", "app.quit")
         self.main_menu_button.set_menu_model(menu)
 
@@ -4113,7 +4113,7 @@ class CineShelfWindow:
             uri,
             heading="Open an external link?",
             body=(
-                f"CineShelf will open the TMDB page for “{record.title}” "
+                f"گیشه will open the TMDB page for “{record.title}” "
                 "in your default web browser."
             ),
         )
@@ -4169,7 +4169,7 @@ class CineShelfWindow:
         if not self.simkl_client_id:
             self.calendar_content.append(self._calendar_status(
                 "dialog-error-symbolic", "Simkl integration is unavailable",
-                "This build does not include CineShelf's public Simkl application ID.",
+                "This build does not include گیشه's public Simkl application ID.",
             ))
             return
         if loading and snapshot is None:
@@ -4256,7 +4256,7 @@ class CineShelfWindow:
 
         ownership = Adw.PreferencesGroup(
             title="Data ownership",
-            description="Choose where CineShelf keeps your personal library state.",
+            description="Choose where گیشه keeps your personal library state.",
         )
         self.settings_library_mode_row = Adw.ActionRow(title="Library mode")
         self.settings_library_mode_button = Gtk.Button(label="Change…")
@@ -4272,11 +4272,11 @@ class CineShelfWindow:
 
         appearance = Adw.PreferencesGroup(
             title="Appearance",
-            description="Choose how CineShelf looks on this device.",
+            description="Choose how گیشه looks on this device.",
         )
         self.settings_color_scheme_row = Adw.ComboRow(
             title="Color scheme",
-            subtitle="Use the system style or override it for CineShelf.",
+            subtitle="Use the system style or override it for گیشه.",
         )
         self.settings_color_scheme_row.set_model(
             Gtk.StringList.new(list(COLOR_SCHEME_LABELS))
@@ -4293,7 +4293,7 @@ class CineShelfWindow:
 
         library = Adw.PreferencesGroup(
             title="Library",
-            description="Set the view CineShelf uses when it starts.",
+            description="Set the view گیشه uses when it starts.",
         )
         self.settings_media_row = Adw.ComboRow(
             title="Default media type",
@@ -4322,11 +4322,11 @@ class CineShelfWindow:
 
         accounts = Adw.PreferencesGroup(
             title="Accounts &amp; Sync",
-            description="CineShelf uses Simkl for your library and TMDB for metadata.",
+            description="گیشه uses Simkl for your library and TMDB for metadata.",
         )
         self.settings_auto_sync_row = Adw.SwitchRow(
             title="Sync Simkl on startup",
-            subtitle="Refresh cloud library state whenever CineShelf starts.",
+            subtitle="Refresh cloud library state whenever گیشه starts.",
         )
         self.settings_auto_sync_row.set_active(self.auto_sync)
         self.settings_auto_sync_row.connect(
@@ -4427,10 +4427,10 @@ class CineShelfWindow:
 
         reset_group = Adw.PreferencesGroup(
             title="Reset",
-            description="Erase local CineShelf data and return to first-run setup.",
+            description="Erase local گیشه data and return to first-run setup.",
         )
         self.settings_factory_reset_row = Adw.ActionRow(
-            title="Reset CineShelf",
+            title="Reset گیشه",
             subtitle="Delete your library, preferences, accounts, caches and logs.",
         )
         self.settings_factory_reset_button = Gtk.Button(label="Reset…")
@@ -4604,7 +4604,7 @@ class CineShelfWindow:
         dialog = Adw.AlertDialog(
             heading="Clear Calendar cache?",
             body=(
-                "Downloaded Simkl schedules will be removed. CineShelf can "
+                "Downloaded Simkl schedules will be removed. گیشه can "
                 "download them again when Calendar is opened."
             ),
         )
@@ -4637,7 +4637,7 @@ class CineShelfWindow:
             heading="Clear downloaded TMDB data?",
             body=(
                 "Downloaded posters, backdrops, cast photos and metadata will "
-                "be removed. CineShelf can download them again when needed."
+                "be removed. گیشه can download them again when needed."
             ),
         )
         dialog.add_response("cancel", "Cancel")
@@ -4666,12 +4666,12 @@ class CineShelfWindow:
 
     def _on_factory_reset_clicked(self, _button: Gtk.Button) -> None:
         dialog = Adw.AlertDialog(
-            heading="Reset CineShelf completely?",
+            heading="Reset گیشه completely?",
             body=(
                 "Your local library, watch history, ratings, preferences, "
                 "connected accounts, downloaded artwork, metadata, Calendar "
                 "cache and application logs will be permanently deleted. "
-                "CineShelf will restart at the Welcome screen."
+                "گیشه will restart at the Welcome screen."
             ),
         )
         dialog.add_response("cancel", "Cancel")
@@ -4694,7 +4694,7 @@ class CineShelfWindow:
         except OSError as error:
             self.settings_factory_reset_button.set_sensitive(True)
             failure = Adw.AlertDialog(
-                heading="CineShelf could not be fully reset",
+                heading="گیشه could not be fully reset",
                 body=str(error),
             )
             failure.add_response("close", "Close")
@@ -4705,15 +4705,15 @@ class CineShelfWindow:
         except OSError as error:
             self.settings_factory_reset_button.set_sensitive(True)
             failure = Adw.AlertDialog(
-                heading="CineShelf was reset but could not restart",
-                body=f"Close and open CineShelf again.\n\n{error}",
+                heading="گیشه was reset but could not restart",
+                body=f"Close and open گیشه again.\n\n{error}",
             )
             failure.add_response("close", "Close")
             failure.present(self.settings_dialog)
 
     @staticmethod
     def _restart_application() -> None:
-        """Replace this process with a clean first-run CineShelf process."""
+        """Replace this process with a clean first-run گیشه process."""
         simkl_client.close_image_http_client()
         environment = os.environ.copy()
         python_paths = [entry for entry in sys.path if entry]
@@ -4724,7 +4724,7 @@ class CineShelfWindow:
         arguments = [
             sys.executable,
             "-m",
-            "cineshelf.main",
+            "gisheh.main",
             *sys.argv[1:],
         ]
         os.execvpe(sys.executable, arguments, environment)
@@ -5351,7 +5351,7 @@ class CineShelfWindow:
             dialog = Adw.AlertDialog(
                 heading="Simkl is unavailable in this build",
                 body=(
-                    "The distributor must register CineShelf with Simkl and include "
+                    "The distributor must register گیشه with Simkl and include "
                     "the public Client ID when building the application. You never "
                     "need to create a developer app or enter a Client Secret."
                 ),
@@ -5367,7 +5367,7 @@ class CineShelfWindow:
         threading.Thread(
             target=self._simkl_pin_worker,
             args=(client_id,),
-            name="cineshelf-simkl-pin",
+            name="gisheh-simkl-pin",
             daemon=True,
         ).start()
 
@@ -5400,7 +5400,7 @@ class CineShelfWindow:
             heading="Enter this code on Simkl",
             body=(
                 "The browser has been opened. Sign in to Simkl and enter the "
-                "code below. CineShelf will finish automatically after approval."
+                "code below. گیشه will finish automatically after approval."
             ),
         )
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
@@ -5436,7 +5436,7 @@ class CineShelfWindow:
         threading.Thread(
             target=self._simkl_poll_worker,
             args=(client_id, user_code, interval, expires_in),
-            name="cineshelf-simkl-poll",
+            name="gisheh-simkl-poll",
             daemon=True,
         ).start()
         return GLib.SOURCE_REMOVE
@@ -5523,7 +5523,7 @@ class CineShelfWindow:
         threading.Thread(
             target=self._simkl_sync_worker,
             args=(self.simkl_client_id, self.simkl_token, generation),
-            name="cineshelf-simkl-sync",
+            name="gisheh-simkl-sync",
             daemon=True,
         ).start()
 
@@ -5839,7 +5839,7 @@ class CineShelfWindow:
             threading.Thread(
                 target=self._cache_simkl_avatar,
                 args=(avatar_url,),
-                name="cineshelf-simkl-avatar",
+                name="gisheh-simkl-avatar",
                 daemon=True,
             ).start()
         elapsed = (
@@ -6813,7 +6813,7 @@ class CineShelfWindow:
         threading.Thread(
             target=self._load_tmdb_library_worker,
             args=(ordered, token, generation),
-            name="cineshelf-tmdb-library",
+            name="gisheh-tmdb-library",
             daemon=True,
         ).start()
 
@@ -6976,7 +6976,7 @@ class CineShelfWindow:
         threading.Thread(
             target=self._load_tmdb_explore_worker,
             args=(token, generation, self.active_media),
-            name="cineshelf-tmdb-explore",
+            name="gisheh-tmdb-explore",
             daemon=True,
         ).start()
 
@@ -7119,7 +7119,7 @@ class CineShelfWindow:
         threading.Thread(
             target=self._load_next_tmdb_explore_page_worker,
             args=(self.tmdb_token, generation, media_type, page),
-            name=f"cineshelf-tmdb-explore-{media_type.lower()}-{page}",
+            name=f"gisheh-tmdb-explore-{media_type.lower()}-{page}",
             daemon=True,
         ).start()
 
@@ -7289,7 +7289,7 @@ class CineShelfWindow:
         threading.Thread(
             target=self._load_tmdb_search_page_worker,
             args=(self.tmdb_token, generation, media_type, query, 1),
-            name=f"cineshelf-tmdb-search-{media_type.lower()}",
+            name=f"gisheh-tmdb-search-{media_type.lower()}",
             daemon=True,
         ).start()
         return GLib.SOURCE_REMOVE
@@ -7314,7 +7314,7 @@ class CineShelfWindow:
                 self._tmdb_search_query,
                 page,
             ),
-            name=f"cineshelf-tmdb-search-{self.active_media.lower()}-{page}",
+            name=f"gisheh-tmdb-search-{self.active_media.lower()}-{page}",
             daemon=True,
         ).start()
 
@@ -7560,7 +7560,7 @@ class CineShelfWindow:
             return GLib.SOURCE_REMOVE
         self._tmdb_explore_pages_loading.difference_update(MEDIA_TYPES)
         self._sync_explore_loading_indicator()
-        print(f"CineShelf TMDB: {message}", file=sys.stderr)
+        print(f"گیشه TMDB: {message}", file=sys.stderr)
         self._toast("TMDB is unavailable — Explore could not be loaded")
         return GLib.SOURCE_REMOVE
 
@@ -7581,7 +7581,7 @@ class CineShelfWindow:
         threading.Thread(
             target=self._load_tmdb_details_worker,
             args=(record, self.tmdb_token, generation),
-            name=f"cineshelf-tmdb-{record.tmdb_id}",
+            name=f"gisheh-tmdb-{record.tmdb_id}",
             daemon=True,
         ).start()
 
@@ -8150,7 +8150,7 @@ class CineShelfWindow:
                 season.number,
                 season_key,
             ),
-            name=f"cineshelf-tmdb-season-{record.tmdb_id}-{season.number}",
+            name=f"gisheh-tmdb-season-{record.tmdb_id}-{season.number}",
             daemon=True,
         ).start()
 
@@ -8505,7 +8505,7 @@ class CineShelfWindow:
                 episode.number,
                 key,
             ),
-            name=f"cineshelf-tmdb-episode-{record.tmdb_id}-{season.number}-{episode.number}",
+            name=f"gisheh-tmdb-episode-{record.tmdb_id}-{season.number}-{episode.number}",
             daemon=True,
         ).start()
 
@@ -8773,7 +8773,7 @@ class CineShelfWindow:
         self._tmdb_details_loading.discard(record_id)
         self._tmdb_cast_images_loading.pop(record_id, None)
         self._tmdb_gallery_images_loading.pop(record_id, None)
-        print(f"CineShelf TMDB details: {message}", file=sys.stderr)
+        print(f"گیشه TMDB details: {message}", file=sys.stderr)
         return GLib.SOURCE_REMOVE
 
     def _on_preferences_clicked(self, _button: Gtk.Button | None) -> None:
@@ -8797,7 +8797,7 @@ class CineShelfWindow:
                 else "Configure this development build"
             ),
             body=(
-                "Public releases should include CineShelf's approved TMDB credential. "
+                "Public releases should include گیشه's approved TMDB credential. "
                 "For local development only, you can enter your own API Read Access "
                 "Token; it will be stored only for this user."
             ),
@@ -8829,7 +8829,7 @@ class CineShelfWindow:
         try:
             tmdb_client.store_token(token)
         except tmdb_client.TmdbError as error:
-            print(f"CineShelf TMDB token: {error}", file=sys.stderr)
+            print(f"گیشه TMDB token: {error}", file=sys.stderr)
             self._toast("Could not save the TMDB token")
             return
 
@@ -9846,7 +9846,7 @@ class CineShelfWindow:
                         video.url or "",
                         heading="Open the trailer?",
                         body=(
-                            f"CineShelf will open “{video.title}” on YouTube "
+                            f"گیشه will open “{video.title}” on YouTube "
                             "in your default web browser."
                         ),
                     )
@@ -9861,7 +9861,7 @@ class CineShelfWindow:
         if record.external_ratings:
             return record.external_ratings[:4]
         return (
-            ("CineShelf", f"{record.rating:.1f}"),
+            ("گیشه", f"{record.rating:.1f}"),
             ("IMDb", f"{min(10.0, record.rating + 0.1):.1f}"),
             ("Meta", str(min(99, round(record.rating * 10)))),
             ("Match", f"{min(99, round(record.rating * 10 + 8))}%"),
@@ -10493,7 +10493,7 @@ class CineShelfWindow:
 
     @staticmethod
     def _scroll_to_top(scroller: Gtk.ScrolledWindow) -> None:
-        CineShelfWindow._scroll_to_value(scroller, 0)
+        GishehWindow._scroll_to_value(scroller, 0)
 
     def _video_card(
         self,
@@ -10539,7 +10539,7 @@ class CineShelfWindow:
                     item.url or "",
                     heading="Open the video?",
                     body=(
-                        f"CineShelf will open “{item.title}” on YouTube "
+                        f"گیشه will open “{item.title}” on YouTube "
                         "in your default web browser."
                     ),
                 ),
@@ -12401,7 +12401,7 @@ class CineShelfWindow:
 
         threading.Thread(
             target=worker,
-            name="cineshelf-simkl-write",
+            name="gisheh-simkl-write",
             daemon=True,
         ).start()
 

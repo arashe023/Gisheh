@@ -1,9 +1,9 @@
-app_id = 'io.github.cineshelf.CineShelf'
+app_id = 'io.github.gisheh.Gisheh'
 
 desktop_file = configure_file(
   input: app_id + '.desktop.in',
   output: app_id + '.desktop',
-  configuration: {'EXECUTABLE': 'cineshelf'},
+  configuration: {'EXECUTABLE': 'gisheh'},
   install: true,
   install_dir: get_option('datadir') / 'applications',
 )

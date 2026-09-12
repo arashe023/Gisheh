@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from cineshelf.services import simkl_client
+from gisheh.services import simkl_client
 
 
 class SimklClientTests(unittest.TestCase):

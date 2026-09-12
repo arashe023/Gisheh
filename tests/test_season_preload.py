@@ -12,21 +12,21 @@ from unittest.mock import MagicMock, patch
 SOURCE_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SOURCE_DIR))
 
-from cineshelf import window as cineshelf
-from cineshelf.services import tmdb_client
+from gisheh import window as gisheh
+from gisheh.services import tmdb_client
 
 
-def _base_record() -> cineshelf.TitleRecord:
-    records, _explore, _totals = cineshelf.load_catalog(
+def _base_record() -> gisheh.TitleRecord:
+    records, _explore, _totals = gisheh.load_catalog(
         include_sample_data=True
     )
     base = next(record for record in records if record.media_type == "Shows")
     return base
 
 
-def _episodes(*numbers: int) -> tuple[cineshelf.EpisodeInfo, ...]:
+def _episodes(*numbers: int) -> tuple[gisheh.EpisodeInfo, ...]:
     return tuple(
-        cineshelf.EpisodeInfo(
+        gisheh.EpisodeInfo(
             id=f"e{number}",
             number=number,
             title=f"Placeholder {number}",
@@ -39,8 +39,8 @@ def _episodes(*numbers: int) -> tuple[cineshelf.EpisodeInfo, ...]:
     )
 
 
-def _controller_for(record: cineshelf.TitleRecord, token: str | None = "token"):
-    controller = object.__new__(cineshelf.CineShelfWindow)
+def _controller_for(record: gisheh.TitleRecord, token: str | None = "token"):
+    controller = object.__new__(gisheh.GishehWindow)
     controller.tmdb_token = token
     controller.completed = set()
     controller.episode_status_overrides = {}
@@ -66,18 +66,18 @@ class SeasonMergeTests(unittest.TestCase):
              "overview": "Second overview", "runtime": 55, "guest_stars": [],
              "still_path": ""},
         ]
-        merged = cineshelf.merge_tmdb_season_episodes(episodes, payload)
+        merged = gisheh.merge_tmdb_season_episodes(episodes, payload)
         by_number = {episode.number: episode for episode in merged}
         self.assertEqual(by_number[1].title, "First")
         self.assertEqual(by_number[2].title, "Second")
         self.assertEqual(by_number[3].title, "Third")
 
     def test_empty_tmdb_values_preserve_existing(self) -> None:
-        existing = cineshelf.EpisodeInfo(
+        existing = gisheh.EpisodeInfo(
             id="e1", number=1, title="Kept title", date="2026-01-01",
             description="Kept overview", watched=True, image_variant=3,
             artwork_file="/cache/kept.jpg", runtime="45m",
-            cast=(cineshelf.CastMember("Actor", "Lead"),),
+            cast=(gisheh.CastMember("Actor", "Lead"),),
         )
         payload = [
             {"episode_number": 1, "name": "", "air_date": "",
@@ -92,13 +92,13 @@ class SeasonMergeTests(unittest.TestCase):
         with patch.object(
             tmdb_client, "cached_image", return_value=None
         ):
-            merged = cineshelf.merge_tmdb_season_episodes((existing,), payload)
+            merged = gisheh.merge_tmdb_season_episodes((existing,), payload)
         self.assertEqual(merged[0].title, "Kept title")
         self.assertEqual(merged[0].date, "2026-01-01")
         self.assertEqual(merged[0].description, "Kept overview")
         self.assertEqual(merged[0].runtime, "45m")
         self.assertEqual(
-            merged[0].cast, (cineshelf.CastMember("Actor", "Lead"),)
+            merged[0].cast, (gisheh.CastMember("Actor", "Lead"),)
         )
         self.assertEqual(merged[0].artwork_file, "/cache/kept.jpg")
 
@@ -109,19 +109,19 @@ class SeasonMergeTests(unittest.TestCase):
              "overview": "Overview", "runtime": 125, "guest_stars": [],
              "still_path": ""},
         ]
-        merged = cineshelf.merge_tmdb_season_episodes(episodes, payload)
+        merged = gisheh.merge_tmdb_season_episodes(episodes, payload)
         self.assertEqual(
-            merged[0].runtime, cineshelf.format_watch_time(125)
+            merged[0].runtime, gisheh.format_watch_time(125)
         )
 
     def test_specials_season_zero_uses_real_number(self) -> None:
         self.assertEqual(
-            cineshelf.CineShelfWindow._tmdb_season_cache_key("rec", 0),
+            gisheh.GishehWindow._tmdb_season_cache_key("rec", 0),
             "rec:s0",
         )
         self.assertNotEqual(
-            cineshelf.CineShelfWindow._tmdb_season_cache_key("rec", 0),
-            cineshelf.CineShelfWindow._tmdb_season_cache_key("rec", 1),
+            gisheh.GishehWindow._tmdb_season_cache_key("rec", 0),
+            gisheh.GishehWindow._tmdb_season_cache_key("rec", 1),
         )
         episodes = _episodes(1)
         payload = [
@@ -129,11 +129,11 @@ class SeasonMergeTests(unittest.TestCase):
              "air_date": "2026-01-01", "overview": "Special overview",
              "runtime": 30, "guest_stars": [], "still_path": ""},
         ]
-        merged = cineshelf.merge_tmdb_season_episodes(episodes, payload)
+        merged = gisheh.merge_tmdb_season_episodes(episodes, payload)
         self.assertEqual(merged[0].title, "Special One")
 
     def test_watched_state_and_identity_preserved(self) -> None:
-        existing = cineshelf.EpisodeInfo(
+        existing = gisheh.EpisodeInfo(
             id="local-e7", number=7, title="Old", date="2026",
             description="Old", watched=True, image_variant=9,
             artwork_file="/cache/old.jpg",
@@ -148,7 +148,7 @@ class SeasonMergeTests(unittest.TestCase):
         with patch.object(
             tmdb_client, "cached_image", return_value=None
         ):
-            merged = cineshelf.merge_tmdb_season_episodes((existing,), payload)
+            merged = gisheh.merge_tmdb_season_episodes((existing,), payload)
         self.assertEqual(merged[0].id, "local-e7")
         self.assertTrue(merged[0].watched)
         self.assertEqual(merged[0].image_variant, 9)
@@ -158,9 +158,9 @@ class SeasonMergeTests(unittest.TestCase):
 
 
 class SeasonRequestTests(unittest.TestCase):
-    def _record(self, season_number: int = 1) -> cineshelf.TitleRecord:
+    def _record(self, season_number: int = 1) -> gisheh.TitleRecord:
         base = _base_record()
-        season = cineshelf.SeasonInfo(
+        season = gisheh.SeasonInfo(
             id="specials" if season_number == 0 else f"s{season_number}",
             number=season_number,
             title="Specials" if season_number == 0 else f"Season {season_number}",
@@ -168,7 +168,7 @@ class SeasonRequestTests(unittest.TestCase):
             episodes=3,
             episode_items=_episodes(1, 2, 3),
         )
-        other = cineshelf.SeasonInfo(
+        other = gisheh.SeasonInfo(
             id="s2" if season_number != 2 else "s1",
             number=2 if season_number != 2 else 1,
             title="Season 2",
@@ -259,7 +259,7 @@ class SeasonRequestTests(unittest.TestCase):
         thread.assert_not_called()
 
     def test_season_preload_starts_from_season_entry_point(self) -> None:
-        source = Path(cineshelf.__file__).read_text(encoding="utf-8")
+        source = Path(gisheh.__file__).read_text(encoding="utf-8")
         season_activated = source.split("def _on_season_activated")[1].split(
             "def _on_episode_activated"
         )[0]
@@ -321,11 +321,11 @@ class SeasonRequestTests(unittest.TestCase):
         }
 
         with (
-            patch.object(cineshelf.tmdb_client, "fetch_season_details", return_value=payload),
-            patch.object(cineshelf.tmdb_client, "cached_image", return_value=None),
-            patch.object(cineshelf.tmdb_client, "cache_image", return_value="/cache/one.jpg"),
+            patch.object(gisheh.tmdb_client, "fetch_season_details", return_value=payload),
+            patch.object(gisheh.tmdb_client, "cached_image", return_value=None),
+            patch.object(gisheh.tmdb_client, "cache_image", return_value="/cache/one.jpg"),
             patch.object(
-                cineshelf.GLib,
+                gisheh.GLib,
                 "idle_add",
                 side_effect=lambda callback, *args: scheduled.append((callback, args)),
             ),
@@ -410,7 +410,7 @@ class SeasonRequestTests(unittest.TestCase):
 class EpisodePositionRemovalTests(unittest.TestCase):
     @staticmethod
     def _source() -> str:
-        return Path(cineshelf.__file__).read_text(encoding="utf-8")
+        return Path(gisheh.__file__).read_text(encoding="utf-8")
 
     def test_position_widgets_and_update_logic_removed(self) -> None:
         source = self._source()

@@ -1,4 +1,4 @@
-"""Installed and development entry point for CineShelf."""
+"""Installed and development entry point for گیشه."""
 
 from __future__ import annotations
 
@@ -10,11 +10,11 @@ from gi.repository import Gio
 
 
 def _register_resources() -> Gio.Resource | None:
-    configured = os.environ.get("CINESHELF_RESOURCE_FILE")
+    configured = os.environ.get("GISHEH_RESOURCE_FILE")
     resource_file = (
         Path(configured)
         if configured
-        else Path(__file__).with_name("cineshelf.gresource")
+        else Path(__file__).with_name("gisheh.gresource")
     )
     if not resource_file.is_file():
         return None
@@ -25,9 +25,9 @@ def _register_resources() -> Gio.Resource | None:
 
 def main() -> int:
     resource = _register_resources()
-    from .application import CineShelfApplication
+    from .application import GishehApplication
 
-    application = CineShelfApplication()
+    application = GishehApplication()
     result = application.run(sys.argv)
     if resource is not None:
         resource._unregister()

@@ -3,7 +3,7 @@
   <requires lib="gtk" version="4.12"/>
   <requires lib="Adw" version="1.9"/>
   <object class="AdwApplicationWindow" id="window">
-    <property name="title">CineShelf</property>
+    <property name="title">گیشه</property>
     <property name="default-width">1100</property>
     <property name="default-height">700</property>
     <property name="content">
@@ -14,7 +14,7 @@
             <property name="show-sidebar">true</property>
             <property name="sidebar">
               <object class="AdwNavigationPage" id="sidebar_page">
-                <property name="title">CineShelf</property>
+                <property name="title">گیشه</property>
                 <property name="child">
                   <object class="AdwToolbarView" id="sidebar_toolbar_view">
                     <style>
@@ -26,7 +26,7 @@
                         <property name="show-end-title-buttons">false</property>
                         <property name="title-widget">
                           <object class="AdwWindowTitle">
-                            <property name="title">CineShelf</property>
+                            <property name="title">گیشه</property>
                           </object>
                         </property>
                         <child type="start">

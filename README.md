@@ -1,4 +1,4 @@
-# CineShelf 1.3.0 — Python + GTK4 + libadwaita
+# گیشه 1.3.0 — Python + GTK4 + libadwaita
 
 یک برنامهٔ بومی لینوکس برای مدیریت فیلم، سریال و انیمه که با Python، GTK4 و libadwaita پیاده‌سازی شده است.
 
@@ -41,13 +41,13 @@
 
 ## معماری بومی
 
-- `src/cineshelf/application.py`: چرخهٔ استاندارد `Adw.Application` و actionهای عمومی
-- `src/cineshelf/onboarding.py`: Welcome Tour و انتخاب روش مدیریت کتابخانه
-- `src/cineshelf/state_store.py`: خواندن و نوشتن اتمیک state خصوصی کاربر
-- `src/cineshelf/window.py`: کنترلر پنجره، نماها و رویدادهای رابط
-- `src/cineshelf/ui/window.ui`: رابط GtkBuilder با `AdwNavigationSplitView`
-- `src/cineshelf/services/`: کلاینت‌های مستقل TMDB، Simkl و انتقال تصاویر
-- `src/cineshelf/io.github.cineshelf.CineShelf.gresource.xml`: بسته‌بندی UI، CSS و fixtureهای تست در GResource
+- `src/gisheh/application.py`: چرخهٔ استاندارد `Adw.Application` و actionهای عمومی
+- `src/gisheh/onboarding.py`: Welcome Tour و انتخاب روش مدیریت کتابخانه
+- `src/gisheh/state_store.py`: خواندن و نوشتن اتمیک state خصوصی کاربر
+- `src/gisheh/window.py`: کنترلر پنجره، نماها و رویدادهای رابط
+- `src/gisheh/ui/window.ui`: رابط GtkBuilder با `AdwNavigationSplitView`
+- `src/gisheh/services/`: کلاینت‌های مستقل TMDB، Simkl و انتقال تصاویر
+- `src/gisheh/io.github.gisheh.Gisheh.gresource.xml`: بسته‌بندی UI، CSS و fixtureهای تست در GResource
 - `data/`: Desktop Entry، AppStream، GSettings و آیکن‌های hicolor
 - `build-aux/flatpak/`: manifest قابل‌شناسایی توسط GNOME Builder و Flatpak Builder
 - `po/`: زیرساخت gettext و فهرست منابع قابل‌ترجمه
@@ -60,12 +60,12 @@ Explore فقط از داده‌ها و تصاویر زندهٔ TMDB استفاد
 
 ## اولین اجرا و مالکیت داده
 
-وقتی هیچ انتخاب قبلی در state وجود نداشته باشد، CineShelf به‌جای پنجرهٔ اصلی یک Tour بومی سه‌مرحله‌ای نشان می‌دهد. دو گزینهٔ مرحلهٔ آخر عبارت‌اند از:
+وقتی هیچ انتخاب قبلی در state وجود نداشته باشد، گیشه به‌جای پنجرهٔ اصلی یک Tour بومی سه‌مرحله‌ای نشان می‌دهد. دو گزینهٔ مرحلهٔ آخر عبارت‌اند از:
 
 - **Local-first:** نیازی به حساب ندارد، دادهٔ شخصی را آپلود نمی‌کند و نسخهٔ کامل رکوردهای افزوده‌شده از Explore را برای راه‌اندازی بعدی روی دستگاه نگه می‌دارد.
 - **Sync with Simkl:** ورود PIN را آغاز می‌کند و Simkl را به‌عنوان منبع همگام کتابخانه، امتیازها و تاریخچه انتخاب می‌کند.
 
-انتخاب در `~/.local/state/io.github.cineshelf.CineShelf/state.json` ذخیره می‌شود. در Flatpak این مسیر داخل فضای خصوصی برنامه قرار می‌گیرد. وضعیت فعال با نشانگر `Local` یا `Synced/Not synced` در HeaderBar قابل مشاهده است و از Preferences → Data ownership می‌توان روش مدیریت کتابخانه را تغییر داد. Welcome Tour فقط در اولین اجرا یا پس از اجرای Reset CineShelf نمایش داده می‌شود و ورودی تکراری آن در منوی اصلی وجود ندارد.
+انتخاب در `~/.local/state/io.github.gisheh.Gisheh/state.json` ذخیره می‌شود. در Flatpak این مسیر داخل فضای خصوصی برنامه قرار می‌گیرد. وضعیت فعال با نشانگر `Local` یا `Synced/Not synced` در HeaderBar قابل مشاهده است و از Preferences → Data ownership می‌توان روش مدیریت کتابخانه را تغییر داد. Welcome Tour فقط در اولین اجرا یا پس از اجرای Reset گیشه نمایش داده می‌شود و ورودی تکراری آن در منوی اصلی وجود ندارد.
 
 اندازهٔ پیش‌فرض پنجره `1100×700` است تا در فضای کاری رایج `1366×768` جا شود؛ حداقل معتبر حدود `360×480` است.
 
@@ -82,7 +82,7 @@ Explore فقط از داده‌ها و تصاویر زندهٔ TMDB استفاد
 ## اجرا
 
 پروژه را مستقیماً در GNOME Builder باز کنید؛ Builder فایل Meson و manifest فلت‌پک را تشخیص می‌دهد و با دکمهٔ Run آن را build و اجرا می‌کند.
-فایل اجرایی Python در Meson به‌عنوان target نصب‌شوندهٔ `cineshelf` ثبت شده است؛ بنابراین در تنظیمات پروژهٔ Builder، گزینهٔ Run Command باید به‌صورت خودکار `cineshelf` باشد.
+فایل اجرایی Python در Meson به‌عنوان target نصب‌شوندهٔ `gisheh` ثبت شده است؛ بنابراین در تنظیمات پروژهٔ Builder، گزینهٔ Run Command باید به‌صورت خودکار `gisheh` باشد.
 
 برای build و تست روی سیستم میزبان:
 
@@ -91,24 +91,24 @@ meson setup build --prefix="$PWD/_install"
 meson compile -C build
 meson test -C build --print-errorlogs
 meson install -C build
-./_install/bin/cineshelf
+./_install/bin/gisheh
 ```
 
 پس از اولین setup، برای buildهای بعدی فقط `meson compile -C build` لازم است. برای ساخت Flatpak:
 
 ```bash
 flatpak-builder --user --install --force-clean flatpak-build \
-  build-aux/flatpak/io.github.cineshelf.CineShelf.json
+  build-aux/flatpak/io.github.gisheh.Gisheh.json
 ```
 
-نسخه‌های عمومی باید Client ID ثبت‌شدهٔ CineShelf در Simkl و credential تأییدشدهٔ TMDB را هنگام build همراه برنامه کنند. در این حالت کاربر برای Simkl فقط دکمهٔ Connect را می‌زند و PIN نمایش‌داده‌شده را در مرورگر تأیید می‌کند؛ ساختن برنامهٔ توسعه‌دهنده یا واردکردن Client Secret لازم نیست. Access Token سیمکل ابتدا در Secret Service سیستم ذخیره می‌شود و اگر keyring در دسترس نباشد، برنامه از فایل خصوصی با مجوز `0600` استفاده می‌کند.
+نسخه‌های عمومی باید Client ID ثبت‌شدهٔ گیشه در Simkl و credential تأییدشدهٔ TMDB را هنگام build همراه برنامه کنند. در این حالت کاربر برای Simkl فقط دکمهٔ Connect را می‌زند و PIN نمایش‌داده‌شده را در مرورگر تأیید می‌کند؛ ساختن برنامهٔ توسعه‌دهنده یا واردکردن Client Secret لازم نیست. Access Token سیمکل ابتدا در Secret Service سیستم ذخیره می‌شود و اگر keyring در دسترس نباشد، برنامه از فایل خصوصی با مجوز `0600` استفاده می‌کند.
 
 مقادیر عمومی release با گزینه‌های Meson تنظیم می‌شوند:
 
 ```bash
 meson setup build \
-  -Dsimkl_client_id="$CINESHELF_PUBLIC_SIMKL_CLIENT_ID" \
-  -Dtmdb_read_token="$CINESHELF_PUBLIC_TMDB_READ_TOKEN"
+  -Dsimkl_client_id="$GISHEH_PUBLIC_SIMKL_CLIENT_ID" \
+  -Dtmdb_read_token="$GISHEH_PUBLIC_TMDB_READ_TOKEN"
 ```
 
 این دو مقدار داخل برنامهٔ نصب‌شده قابل استخراج‌اند و نباید Client Secret یا credential محرمانه در آن‌ها قرار گیرد. برای توسعهٔ محلی، `SIMKL_CLIENT_ID`، `SIMKL_ACCESS_TOKEN` و `TMDB_READ_TOKEN` همچنان به‌عنوان override پشتیبانی می‌شوند. در build فاقد credential عمومی، صفحهٔ تنظیمات وضعیت integration را صریحاً «Unavailable» نشان می‌دهد؛ ورود token شخصی TMDB فقط به‌عنوان Developer Setup باقی مانده است.
@@ -125,18 +125,18 @@ meson setup build \
 .
 ├── meson.build
 ├── meson_options.txt
-├── build-aux/flatpak/io.github.cineshelf.CineShelf.json
+├── build-aux/flatpak/io.github.gisheh.Gisheh.json
 ├── data/
 │   ├── meson.build
-│   ├── io.github.cineshelf.CineShelf.desktop.in
-│   ├── io.github.cineshelf.CineShelf.metainfo.xml.in
-│   ├── io.github.cineshelf.CineShelf.gschema.xml
+│   ├── io.github.gisheh.Gisheh.desktop.in
+│   ├── io.github.gisheh.Gisheh.metainfo.xml.in
+│   ├── io.github.gisheh.Gisheh.gschema.xml
 │   └── icons/hicolor/
 ├── po/
 ├── src/
 │   ├── meson.build
-│   ├── cineshelf.in
-│   └── cineshelf/
+│   ├── gisheh.in
+│   └── gisheh/
 │       ├── application.py
 │       ├── main.py
 │       ├── onboarding.py
