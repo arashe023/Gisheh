@@ -68,7 +68,6 @@ gisheh_resources = custom_target(
   depend_files: files(
     'gisheh/ui/window.ui',
     'gisheh/style.css',
-    'gisheh/library.json',
     'gisheh/assets/tmdb-logo.svg',
   ),
   output: 'gisheh.gresource',

@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+SAMPLE_DATA = Path(__file__).resolve().parent / "fixtures/library.json"
 
 from gisheh import window as gisheh
 from gisheh.services import simkl_client
@@ -312,7 +313,7 @@ def _titled_controller() -> gisheh.GishehWindow:
 
 class TitleWatchedFlowTests(unittest.TestCase):
     def _record(self) -> gisheh.TitleRecord:
-        records, _explore, _totals = gisheh.load_catalog(include_sample_data=True)
+        records, _explore, _totals = gisheh.load_catalog(sample_data_path=SAMPLE_DATA)
         base = next(record for record in records if record.media_type == "Movies")
         return replace(base, tmdb_id=20, tmdb_media_type="movie")
 
@@ -479,7 +480,7 @@ class TitleWatchedFlowTests(unittest.TestCase):
 
     def test_watched_explore_record_is_promoted_to_library_views(self) -> None:
         controller = _titled_controller()
-        records, _explore, _totals = gisheh.load_catalog(include_sample_data=True)
+        records, _explore, _totals = gisheh.load_catalog(sample_data_path=SAMPLE_DATA)
         library_record = next(
             record for record in records if record.media_type == "Movies"
         )
@@ -663,7 +664,7 @@ class TitleWatchedFlowTests(unittest.TestCase):
 
 class SeasonEpisodeWatchedFlowTests(unittest.TestCase):
     def _show(self) -> tuple[gisheh.TitleRecord, gisheh.GishehWindow]:
-        records, _explore, _totals = gisheh.load_catalog(include_sample_data=True)
+        records, _explore, _totals = gisheh.load_catalog(sample_data_path=SAMPLE_DATA)
         base = next(record for record in records if record.media_type == "Shows")
         season = gisheh.SeasonInfo(
             id="s1",

@@ -3,7 +3,6 @@
   <gresource prefix="/io/github/arashe023/Gisheh">
     <file preprocess="xml-stripblanks">ui/window.ui</file>
     <file>style.css</file>
-    <file>library.json</file>
     <file>assets/tmdb-logo.svg</file>
   </gresource>
 </gresources>

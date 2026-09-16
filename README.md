@@ -48,7 +48,8 @@
 - `src/gisheh/window.py`: کنترلر پنجره، نماها و رویدادهای رابط
 - `src/gisheh/ui/window.ui`: رابط GtkBuilder با `AdwNavigationSplitView`
 - `src/gisheh/services/`: کلاینت‌های مستقل TMDB، Simkl و انتقال تصاویر
-- `src/gisheh/io.github.arashe023.Gisheh.gresource.xml`: بسته‌بندی UI، CSS و fixtureهای تست در GResource
+- `src/gisheh/io.github.arashe023.Gisheh.gresource.xml`: بسته‌بندی UI، CSS و دارایی‌های runtime در GResource
+- `tests/fixtures/`: داده‌های نمونهٔ مخصوص تست که وارد بستهٔ نهایی نمی‌شوند
 - `data/`: Desktop Entry، AppStream، GSettings و آیکن‌های hicolor
 - `build-aux/flatpak/`: manifest قابل‌شناسایی توسط GNOME Builder و Flatpak Builder
 - `po/`: زیرساخت gettext و فهرست منابع قابل‌ترجمه
@@ -68,7 +69,7 @@ Explore فقط از داده‌ها و تصاویر زندهٔ TMDB استفاد
 
 انتخاب در `~/.local/state/io.github.arashe023.Gisheh/state.json` ذخیره می‌شود. در Flatpak این مسیر داخل فضای خصوصی برنامه قرار می‌گیرد. وضعیت فعال با نشانگر `Local` یا `Synced/Not synced` در HeaderBar قابل مشاهده است و از Preferences → Data ownership می‌توان روش مدیریت کتابخانه را تغییر داد. Welcome Tour فقط در اولین اجرا یا پس از اجرای Reset Gisheh نمایش داده می‌شود و ورودی تکراری آن در منوی اصلی وجود ندارد.
 
-اندازهٔ پیش‌فرض پنجره `1100×700` است تا در فضای کاری رایج `1366×768` جا شود؛ حداقل معتبر حدود `360×480` است.
+اندازهٔ پیش‌فرض پنجره `1100×700` است تا در فضای کاری رایج `1366×768` جا شود؛ حداقل معتبر حدود `360×480` است. اندازه و حالت maximized پنجره و حالت نمایش فهرست/گرید با GSettings ذخیره و در اجرای بعدی بازیابی می‌شوند.
 
 ## چیدمان تطبیقی
 
@@ -149,6 +150,7 @@ meson setup build \
 │       ├── services/
 │       ├── ui/window.ui
 │       ├── style.css
-│       └── library.json
+│       └── assets/
 └── tests/
+    └── fixtures/library.json
 ```

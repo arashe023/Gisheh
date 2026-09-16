@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 SOURCE_DIR = Path(__file__).resolve().parents[1] / "src"
+SAMPLE_DATA = Path(__file__).resolve().parent / "fixtures/library.json"
 sys.path.insert(0, str(SOURCE_DIR))
 
 from gisheh import window as gisheh
@@ -91,7 +92,7 @@ class ExploreLayoutTests(unittest.TestCase):
     ) -> None:
         from gi.repository import Gtk
 
-        records, _explore, _totals = gisheh.load_catalog(include_sample_data=True)
+        records, _explore, _totals = gisheh.load_catalog(sample_data_path=SAMPLE_DATA)
         record = replace(
             records[0],
             artwork_file=None,
@@ -111,7 +112,7 @@ class ExploreLayoutTests(unittest.TestCase):
     ) -> None:
         from gi.repository import Gtk
 
-        records, _explore, _totals = gisheh.load_catalog(include_sample_data=True)
+        records, _explore, _totals = gisheh.load_catalog(sample_data_path=SAMPLE_DATA)
         record = next(item for item in records if item.media_type == "Shows")
         episode = gisheh.EpisodeInfo(
             id="episode-1",
@@ -469,6 +470,22 @@ class SettingsDialogTests(unittest.TestCase):
 
 
 class DataSourceCreditsTests(unittest.TestCase):
+    def test_sample_catalog_is_kept_out_of_production_resources(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        resource_manifest = (
+            project_root / "src/gisheh/io.github.arashe023.Gisheh.gresource.xml"
+        ).read_text(encoding="utf-8")
+        meson_source = (project_root / "src/meson.build").read_text(encoding="utf-8")
+
+        self.assertTrue(SAMPLE_DATA.is_file())
+        self.assertFalse((project_root / "src/gisheh/library.json").exists())
+        self.assertNotIn("library.json", resource_manifest)
+        self.assertNotIn("gisheh/library.json", meson_source)
+
+        records, explore, _totals = gisheh.load_catalog(sample_data_path=SAMPLE_DATA)
+        self.assertTrue(records)
+        self.assertTrue(explore)
+
     def test_tmdb_attribution_and_official_logo_are_bundled(self) -> None:
         application_source = (
             Path(__file__).resolve().parents[1] / "src/gisheh/application.py"
@@ -506,7 +523,7 @@ class SeasonProgressTests(unittest.TestCase):
     def _record_with_seasons(
         seasons: tuple[gisheh.SeasonInfo, ...],
     ) -> gisheh.TitleRecord:
-        records, _explore, _totals = gisheh.load_catalog(include_sample_data=True)
+        records, _explore, _totals = gisheh.load_catalog(sample_data_path=SAMPLE_DATA)
         base = next(record for record in records if record.media_type == "Shows")
         return replace(base, seasons=seasons)
 
@@ -677,7 +694,7 @@ class SeasonProgressTests(unittest.TestCase):
 
 class MediaCollectionTests(unittest.TestCase):
     def test_media_items_keep_primary_first_and_remove_duplicates(self) -> None:
-        records, _explore, _totals = gisheh.load_catalog(include_sample_data=True)
+        records, _explore, _totals = gisheh.load_catalog(sample_data_path=SAMPLE_DATA)
         with tempfile.TemporaryDirectory() as temporary_directory:
             first = Path(temporary_directory) / "first.jpg"
             second = Path(temporary_directory) / "second.jpg"

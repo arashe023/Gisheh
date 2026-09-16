@@ -2,11 +2,13 @@
 <schemalist gettext-domain="gisheh">
   <schema id="io.github.arashe023.Gisheh" path="/io/github/arashe023/Gisheh/">
     <key name="window-width" type="i">
-      <default>1360</default>
+      <range min="360" max="32767"/>
+      <default>1100</default>
       <summary>Window width</summary>
     </key>
     <key name="window-height" type="i">
-      <default>820</default>
+      <range min="480" max="32767"/>
+      <default>700</default>
       <summary>Window height</summary>
     </key>
     <key name="window-maximized" type="b">

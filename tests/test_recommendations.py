@@ -7,13 +7,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+SAMPLE_DATA = Path(__file__).resolve().parent / "fixtures/library.json"
 
 from gisheh import window as gisheh
 from gisheh.services import tmdb_client
 
 
 def _parent(media_type: str = "Movies") -> gisheh.TitleRecord:
-    records, _explore, _totals = gisheh.load_catalog(include_sample_data=True)
+    records, _explore, _totals = gisheh.load_catalog(sample_data_path=SAMPLE_DATA)
     base = next(record for record in records if record.media_type == media_type)
     namespace = "movie" if media_type == "Movies" else "tv"
     return replace(base, tmdb_id=10, tmdb_media_type=namespace)
@@ -174,7 +175,7 @@ def _controller() -> gisheh.GishehWindow:
 class RecommendationCacheTests(unittest.TestCase):
     def test_no_local_fallback_without_tmdb_data(self) -> None:
         controller = _controller()
-        records, _explore, _totals = gisheh.load_catalog(include_sample_data=True)
+        records, _explore, _totals = gisheh.load_catalog(sample_data_path=SAMPLE_DATA)
         first = records[0]
         controller.records_by_id = {record.id: record for record in records}
         self.assertEqual(controller._related_records(first), ())

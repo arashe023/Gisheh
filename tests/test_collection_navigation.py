@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 SOURCE_DIR = Path(__file__).resolve().parents[1] / "src"
+SAMPLE_DATA = Path(__file__).resolve().parent / "fixtures/library.json"
 sys.path.insert(0, str(SOURCE_DIR))
 
 from gisheh import window as gisheh
@@ -266,7 +267,7 @@ class DirectCollectionNavigationTests(unittest.TestCase):
 
 class CollectionBehaviorTests(unittest.TestCase):
     def _record(self):
-        records, _explore, _totals = gisheh.load_catalog(include_sample_data=True)
+        records, _explore, _totals = gisheh.load_catalog(sample_data_path=SAMPLE_DATA)
         return next(record for record in records if record.media_type == "Movies")
 
     def test_status_change_moves_title_between_collections(self) -> None:
@@ -410,6 +411,7 @@ class CollectionBehaviorTests(unittest.TestCase):
         group = SimpleNamespace(get_active_name=lambda: "grid")
         controller._on_view_changed(group, None)
         self.assertEqual(controller.view_mode, "grid")
+        self.assertEqual(controller.preferred_view_mode, "grid")
         self.assertEqual(calls[0], "refresh")
         self.assertIsInstance(calls[1], int)
 

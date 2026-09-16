@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 SOURCE_DIR = Path(__file__).resolve().parents[1] / "src"
+SAMPLE_DATA = Path(__file__).resolve().parent / "fixtures/library.json"
 sys.path.insert(0, str(SOURCE_DIR))
 
 from gisheh import window as gisheh
@@ -15,7 +16,7 @@ from gisheh.services import tmdb_client
 
 
 def _base_record() -> gisheh.TitleRecord:
-    records, _explore, _totals = gisheh.load_catalog(include_sample_data=True)
+    records, _explore, _totals = gisheh.load_catalog(sample_data_path=SAMPLE_DATA)
     base = next(record for record in records if record.media_type == "Shows")
     return base
 

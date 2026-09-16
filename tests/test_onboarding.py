@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 SOURCE_DIR = Path(__file__).resolve().parents[1] / "src"
+SAMPLE_DATA = Path(__file__).resolve().parent / "fixtures/library.json"
 sys.path.insert(0, str(SOURCE_DIR))
 
 from gisheh import state_store
@@ -156,7 +157,7 @@ class LocalFirstLibraryTests(unittest.TestCase):
 
     @staticmethod
     def _controller() -> tuple[gisheh.GishehWindow, gisheh.TitleRecord]:
-        records, explore, _totals = gisheh.load_catalog(include_sample_data=True)
+        records, explore, _totals = gisheh.load_catalog(sample_data_path=SAMPLE_DATA)
         record = explore[0]
         controller = object.__new__(gisheh.GishehWindow)
         controller.library_mode = gisheh.LIBRARY_MODE_LOCAL
@@ -249,7 +250,9 @@ class LocalFirstLibraryTests(unittest.TestCase):
                 destination,
             )
 
-            records, explore, _totals = gisheh.load_catalog(include_sample_data=True)
+            records, explore, _totals = gisheh.load_catalog(
+                sample_data_path=SAMPLE_DATA
+            )
             reader = object.__new__(gisheh.GishehWindow)
             reader.state_file = destination
             reader.library_mode = gisheh.LIBRARY_MODE_LOCAL

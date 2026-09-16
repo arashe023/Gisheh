@@ -11,6 +11,7 @@ from unittest.mock import Mock
 import gi
 
 SOURCE_DIR = Path(__file__).resolve().parents[1] / "src"
+SAMPLE_DATA = Path(__file__).resolve().parent / "fixtures/library.json"
 sys.path.insert(0, str(SOURCE_DIR))
 
 gi.require_version("Gtk", "4.0")
@@ -22,7 +23,7 @@ from gisheh import window as gisheh
 class DetailDataIntegrityTests(unittest.TestCase):
     @staticmethod
     def _record(**changes: object) -> gisheh.TitleRecord:
-        records, _explore, _totals = gisheh.load_catalog(include_sample_data=True)
+        records, _explore, _totals = gisheh.load_catalog(sample_data_path=SAMPLE_DATA)
         return replace(records[0], **changes)
 
     def test_rating_sources_do_not_fabricate_fallbacks(self) -> None:

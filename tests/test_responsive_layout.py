@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 SOURCE_DIR = Path(__file__).resolve().parents[1] / "src"
+SAMPLE_DATA = Path(__file__).resolve().parent / "fixtures/library.json"
 sys.path.insert(0, str(SOURCE_DIR))
 
 from gisheh import window as gisheh
@@ -153,7 +154,7 @@ class DetailsBackActionTests(unittest.TestCase):
 class RecordContextMenuTests(unittest.TestCase):
     @staticmethod
     def _record() -> gisheh.TitleRecord:
-        records, _explore, _totals = gisheh.load_catalog(include_sample_data=True)
+        records, _explore, _totals = gisheh.load_catalog(sample_data_path=SAMPLE_DATA)
         return records[0]
 
     def test_menu_contains_watch_watchlist_and_rating_controls(self) -> None:
@@ -342,7 +343,7 @@ class ExploreColumnTests(unittest.TestCase):
     ) -> None:
         from gi.repository import Gtk
 
-        records, _explore, _totals = gisheh.load_catalog(include_sample_data=True)
+        records, _explore, _totals = gisheh.load_catalog(sample_data_path=SAMPLE_DATA)
         record = records[0]
         overlay = Gtk.Overlay()
         overlay.set_child(Gtk.Box())
@@ -418,6 +419,118 @@ class ExploreColumnTests(unittest.TestCase):
         )
         self.assertLessEqual(minimum, 18)
         footer.measure(Gtk.Orientation.HORIZONTAL, 18)
+
+
+class DesktopSettingsTests(unittest.TestCase):
+    class Settings:
+        def __init__(self, values: dict[str, object], user_values=()) -> None:
+            self.values = values
+            self.user_values = set(user_values)
+
+        def get_user_value(self, key: str):
+            return self.values[key] if key in self.user_values else None
+
+        def get_string(self, key: str) -> str:
+            return str(self.values[key])
+
+        def get_int(self, key: str) -> int:
+            return int(self.values[key])
+
+        def get_boolean(self, key: str) -> bool:
+            return bool(self.values[key])
+
+        def set_string(self, key: str, value: str) -> None:
+            self.values[key] = value
+            self.user_values.add(key)
+
+        def set_int(self, key: str, value: int) -> None:
+            self.values[key] = value
+            self.user_values.add(key)
+
+        def set_boolean(self, key: str, value: bool) -> None:
+            self.values[key] = value
+            self.user_values.add(key)
+
+    def test_schema_defaults_match_documented_window_size(self) -> None:
+        schema_file = SOURCE_DIR.parent / "data/io.github.arashe023.Gisheh.gschema.xml"
+        schema = ET.parse(schema_file).getroot().find("schema")
+        self.assertIsNotNone(schema)
+        keys = {key.get("name"): key for key in schema.findall("key")}
+        self.assertEqual(keys["window-width"].findtext("default"), "1100")
+        self.assertEqual(keys["window-height"].findtext("default"), "700")
+        self.assertEqual(keys["window-width"].find("range").get("min"), "360")
+        self.assertEqual(keys["window-height"].find("range").get("min"), "480")
+
+    def test_view_mode_loads_from_gsettings(self) -> None:
+        controller = object.__new__(gisheh.GishehWindow)
+        controller.settings = self.Settings(
+            {"view-mode": "grid"}, user_values=("view-mode",)
+        )
+        controller.preferred_view_mode = "list"
+        controller.view_mode = "list"
+
+        controller._load_view_mode_preference()
+
+        self.assertEqual(controller.preferred_view_mode, "grid")
+        self.assertEqual(controller.view_mode, "grid")
+
+    def test_legacy_json_view_mode_is_migrated_once(self) -> None:
+        controller = object.__new__(gisheh.GishehWindow)
+        controller.settings = self.Settings({"view-mode": "list"})
+        controller.preferred_view_mode = "grid"
+        controller.view_mode = "grid"
+
+        controller._load_view_mode_preference()
+
+        self.assertEqual(controller.settings.values["view-mode"], "grid")
+        self.assertIn("view-mode", controller.settings.user_values)
+
+    def test_window_state_is_restored_and_saved(self) -> None:
+        controller = object.__new__(gisheh.GishehWindow)
+        controller.settings = self.Settings(
+            {
+                "window-width": 1280,
+                "window-height": 760,
+                "window-maximized": True,
+            }
+        )
+        calls: list[object] = []
+        controller.window = SimpleNamespace(
+            set_default_size=lambda width, height: calls.append((width, height)),
+            maximize=lambda: calls.append("maximize"),
+            is_maximized=lambda: False,
+            get_width=lambda: 1180,
+            get_height=lambda: 720,
+        )
+
+        controller._restore_window_state()
+        controller._save_window_state()
+
+        self.assertEqual(calls, [(1280, 760), "maximize"])
+        self.assertFalse(controller.settings.values["window-maximized"])
+        self.assertEqual(controller.settings.values["window-width"], 1180)
+        self.assertEqual(controller.settings.values["window-height"], 720)
+
+    def test_maximized_window_does_not_replace_its_normal_size(self) -> None:
+        controller = object.__new__(gisheh.GishehWindow)
+        controller.settings = self.Settings(
+            {
+                "window-width": 1100,
+                "window-height": 700,
+                "window-maximized": False,
+            }
+        )
+        controller.window = SimpleNamespace(
+            is_maximized=lambda: True,
+            get_width=lambda: 1920,
+            get_height=lambda: 1080,
+        )
+
+        controller._save_window_state()
+
+        self.assertTrue(controller.settings.values["window-maximized"])
+        self.assertEqual(controller.settings.values["window-width"], 1100)
+        self.assertEqual(controller.settings.values["window-height"], 700)
 
 
 class CompactRemovalTests(unittest.TestCase):

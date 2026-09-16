@@ -51,10 +51,8 @@ RESOURCE_DIR = Path(__file__).resolve().parent
 RESOURCE_PREFIX = "/io/github/arashe023/Gisheh"
 UI_RESOURCE = f"{RESOURCE_PREFIX}/ui/window.ui"
 CSS_RESOURCE = f"{RESOURCE_PREFIX}/style.css"
-LIBRARY_RESOURCE = f"{RESOURCE_PREFIX}/library.json"
 UI_FILE = RESOURCE_DIR / "ui" / "window.ui"
 CSS_FILE = RESOURCE_DIR / "style.css"
-DATA_FILE = RESOURCE_DIR / "library.json"
 _APP_LOGGER: logging.Logger | None = None
 
 
@@ -292,14 +290,22 @@ def clear_application_logs() -> None:
 
 def clear_desktop_preferences() -> None:
     """Reset any GSettings values left by this or an earlier Gisheh build."""
-    source = Gio.SettingsSchemaSource.get_default()
-    schema = source.lookup(APP_ID, True) if source is not None else None
-    if schema is None:
+    settings = application_settings()
+    if settings is None:
         return
-    settings = Gio.Settings.new_full(schema, None, None)
+    schema = settings.props.settings_schema
     for key in schema.list_keys():
         settings.reset(key)
     Gio.Settings.sync()
+
+
+def application_settings() -> Gio.Settings | None:
+    """Return the installed application settings, if its schema is available."""
+    source = Gio.SettingsSchemaSource.get_default()
+    schema = source.lookup(APP_ID, True) if source is not None else None
+    if schema is None:
+        return None
+    return Gio.Settings.new_full(schema, None, None)
 
 
 def clear_all_user_data(state_file: Path | None = None) -> None:
@@ -1087,34 +1093,23 @@ def title_record_to_mapping(record: TitleRecord) -> dict[str, Any]:
 
 def load_catalog(
     *,
-    include_sample_data: bool = False,
+    sample_data_path: Path | None = None,
 ) -> tuple[
     tuple[TitleRecord, ...],
     tuple[TitleRecord, ...],
     dict[str, dict[str, int]],
 ]:
-    try:
-        resource = Gio.resources_lookup_data(
-            LIBRARY_RESOURCE,
-            Gio.ResourceLookupFlags.NONE,
-        )
-        payload = json.loads(resource.get_data().decode("utf-8"))
-    except GLib.Error:
-        with DATA_FILE.open(encoding="utf-8") as source:
+    if sample_data_path is not None:
+        with sample_data_path.open(encoding="utf-8") as source:
             payload = json.load(source)
+    else:
+        payload = {"library": (), "explore": ()}
 
-    # Bundled records are retained solely as deterministic test fixtures.
-    # Production callers use the default, so both the personal library and
-    # Explore start empty and are populated only by user actions or live APIs.
-    records = (
-        tuple(TitleRecord.from_mapping(raw) for raw in payload["library"])
-        if include_sample_data
-        else ()
-    )
-    explore_records = (
-        tuple(TitleRecord.from_mapping(raw) for raw in payload.get("explore", ()))
-        if include_sample_data
-        else ()
+    # Production callers omit the fixture path, so both the personal library
+    # and Explore start empty and are populated only by user actions or APIs.
+    records = tuple(TitleRecord.from_mapping(raw) for raw in payload["library"])
+    explore_records = tuple(
+        TitleRecord.from_mapping(raw) for raw in payload.get("explore", ())
     )
     totals = {
         media_type: {status: 0 for status in COLLECTION_NAMES}
@@ -2514,8 +2509,10 @@ class GishehWindow:
         self.auto_calendar_refresh = True
         self.default_media = "Movies"
         self.preferred_view_mode = "list"
+        self.settings = application_settings()
         self.state_file = user_state_file()
         self._load_user_state()
+        self._load_view_mode_preference()
         self._apply_color_scheme()
         application_logger().info("Gisheh %s started", APP_VERSION)
 
@@ -2553,7 +2550,7 @@ class GishehWindow:
             self.builder = Gtk.Builder.new_from_file(str(UI_FILE))
         self.window: Adw.ApplicationWindow = self._object("window")
         self.window.set_application(application)
-        self.window.set_default_size(1100, 700)
+        self._restore_window_state()
 
         self._load_css()
         self._bind_objects()
@@ -3130,6 +3127,54 @@ class GishehWindow:
         except OSError as error:
             print(f"Gisheh could not save user state: {error}", file=sys.stderr)
 
+    def _load_view_mode_preference(self) -> None:
+        """Load the library view from GSettings, migrating the legacy JSON value."""
+        settings = getattr(self, "settings", None)
+        if settings is None:
+            return
+        if settings.get_user_value("view-mode") is None:
+            # Before GSettings was wired up, this preference lived in state.json.
+            # Preserve a non-default legacy value instead of silently losing it.
+            if self.preferred_view_mode != "list":
+                settings.set_string("view-mode", self.preferred_view_mode)
+            return
+        view_mode = settings.get_string("view-mode")
+        if view_mode in ("list", "grid"):
+            self.preferred_view_mode = view_mode
+            self.view_mode = view_mode
+
+    def _save_view_mode_preference(self) -> None:
+        settings = getattr(self, "settings", None)
+        if settings is not None:
+            settings.set_string("view-mode", self.preferred_view_mode)
+
+    def _restore_window_state(self) -> None:
+        """Apply the last normal size and maximized state to the GTK window."""
+        width, height, maximized = 1100, 700, False
+        settings = getattr(self, "settings", None)
+        if settings is not None:
+            width = settings.get_int("window-width")
+            height = settings.get_int("window-height")
+            maximized = settings.get_boolean("window-maximized")
+        self.window.set_default_size(width, height)
+        if maximized:
+            self.window.maximize()
+
+    def _save_window_state(self) -> None:
+        """Persist the normal window size without replacing it while maximized."""
+        settings = getattr(self, "settings", None)
+        if settings is None:
+            return
+        maximized = self.window.is_maximized()
+        settings.set_boolean("window-maximized", maximized)
+        if maximized:
+            return
+        width = self.window.get_width()
+        height = self.window.get_height()
+        if width > 0 and height > 0:
+            settings.set_int("window-width", width)
+            settings.set_int("window-height", height)
+
     def _build_header_controls(self) -> None:
         self.sidebar_toggle_button = Gtk.ToggleButton(icon_name="sidebar-show-symbolic")
         self.sidebar_toggle_button.set_active(True)
@@ -3393,7 +3438,9 @@ class GishehWindow:
         self.calendar_media_dropdown = Gtk.DropDown(
             model=Gtk.StringList.new(["All", "Movies", "Shows", "Anime"])
         )
-        self.calendar_media_dropdown.set_tooltip_text(_("Filter releases by media type"))
+        self.calendar_media_dropdown.set_tooltip_text(
+            _("Filter releases by media type")
+        )
         controls.append(self.calendar_media_dropdown)
 
         self.calendar_filter_button = Gtk.MenuButton(
@@ -4291,8 +4338,10 @@ class GishehWindow:
                 self._calendar_status(
                     "drive-harddisk-symbolic",
                     _("Local-first mode is active"),
-                    _("Calendar downloads use Simkl. Your local library remains fully "
-                    "available without connecting an account."),
+                    _(
+                        "Calendar downloads use Simkl. Your local library remains fully "
+                        "available without connecting an account."
+                    ),
                     action,
                     callback,
                 )
@@ -4303,7 +4352,9 @@ class GishehWindow:
                 self._calendar_status(
                     "dialog-error-symbolic",
                     _("Simkl integration is unavailable"),
-                    _("This build does not include Gisheh's public Simkl application ID."),
+                    _(
+                        "This build does not include Gisheh's public Simkl application ID."
+                    ),
                 )
             )
             return
@@ -4524,7 +4575,9 @@ class GishehWindow:
 
         data = Adw.PreferencesGroup(
             title=_("Data &amp; Diagnostics"),
-            description=_("Manage reproducible downloads and troubleshooting information."),
+            description=_(
+                "Manage reproducible downloads and troubleshooting information."
+            ),
         )
         self.settings_cache_row = Adw.ActionRow(
             title=_("Downloaded TMDB data"),
@@ -4673,9 +4726,11 @@ class GishehWindow:
         dialog = Adw.AlertDialog(
             heading=_("Choose how your library is managed"),
             body=(
-                _("Local-first keeps lists, ratings and watch history on this device. "
-                "Simkl sync uses your Simkl account as the shared library source. "
-                "Changing mode does not delete the saved local copy.")
+                _(
+                    "Local-first keeps lists, ratings and watch history on this device. "
+                    "Simkl sync uses your Simkl account as the shared library source. "
+                    "Changing mode does not delete the saved local copy."
+                )
             ),
         )
         dialog.add_response("cancel", _("Cancel"))
@@ -4709,6 +4764,7 @@ class GishehWindow:
         self.view_switcher.set_active_name(self.view_mode)
         self._updating = False
         self._refresh_results()
+        self._save_view_mode_preference()
         self._save_user_state()
 
     def _on_settings_auto_sync_changed(
@@ -4734,8 +4790,10 @@ class GishehWindow:
         dialog = Adw.AlertDialog(
             heading=_("Clear Calendar cache?"),
             body=(
-                _("Downloaded Simkl schedules will be removed. Gisheh can "
-                "download them again when Calendar is opened.")
+                _(
+                    "Downloaded Simkl schedules will be removed. Gisheh can "
+                    "download them again when Calendar is opened."
+                )
             ),
         )
         dialog.add_response("cancel", _("Cancel"))
@@ -4768,8 +4826,10 @@ class GishehWindow:
         dialog = Adw.AlertDialog(
             heading=_("Clear downloaded TMDB data?"),
             body=(
-                _("Downloaded posters, backdrops, cast photos and metadata will "
-                "be removed. Gisheh can download them again when needed.")
+                _(
+                    "Downloaded posters, backdrops, cast photos and metadata will "
+                    "be removed. Gisheh can download them again when needed."
+                )
             ),
         )
         dialog.add_response("cancel", _("Cancel"))
@@ -4798,10 +4858,12 @@ class GishehWindow:
         dialog = Adw.AlertDialog(
             heading=_("Reset Gisheh completely?"),
             body=(
-                _("Your local library, watch history, ratings, preferences, "
-                "connected accounts, downloaded artwork, metadata, Calendar "
-                "cache and application logs will be permanently deleted. "
-                "Gisheh will restart at the Welcome screen.")
+                _(
+                    "Your local library, watch history, ratings, preferences, "
+                    "connected accounts, downloaded artwork, metadata, Calendar "
+                    "cache and application logs will be permanently deleted. "
+                    "Gisheh will restart at the Welcome screen."
+                )
             ),
         )
         dialog.add_response("cancel", _("Cancel"))
@@ -5282,7 +5344,9 @@ class GishehWindow:
 
     def _build_habits_card(self, stats: dict[str, Any]) -> Gtk.Box:
         card = self._profile_card()
-        card.append(self._profile_heading(_("Watching habits"), _("All-time library totals")))
+        card.append(
+            self._profile_heading(_("Watching habits"), _("All-time library totals"))
+        )
         for label, value in (
             ("All time", format_watch_time(stats["total_minutes"])),
             ("Movie time", format_watch_time(stats["movie_minutes"])),
@@ -5335,7 +5399,9 @@ class GishehWindow:
 
     def _build_genres_card(self, stats: dict[str, Any]) -> Gtk.Box:
         card = self._profile_card()
-        card.append(self._profile_heading(_("Favorite genres"), _("Based on watched titles")))
+        card.append(
+            self._profile_heading(_("Favorite genres"), _("Based on watched titles"))
+        )
         top_genres = stats["genres"].most_common(6)
         maximum = top_genres[0][1] if top_genres else 1
         for genre, count in top_genres:
@@ -5497,9 +5563,11 @@ class GishehWindow:
             dialog = Adw.AlertDialog(
                 heading=_("Simkl is unavailable in this build"),
                 body=(
-                    _("The distributor must register Gisheh with Simkl and include "
-                    "the public Client ID when building the application. You never "
-                    "need to create a developer app or enter a Client Secret.")
+                    _(
+                        "The distributor must register Gisheh with Simkl and include "
+                        "the public Client ID when building the application. You never "
+                        "need to create a developer app or enter a Client Secret."
+                    )
                 ),
             )
             dialog.add_response("close", _("Close"))
@@ -5545,8 +5613,10 @@ class GishehWindow:
         dialog = Adw.AlertDialog(
             heading=_("Enter this code on Simkl"),
             body=(
-                _("The browser has been opened. Sign in to Simkl and enter the "
-                "code below. Gisheh will finish automatically after approval.")
+                _(
+                    "The browser has been opened. Sign in to Simkl and enter the "
+                    "code below. Gisheh will finish automatically after approval."
+                )
             ),
         )
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
@@ -6002,7 +6072,9 @@ class GishehWindow:
             )
             self._load_tmdb_library_async(records)
         else:
-            self._toast(_("Simkl state synced — connect TMDB to load titles and artwork"))
+            self._toast(
+                _("Simkl state synced — connect TMDB to load titles and artwork")
+            )
         self._finish_simkl_sync(len(records))
         return GLib.SOURCE_REMOVE
 
@@ -6148,8 +6220,10 @@ class GishehWindow:
         dialog = Adw.AlertDialog(
             heading=_("Disconnect Simkl?"),
             body=(
-                _("The local access token will be removed. Your Simkl account "
-                "and cloud library will not be changed.")
+                _(
+                    "The local access token will be removed. Your Simkl account "
+                    "and cloud library will not be changed."
+                )
             ),
         )
         dialog.add_response("cancel", _("Cancel"))
@@ -6247,7 +6321,9 @@ class GishehWindow:
         series_content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         series_content.append(self.episode_cards_box)
         series_content.append(self.seasons_list)
-        self.series_section = self._detail_section(_("Episodes & Seasons"), series_content)
+        self.series_section = self._detail_section(
+            _("Episodes & Seasons"), series_content
+        )
 
         self.videos_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         self.videos_scroller = self._horizontal_scroller(self.videos_box, 126)
@@ -8915,9 +8991,11 @@ class GishehWindow:
                 else "Configure this development build"
             ),
             body=(
-                _("Public releases should include Gisheh's approved TMDB credential. "
-                "For local development only, you can enter your own API Read Access "
-                "Token; it will be stored only for this user.")
+                _(
+                    "Public releases should include Gisheh's approved TMDB credential. "
+                    "For local development only, you can enter your own API Read Access "
+                    "Token; it will be stored only for this user."
+                )
             ),
         )
         entry = Gtk.PasswordEntry()
@@ -8970,8 +9048,10 @@ class GishehWindow:
         dialog = Adw.AlertDialog(
             heading=_("Remove the TMDB connection?"),
             body=(
-                _("The locally stored read token will be removed. Downloaded "
-                "artwork remains available until you clear the cache.")
+                _(
+                    "The locally stored read token will be removed. Downloaded "
+                    "artwork remains available until you clear the cache."
+                )
             ),
         )
         dialog.add_response("cancel", _("Cancel"))
@@ -10529,7 +10609,9 @@ class GishehWindow:
                 row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
                 row.set_tooltip_text(f"Open episode {episode.number}: {episode.title}")
             else:
-                row.set_tooltip_text(_("Wait for all episode details to finish loading"))
+                row.set_tooltip_text(
+                    _("Wait for all episode details to finish loading")
+                )
             self.season_episodes_list.append(row)
 
         if reset_scroll:
@@ -11447,6 +11529,8 @@ class GishehWindow:
             0,
         )
         self.view_mode = active
+        self.preferred_view_mode = active
+        self._save_view_mode_preference()
         self._refresh_results()
         if active == "grid":
             columns = grid_columns_for_width(self.results_scroller.get_width())
@@ -12266,6 +12350,7 @@ class GishehWindow:
 
     def _on_window_close_request(self, _window: Gtk.Window) -> bool:
         self._save_user_state()
+        self._save_window_state()
         if not self.details_open:
             return False
         self._set_details_open(False)
@@ -12761,8 +12846,10 @@ class GishehWindow:
             if outcome.noop:
                 self._update_details()
                 self._toast(
-                    _("This title is already marked as watched on Simkl. "
-                    "Use Change watched date or unmark it first.")
+                    _(
+                        "This title is already marked as watched on Simkl. "
+                        "Use Change watched date or unmark it first."
+                    )
                 )
                 return
             if not outcome.changed:
