@@ -41,13 +41,13 @@ from .state_store import (  # noqa: E402
     user_state_file as persistent_user_state_file,
     write_state,
 )
+from .version import APP_VERSION  # noqa: E402
 
 
-APP_ID = "io.github.gisheh.Gisheh"
+APP_ID = "io.github.arashe023.Gisheh"
 APP_NAME = "Gisheh"
-APP_VERSION = "1.3.0"
 RESOURCE_DIR = Path(__file__).resolve().parent
-RESOURCE_PREFIX = "/io/github/gisheh/Gisheh"
+RESOURCE_PREFIX = "/io/github/arashe023/Gisheh"
 UI_RESOURCE = f"{RESOURCE_PREFIX}/ui/window.ui"
 CSS_RESOURCE = f"{RESOURCE_PREFIX}/style.css"
 LIBRARY_RESOURCE = f"{RESOURCE_PREFIX}/library.json"
@@ -69,8 +69,14 @@ class PrivateRotatingFileHandler(RotatingFileHandler):
         return stream
 
 MEDIA_TYPES = ("Movies", "Shows", "Anime")
-STATUSES = ("Watching", "Watched", "On Hold", "Dropped")
-LIBRARY_FILTERS = (*STATUSES, "Watchlist")
+COLLECTIONS = (
+    ("Watching", "media-playback-start-symbolic"),
+    ("Watched", "emblem-ok-symbolic"),
+    ("On Hold", "media-playback-pause-symbolic"),
+    ("Dropped", "user-trash-symbolic"),
+    ("Watchlist", "bookmark-new-symbolic"),
+)
+COLLECTION_NAMES = tuple(name for name, _icon_name in COLLECTIONS)
 SORT_OPTIONS = (
     ("recent", "Last watched"),
     ("title", "Title"),
@@ -92,15 +98,6 @@ GRID_MAX_COLUMNS = 6
 GRID_ROW_HEIGHT = 226
 CALENDAR_TIMELINE_PAGE_SIZE = 120
 
-STATUS_ICONS = {
-    "Watching": "media-playback-start-symbolic",
-    "Watchlist": "bookmark-new-symbolic",
-    "Watched": "emblem-ok-symbolic",
-    "On Hold": "media-playback-pause-symbolic",
-    "Dropped": "user-trash-symbolic",
-}
-
-LISTS = (("Watchlist", "bookmark-new-symbolic"),)
 COLOR_SCHEMES = ("system", "light", "dark")
 COLOR_SCHEME_LABELS = ("Follow system", "Light", "Dark")
 
@@ -1130,7 +1127,7 @@ def load_catalog(
         else ()
     )
     totals = {
-        media_type: {status: 0 for status in LIBRARY_FILTERS}
+        media_type: {status: 0 for status in COLLECTION_NAMES}
         for media_type in MEDIA_TYPES
     }
     return records, explore_records, totals
@@ -1145,6 +1142,24 @@ def _tmdb_palette(tmdb_id: int) -> tuple[str, str, str]:
         f"#{red:02x}{green:02x}{blue:02x}",
         f"#{min(255, red + 74):02x}{min(255, green + 74):02x}{min(255, blue + 74):02x}",
     )
+
+
+def tmdb_rating_from_payload(payload: dict[str, Any]) -> float | None:
+    """Return a real TMDB rating only when TMDB reports at least one vote."""
+    vote_count = payload.get("vote_count")
+    vote_average = payload.get("vote_average")
+    if (
+        not isinstance(vote_count, int)
+        or isinstance(vote_count, bool)
+        or vote_count <= 0
+        or not isinstance(vote_average, (int, float))
+        or isinstance(vote_average, bool)
+    ):
+        return None
+    rating = float(vote_average)
+    if not math.isfinite(rating) or not 0.0 <= rating <= 10.0:
+        return None
+    return round(rating, 1)
 
 
 def title_record_from_tmdb(
@@ -1166,7 +1181,8 @@ def title_record_from_tmdb(
     ) or ("Uncategorized",)
     origin = raw.get("origin_country") or ()
     country = str(origin[0]) if origin else "—"
-    rating = round(float(raw.get("vote_average") or 0), 1)
+    tmdb_rating = tmdb_rating_from_payload(raw)
+    rating = tmdb_rating if tmdb_rating is not None else 0.0
     return TitleRecord(
         id=f"tmdb-{tmdb_namespace}-{tmdb_id}",
         title=title,
@@ -1188,7 +1204,11 @@ def title_record_from_tmdb(
         language=str(raw.get("original_language") or "—").upper(),
         availability="Released" if media_type == "Movies" else "Airing",
         network="TMDB",
-        external_ratings=(("TMDB", f"{rating:.1f}"),),
+        external_ratings=(
+            (("TMDB", f"{tmdb_rating:.1f}"),)
+            if tmdb_rating is not None
+            else ()
+        ),
         cast=(),
         seasons=(),
         recommendations=(),
@@ -1377,8 +1397,12 @@ def enrich_record_from_tmdb(
         for item in payload.get("networks", ())
         if isinstance(item, dict) and item.get("name")
     ]
-    tmdb_rating = round(float(payload.get("vote_average") or 0), 1)
-    external_ratings = (("TMDB", f"{tmdb_rating:.1f}"),)
+    tmdb_rating = tmdb_rating_from_payload(payload)
+    external_ratings = (
+        (("TMDB", f"{tmdb_rating:.1f}"),)
+        if tmdb_rating is not None
+        else ()
+    )
     if record.user_rating is not None:
         external_ratings += (("Your rating", str(record.user_rating)),)
 
@@ -1394,7 +1418,7 @@ def enrich_record_from_tmdb(
         title=title,
         year=year,
         runtime=runtime,
-        rating=tmdb_rating,
+        rating=tmdb_rating if tmdb_rating is not None else 0.0,
         genres=genres,
         country=", ".join(countries[:2]) or record.country,
         creator=", ".join(creators[:2]) or "TMDB",
@@ -2388,9 +2412,9 @@ class GishehWindow:
         self._library_records_by_canonical: dict[str, TitleRecord] = {}
         self._rebuild_record_aliases()
 
-        self.active_destination = "library"
+        self.active_destination = "collection"
         self.active_media = "Movies"
-        self.active_status = "Watched"
+        self.active_collection = "Watched"
         today = date.today()
         self.calendar_month = today.replace(day=1)
         self.calendar_selected_date = today
@@ -2414,7 +2438,30 @@ class GishehWindow:
         self.selected_id: str | None = (
             default_record.id if default_record is not None else None
         )
-        self.library_selected_id: str | None = self.selected_id
+        self.collection_selected_ids: dict[str, str | None] = {
+            collection: next(
+                (
+                    record.id
+                    for record in self.records
+                    if record.status == collection
+                ),
+                None,
+            )
+            for collection in COLLECTION_NAMES
+        }
+        self.collection_selected_ids[self.active_collection] = self.selected_id
+        self.collection_scroll_positions = {
+            collection: 0.0 for collection in COLLECTION_NAMES
+        }
+        self.collection_view_states: dict[str, dict[str, Any]] = {
+            collection: {
+                "query": "",
+                "genre": "All genres",
+                "sortKey": "recent",
+                "sortReversed": False,
+            }
+            for collection in COLLECTION_NAMES
+        }
         self.explore_selected_id: str | None = None
         self.visible_records: tuple[TitleRecord, ...] = ()
         self.explore_visible_records: tuple[TitleRecord, ...] = ()
@@ -2498,11 +2545,11 @@ class GishehWindow:
         self._updating_sidebar_toggle = False
         self._applying_responsive = False
         self.details_open = False
-        self._library_results_dirty = False
+        self._collection_results_dirty = False
         self.detail_record_id: str | None = None
         self.current_season_index = 0
         self.current_episode_index = 0
-        self.status_rows: dict[str, SidebarRow] = {}
+        self.collection_rows: dict[str, SidebarRow] = {}
         self._sidebar_docked = True
         self.effective_details_mode = DETAILS_INLINE
         self._responsive_layout_source_id = 0
@@ -2545,7 +2592,9 @@ class GishehWindow:
         self._build_detail_sections()
         self._connect_signals(application)
         self._update_genre_model()
+        initial_collection_scroll = self._restore_active_collection_state()
         self._refresh_results()
+        self._scroll_to_value(self.results_scroller, initial_collection_scroll)
         if self.tmdb_token:
             self._load_tmdb_explore_async()
         if (
@@ -2597,12 +2646,11 @@ class GishehWindow:
             "main_menu_button",
             "search_button",
             "destination_list",
-            "status_list",
-            "collections_list",
+            "collection_list",
             "profile_button",
             "sidebar_profile_avatar",
             "main_workspace",
-            "library_pane",
+            "collection_pane",
             "eyebrow_label",
             "section_title",
             "search_entry",
@@ -2659,7 +2707,7 @@ class GishehWindow:
 
     def _build_browser_stack(self) -> None:
         """Place the content pages beside an animated end details panel."""
-        self.main_workspace.remove(self.library_pane)
+        self.main_workspace.remove(self.collection_pane)
         self.main_workspace.remove(self.details_surface)
         divider = self.main_workspace.get_last_child()
         if isinstance(divider, Gtk.Separator):
@@ -2672,9 +2720,9 @@ class GishehWindow:
         self.browser_stack.set_vhomogeneous(False)
         self.browser_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
         self.browser_stack.set_transition_duration(160)
-        self.browser_stack.add_named(self.library_pane, "library")
+        self.browser_stack.add_named(self.collection_pane, "collection")
         self.browser_stack.add_named(self.explore_pane, "explore")
-        self.browser_stack.set_visible_child_name("library")
+        self.browser_stack.set_visible_child_name("collection")
 
         self.content_overlay = Gtk.Overlay()
         self.content_overlay.set_hexpand(True)
@@ -2934,7 +2982,7 @@ class GishehWindow:
             for record_id, status in personal_state.get(
                 "statusOverrides", {}
             ).items()
-            if is_valid_id(record_id) and status in LIBRARY_FILTERS
+            if is_valid_id(record_id) and status in COLLECTION_NAMES
         }
         if not self.simkl_connected:
             self.episode_status_overrides = {
@@ -2958,6 +3006,61 @@ class GishehWindow:
             for key, value in personal_state.get("titleWatchedAt", {}).items()
             if isinstance(value, str) and is_valid_id(str(key))
         }
+        if not hasattr(self, "active_collection"):
+            self.active_collection = "Watched"
+        if not hasattr(self, "collection_selected_ids"):
+            self.collection_selected_ids = {
+                collection: None for collection in COLLECTION_NAMES
+            }
+        if not hasattr(self, "collection_scroll_positions"):
+            self.collection_scroll_positions = {
+                collection: 0.0 for collection in COLLECTION_NAMES
+            }
+        if not hasattr(self, "collection_view_states"):
+            self.collection_view_states = {
+                collection: {
+                    "query": "",
+                    "genre": "All genres",
+                    "sortKey": "recent",
+                    "sortReversed": False,
+                }
+                for collection in COLLECTION_NAMES
+            }
+        collection_state = payload.get("collectionState", {})
+        if isinstance(collection_state, dict):
+            active_collection = collection_state.get("active")
+            if active_collection in COLLECTION_NAMES:
+                self.active_collection = str(active_collection)
+            views = collection_state.get("views", {})
+            if isinstance(views, dict):
+                valid_sort_keys = {key for key, _label in SORT_OPTIONS}
+                for collection in COLLECTION_NAMES:
+                    raw_view = views.get(collection)
+                    if not isinstance(raw_view, dict):
+                        continue
+                    selected_id = raw_view.get("selectedId")
+                    if selected_id is None or is_valid_id(selected_id):
+                        self.collection_selected_ids[collection] = (
+                            str(selected_id) if selected_id is not None else None
+                        )
+                    scroll = raw_view.get("scroll")
+                    if isinstance(scroll, (int, float)) and scroll >= 0:
+                        self.collection_scroll_positions[collection] = float(scroll)
+                    query = raw_view.get("query")
+                    if isinstance(query, str):
+                        self.collection_view_states[collection]["query"] = query
+                    genre = raw_view.get("genre")
+                    if isinstance(genre, str):
+                        self.collection_view_states[collection]["genre"] = genre
+                    sort_key = raw_view.get("sortKey")
+                    if sort_key in valid_sort_keys:
+                        self.collection_view_states[collection]["sortKey"] = sort_key
+                    sort_reversed = raw_view.get("sortReversed")
+                    if isinstance(sort_reversed, bool):
+                        self.collection_view_states[collection][
+                            "sortReversed"
+                        ] = sort_reversed
+        self.selected_id = self.collection_selected_ids[self.active_collection]
         if isinstance(preferences, dict):
             color_scheme = preferences.get("colorScheme")
             if color_scheme in COLOR_SCHEMES:
@@ -2985,7 +3088,14 @@ class GishehWindow:
             else:
                 self.completed.discard(record_id)
 
-    def _save_user_state(self) -> None:
+    def _save_user_state(self, *, remember_collection: bool = True) -> None:
+        if (
+            remember_collection
+            and
+            getattr(self, "active_destination", None) == "collection"
+            and hasattr(self, "results_scroller")
+        ):
+            self._remember_active_collection_state()
         payload = read_state(self.state_file)
         personal_state = {
             "bookmarks": sorted(self.bookmarks),
@@ -3015,6 +3125,41 @@ class GishehWindow:
             "defaultMedia": self.default_media,
             "libraryView": self.preferred_view_mode,
             "libraryMode": getattr(self, "library_mode", LIBRARY_MODE_LOCAL),
+        }
+        active_collection = getattr(self, "active_collection", "Watched")
+        selected_ids = getattr(
+            self,
+            "collection_selected_ids",
+            {collection: None for collection in COLLECTION_NAMES},
+        )
+        scroll_positions = getattr(
+            self,
+            "collection_scroll_positions",
+            {collection: 0.0 for collection in COLLECTION_NAMES},
+        )
+        view_states = getattr(
+            self,
+            "collection_view_states",
+            {
+                collection: {
+                    "query": "",
+                    "genre": "All genres",
+                    "sortKey": "recent",
+                    "sortReversed": False,
+                }
+                for collection in COLLECTION_NAMES
+            },
+        )
+        payload["collectionState"] = {
+            "active": active_collection,
+            "views": {
+                collection: {
+                    "selectedId": selected_ids.get(collection),
+                    "scroll": scroll_positions.get(collection, 0.0),
+                    **view_states.get(collection, {}),
+                }
+                for collection in COLLECTION_NAMES
+            },
         }
         try:
             write_state(payload, self.state_file)
@@ -3091,11 +3236,6 @@ class GishehWindow:
         self.main_menu_button.set_menu_model(menu)
 
     def _build_sidebar(self) -> None:
-        self.library_row = SidebarRow(
-            "library",
-            "Library",
-            "folder-symbolic",
-        )
         self.explore_row = SidebarRow(
             "explore",
             "Explore",
@@ -3106,34 +3246,24 @@ class GishehWindow:
             "Calendar",
             "x-office-calendar-symbolic",
         )
-        self.destination_list.append(self.library_row)
         self.destination_list.append(self.explore_row)
         self.destination_list.append(self.calendar_row)
 
-        for status in STATUSES:
+        for collection, icon_name in COLLECTIONS:
             row = SidebarRow(
-                status,
-                status,
-                STATUS_ICONS[status],
-            )
-            self.status_rows[status] = row
-            self.status_list.append(row)
-
-        self._updating = True
-        self.destination_list.select_row(self.library_row)
-        self.status_list.select_row(self.status_rows[self.active_status])
-        self._updating = False
-
-        self.list_rows: dict[str, SidebarRow] = {}
-        for label, icon_name in LISTS:
-            row = SidebarRow(
-                label,
-                label,
+                collection,
+                collection,
                 icon_name,
             )
-            self.list_rows[label] = row
-            self.collections_list.append(row)
-        self.watchlist_row = self.list_rows["Watchlist"]
+            self.collection_rows[collection] = row
+            self.collection_list.append(row)
+
+        self._updating = True
+        self.destination_list.unselect_all()
+        self.collection_list.select_row(
+            self.collection_rows[self.active_collection]
+        )
+        self._updating = False
 
     def _build_result_views(self) -> None:
         self.list_box = Gtk.ListBox()
@@ -3161,11 +3291,11 @@ class GishehWindow:
             description="Try a different search term or clear the genre filter.",
         )
         self.empty_page.add_css_class("empty-status")
-        clear_button = Gtk.Button(label="Clear filters")
-        clear_button.set_halign(Gtk.Align.CENTER)
-        clear_button.add_css_class("pill")
-        clear_button.connect("clicked", self._on_clear_filters)
-        self.empty_page.set_child(clear_button)
+        self.empty_clear_button = Gtk.Button(label="Clear filters")
+        self.empty_clear_button.set_halign(Gtk.Align.CENTER)
+        self.empty_clear_button.add_css_class("pill")
+        self.empty_clear_button.connect("clicked", self._on_clear_filters)
+        self.empty_page.set_child(self.empty_clear_button)
 
     def _build_explore_view(self) -> None:
         self.explore_empty_page = Adw.StatusPage(
@@ -3297,9 +3427,7 @@ class GishehWindow:
         controls.set_hexpand(True)
         self.calendar_scope_switcher = Adw.ToggleGroup()
         self.calendar_scope_switcher.add(Adw.Toggle(name="my", label="My Calendar"))
-        self.calendar_scope_switcher.add(Adw.Toggle(name="all", label="All Releases"))
-        self.calendar_scope_switcher.set_active_name(self.calendar_scope)
-        self.calendar_scope_switcher.set_tooltip_text("Calendar source")
+        self.calendar_scope_switcher.set_active_name("my")
         controls.append(self.calendar_scope_switcher)
 
         self.calendar_media_dropdown = Gtk.DropDown(
@@ -3397,9 +3525,20 @@ class GishehWindow:
             return str(value) if value else None
         return None
 
-    def _start_calendar_refresh(self, force: bool = False) -> bool:
+    def _start_calendar_refresh(
+        self,
+        force: bool = False,
+        *,
+        supersede: bool = False,
+    ) -> bool:
         if self._calendar_refresh_inflight:
-            return GLib.SOURCE_REMOVE
+            if not supersede:
+                return GLib.SOURCE_REMOVE
+            # Month navigation must not be blocked by a request for the month
+            # that was previously visible. Invalidate that request so its
+            # eventual result cannot replace the newly selected month.
+            self._calendar_generation += 1
+            self._calendar_refresh_inflight = False
         if self.library_mode == LIBRARY_MODE_LOCAL:
             if self.active_destination == "calendar":
                 self._render_calendar()
@@ -3477,8 +3616,10 @@ class GishehWindow:
         self.calendar_timeline_limit = CALENDAR_TIMELINE_PAGE_SIZE
 
     def _on_calendar_scope_changed(self, group: Adw.ToggleGroup, _parameter: Any) -> None:
-        self.calendar_scope = group.get_active_name() or "my"
-        self.calendar_filter_button.set_visible(self.calendar_scope == "my")
+        # The only available source is My Calendar. Keeping this assignment
+        # explicit prevents a stale or programmatic value from exposing the
+        # removed All Releases source.
+        self.calendar_scope = "my"
         self._reset_calendar_timeline()
         self._render_calendar()
 
@@ -3505,14 +3646,14 @@ class GishehWindow:
         self.calendar_selected_date = self.calendar_month
         self._reset_calendar_timeline()
         self.calendar_snapshot = None
-        self._start_calendar_refresh(False)
+        self._start_calendar_refresh(False, supersede=True)
 
     def _on_calendar_next(self, _button: Gtk.Button) -> None:
         self.calendar_month = self._shift_month(self.calendar_month, 1)
         self.calendar_selected_date = self.calendar_month
         self._reset_calendar_timeline()
         self.calendar_snapshot = None
-        self._start_calendar_refresh(False)
+        self._start_calendar_refresh(False, supersede=True)
 
     def _on_calendar_today(self, _button: Gtk.Button) -> None:
         today = date.today()
@@ -3522,7 +3663,7 @@ class GishehWindow:
         self._reset_calendar_timeline()
         if month_changed:
             self.calendar_snapshot = None
-            self._start_calendar_refresh(False)
+            self._start_calendar_refresh(False, supersede=True)
         else:
             self._render_calendar()
 
@@ -3605,17 +3746,16 @@ class GishehWindow:
                 continue
             if self.calendar_media_filter != "all" and event.media_type != self.calendar_media_filter:
                 continue
-            if self.calendar_scope == "my":
-                record = self._calendar_record(event)
-                if record is None or not self._calendar_record_is_in_library(record):
-                    continue
-                status = self._effective_status(record)
-                if status == "Watched" and not self.calendar_include_watched:
-                    continue
-                if status == "Dropped" and not self.calendar_include_dropped:
-                    continue
-                if status not in {"Watching", "Watchlist", "On Hold", "Watched", "Dropped"}:
-                    continue
+            record = self._calendar_record(event)
+            if record is None or not self._calendar_record_is_in_library(record):
+                continue
+            status = self._effective_status(record)
+            if status == "Watched" and not self.calendar_include_watched:
+                continue
+            if status == "Dropped" and not self.calendar_include_dropped:
+                continue
+            if status not in {"Watching", "Watchlist", "On Hold", "Watched", "Dropped"}:
+                continue
             visible.append(event)
         return tuple(visible)
 
@@ -3782,9 +3922,6 @@ class GishehWindow:
 
             header = Gtk.Box(spacing=8)
             header.add_css_class("calendar-day-header")
-            clock = Gtk.Image.new_from_icon_name("appointment-soon-symbolic")
-            clock.add_css_class("dim-label")
-            header.append(clock)
             heading = Gtk.Label(
                 label=self._calendar_day_heading(day),
                 xalign=0,
@@ -4189,7 +4326,7 @@ class GishehWindow:
             ))
             return
         events = self._calendar_events()
-        if self.calendar_scope == "my" and not events:
+        if not events:
             eligible_count = self._calendar_eligible_library_count()
             self.calendar_content.append(self._calendar_status(
                 "bookmark-new-symbolic", "Nothing scheduled in My Calendar",
@@ -4200,12 +4337,6 @@ class GishehWindow:
                     "and On Hold titles appear as soon as Simkl schedules them."
                 ),
                 "Open Explore", self._open_explore_from_calendar,
-            ))
-            return
-        if not events:
-            self.calendar_content.append(self._calendar_status(
-                "x-office-calendar-symbolic", "Nothing scheduled",
-                "No releases match the selected month and filters.",
             ))
             return
         self.calendar_timeline_view = self._calendar_timeline(events)
@@ -5760,7 +5891,19 @@ class GishehWindow:
             records[0] if records else None,
         )
         self.selected_id = default_record.id if default_record is not None else None
-        self.library_selected_id = self.selected_id
+        valid_record_ids = {record.id for record in records}
+        for collection in COLLECTION_NAMES:
+            selected_id = self.collection_selected_ids.get(collection)
+            if selected_id not in valid_record_ids:
+                self.collection_selected_ids[collection] = next(
+                    (
+                        record.id
+                        for record in records
+                        if record.status == collection
+                    ),
+                    None,
+                )
+        self.selected_id = self.collection_selected_ids[self.active_collection]
         valid_canonical_ids = set(self._library_records_by_canonical)
         self.status_overrides = {
             record_id: status
@@ -6093,7 +6236,6 @@ class GishehWindow:
         self.cast_section = self._detail_section(
             "Cast & Crew",
             self.cast_scroller,
-            action_label="See all",
         )
 
         self.episode_cards_box = Adw.WrapBox()
@@ -6377,7 +6519,6 @@ class GishehWindow:
         title: str,
         content: Gtk.Widget,
         *,
-        action_label: str | None = None,
         end_widget: Gtk.Widget | None = None,
     ) -> Gtk.Box:
         section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
@@ -6392,17 +6533,6 @@ class GishehWindow:
         end_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         if end_widget is not None:
             end_box.append(end_widget)
-        if action_label is not None:
-            action = Gtk.Button(label=action_label)
-            action.add_css_class("flat")
-            action.add_css_class("caption")
-            action.connect(
-                "clicked",
-                lambda _button, section_title=title: self._toast(
-                    f"Open all {section_title.lower()}"
-                ),
-            )
-            end_box.append(action)
         if isinstance(content, Gtk.ScrolledWindow):
             end_box.append(self._carousel_controls(content, title))
         if end_box.get_first_child() is not None:
@@ -6520,10 +6650,9 @@ class GishehWindow:
             "row-selected",
             self._on_destination_selected,
         )
-        self.status_list.connect("row-selected", self._on_status_selected)
-        self.collections_list.connect(
+        self.collection_list.connect(
             "row-selected",
-            self._on_library_list_selected,
+            self._on_collection_selected,
         )
         self.list_box.connect("row-selected", self._on_list_selected)
         self.list_box.connect("row-activated", self._on_list_activated)
@@ -6652,7 +6781,7 @@ class GishehWindow:
         # pass, so cards are never measured against a guessed future pane.
         if self._details_resize_source_id or self._sidebar_resize_source_id:
             return GLib.SOURCE_REMOVE
-        width = self.explore_pane.get_width() or self.library_pane.get_width()
+        width = self.explore_pane.get_width() or self.collection_pane.get_width()
         if width <= 0:
             return GLib.SOURCE_REMOVE
         columns = self._stable_explore_columns_for_width(
@@ -6710,7 +6839,7 @@ class GishehWindow:
         """Return the column width and column count for Explore cards."""
         pane_width = (
             self.explore_pane.get_width()
-            or self.library_pane.get_width()
+            or self.collection_pane.get_width()
             or self._last_explore_layout_width
             or 620
         )
@@ -6943,7 +7072,7 @@ class GishehWindow:
 
     def _refresh_tmdb_library_ui(self) -> bool:
         self._tmdb_library_refresh_source_id = 0
-        if self.active_destination == "library":
+        if self.active_destination == "collection":
             scroll_position = self.results_scroller.get_vadjustment().get_value()
             self._refresh_results()
             self._scroll_to_value(self.results_scroller, scroll_position)
@@ -6960,8 +7089,10 @@ class GishehWindow:
         if generation != self._tmdb_library_generation:
             return GLib.SOURCE_REMOVE
         self._update_genre_model(preserve=True)
-        if self.active_destination == "library":
+        if self.active_destination == "collection":
+            scroll_position = self.results_scroller.get_vadjustment().get_value()
             self._refresh_results()
+            self._scroll_to_value(self.results_scroller, scroll_position)
         self._toast(f"TMDB catalog ready for {completed}/{total} titles")
         return GLib.SOURCE_REMOVE
 
@@ -8774,6 +8905,8 @@ class GishehWindow:
         self._tmdb_cast_images_loading.pop(record_id, None)
         self._tmdb_gallery_images_loading.pop(record_id, None)
         print(f"Gisheh TMDB details: {message}", file=sys.stderr)
+        if self.selected_id == record_id:
+            self._update_details()
         return GLib.SOURCE_REMOVE
 
     def _on_preferences_clicked(self, _button: Gtk.Button | None) -> None:
@@ -9003,7 +9136,7 @@ class GishehWindow:
     def _library_total(self, media_type: str) -> int:
         return sum(
             self._status_total(media_type, status)
-            for status in LIBRARY_FILTERS
+            for status in COLLECTION_NAMES
         )
 
     def _filtered_explore_records(self) -> tuple[TitleRecord, ...]:
@@ -9068,7 +9201,7 @@ class GishehWindow:
         )
         return (*self.records, *promoted)
 
-    def _filtered_records(self) -> tuple[TitleRecord, ...]:
+    def _filtered_collection_records(self) -> tuple[TitleRecord, ...]:
         query = self.search_entry.get_text().strip().casefold()
         records = []
         for record in self._library_records():
@@ -9077,7 +9210,7 @@ class GishehWindow:
             ).casefold()
             if record.media_type != self.active_media:
                 continue
-            if self._effective_status(record) != self.active_status:
+            if self._effective_status(record) != self.active_collection:
                 continue
             if self.genre != "All genres" and self.genre not in record.genres:
                 continue
@@ -9105,11 +9238,11 @@ class GishehWindow:
         return tuple(records)
 
     def _refresh_results(self) -> None:
-        self.visible_records = self._filtered_records()
+        self.visible_records = self._filtered_collection_records()
         visible_ids = {record.id for record in self.visible_records}
         if self.selected_id not in visible_ids:
             self.selected_id = self.visible_records[0].id if self.visible_records else None
-        self.library_selected_id = self.selected_id
+        self.collection_selected_ids[self.active_collection] = self.selected_id
 
         self._clear_container(self.list_box)
         self._clear_container(self.grid_box)
@@ -9143,11 +9276,29 @@ class GishehWindow:
         has_filters = bool(self.search_entry.get_text().strip()) or self.genre != "All genres"
         if has_filters:
             description = f"{sample_count} matching {'title' if sample_count == 1 else 'titles'}"
+            self.empty_page.set_icon_name("system-search-symbolic")
+            self.empty_page.set_title("No titles found")
+            self.empty_page.set_description(
+                "Try a different search term or clear the genre filter."
+            )
         else:
             description = f"Showing {sample_count} recent {'entry' if sample_count == 1 else 'entries'}"
+            empty_copy = {
+                "Watching": "Start watching a title to see it here.",
+                "Watched": "Titles you finish will appear here.",
+                "On Hold": "Titles you pause will appear here.",
+                "Dropped": "Titles you stop watching will appear here.",
+                "Watchlist": "Bookmark a title to save it for later.",
+            }
+            self.empty_page.set_icon_name(dict(COLLECTIONS)[self.active_collection])
+            self.empty_page.set_title(f"No {self.active_collection.lower()} titles")
+            self.empty_page.set_description(empty_copy[self.active_collection])
+        self.empty_clear_button.set_visible(has_filters)
 
-        self.eyebrow_label.set_label(f"My library / {self.active_media}")
-        self.section_title.set_label(self.active_status)
+        self.eyebrow_label.set_label(
+            f"{self.active_media} / {self.active_collection}"
+        )
+        self.section_title.set_label(self.active_collection)
         self.result_count.set_label("All")
         self.result_description.set_label(description)
         self.search_entry.set_placeholder_text(
@@ -9857,19 +10008,55 @@ class GishehWindow:
 
         self.detail_poster_host.append(overlay)
 
-    def _rating_sources(self, record: TitleRecord) -> tuple[tuple[str, str], ...]:
-        if record.external_ratings:
-            return record.external_ratings[:4]
-        return (
-            ("Gisheh", f"{record.rating:.1f}"),
-            ("IMDb", f"{min(10.0, record.rating + 0.1):.1f}"),
-            ("Meta", str(min(99, round(record.rating * 10)))),
-            ("Match", f"{min(99, round(record.rating * 10 + 8))}%"),
+    @staticmethod
+    def _rating_sources(record: TitleRecord) -> tuple[tuple[str, str], ...]:
+        valid_sources: dict[str, str] = {}
+        for source, raw_value in record.external_ratings:
+            if source not in {"TMDB", "Your rating"} or source in valid_sources:
+                continue
+            value = raw_value.strip()
+            try:
+                numeric_value = float(value)
+            except ValueError:
+                continue
+            if (
+                not value
+                or not math.isfinite(numeric_value)
+                or not 0 <= numeric_value <= 10
+            ):
+                continue
+            valid_sources[source] = value
+        return tuple(
+            (source, valid_sources[source])
+            for source in ("TMDB", "Your rating")
+            if source in valid_sources
         )
+
+    @staticmethod
+    def _tmdb_rating_value(record: TitleRecord) -> str | None:
+        for source, value in GishehWindow._rating_sources(record):
+            if source == "TMDB":
+                return value
+        return None
 
     def _populate_detail_ratings(self, record: TitleRecord) -> None:
         self._clear_container(self.detail_ratings_host)
-        for index, (source, value) in enumerate(self._rating_sources(record)):
+        rating_sources = self._rating_sources(record)
+        if not rating_sources:
+            message = Gtk.Label(
+                label=(
+                    "Loading ratings…"
+                    if record.id in self._tmdb_details_loading
+                    else "No rating information is available."
+                )
+            )
+            message.set_wrap(True)
+            message.set_xalign(0)
+            message.add_css_class("caption")
+            message.add_css_class("dim-label")
+            self.detail_ratings_host.attach(message, 0, 0, 2, 1)
+            return
+        for index, (source, value) in enumerate(rating_sources):
             chip = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
             chip.set_hexpand(True)
             chip.add_css_class("detail-metric")
@@ -9886,14 +10073,7 @@ class GishehWindow:
 
     @staticmethod
     def _cast_members(record: TitleRecord) -> tuple[CastMember, ...]:
-        if record.cast:
-            return record.cast[:12]
-        return (
-            CastMember(record.creator, "Director / Creator"),
-            CastMember("Lead Ensemble", "Cast"),
-            CastMember("Supporting Ensemble", "Cast"),
-            CastMember("Guest Artist", "Cast"),
-        )
+        return record.cast[:12]
 
     def _populate_cast(self, record: TitleRecord) -> None:
         self._populate_cast_container(self.cast_box, record)
@@ -9903,7 +10083,7 @@ class GishehWindow:
         container: Gtk.Box,
         record: TitleRecord,
         *,
-        allow_fallback: bool = True,
+        empty_message: str = "Cast information is unavailable.",
     ) -> None:
         self._clear_container(container)
         if record.id in self._tmdb_details_loading:
@@ -9911,9 +10091,9 @@ class GishehWindow:
                 container.append(self._loading_cast_placeholder())
             return
 
-        members = self._cast_members(record) if allow_fallback else record.cast[:12]
+        members = self._cast_members(record)
         if not members:
-            empty = Gtk.Label(label="No guest cast information is available.")
+            empty = Gtk.Label(label=empty_message)
             empty.add_css_class("dim-label")
             empty.add_css_class("caption")
             container.append(empty)
@@ -10437,7 +10617,7 @@ class GishehWindow:
         self._populate_cast_container(
             self.episode_cast_box,
             replace(record, cast=episode.cast),
-            allow_fallback=False,
+            empty_message="Guest cast information is unavailable for this episode.",
         )
         self._update_episode_watch_controls(record, season_index, episode)
         if reset_scroll:
@@ -10698,7 +10878,10 @@ class GishehWindow:
         self.detail_status_label.set_label(self._effective_status(record))
         self.detail_overline.set_label(" · ".join(record.genres))
         self.detail_title.set_label(record.title)
-        self.community_rating.set_label(f"★ {record.rating:.1f}")
+        tmdb_rating = self._tmdb_rating_value(record)
+        self.community_rating.set_visible(tmdb_rating is not None)
+        if tmdb_rating is not None:
+            self.community_rating.set_label(f"★ {tmdb_rating}")
         self.watched_button.set_label(
             "✓  Watched" if is_completed else "＋  Mark watched"
         )
@@ -10733,15 +10916,42 @@ class GishehWindow:
         if record_changed:
             self._scroll_to_top(self.details_scroller)
 
-    def _sync_library_filter_selection(self) -> None:
+    def _remember_active_collection_state(self) -> None:
+        """Store the active collection's selection, scroll, and filters."""
+        collection = self.active_collection
+        self.collection_selected_ids[collection] = self.selected_id
+        self.collection_scroll_positions[collection] = (
+            self.results_scroller.get_vadjustment().get_value()
+        )
+        self.collection_view_states[collection] = {
+            "query": self.search_entry.get_text(),
+            "genre": self.genre,
+            "sortKey": self.sort_key,
+            "sortReversed": self.sort_reversed,
+        }
+
+    def _restore_active_collection_state(self) -> float:
+        """Restore controls for the active collection and return its scroll."""
+        state = self.collection_view_states[self.active_collection]
+        self.selected_id = self.collection_selected_ids[self.active_collection]
+        self.genre = str(state["genre"])
+        self.sort_key = str(state["sortKey"])
+        self.sort_reversed = bool(state["sortReversed"])
+        self._updating = True
+        self.search_entry.set_text(str(state["query"]))
+        sort_keys = tuple(key for key, _label in SORT_OPTIONS)
+        self.sort_dropdown.set_selected(sort_keys.index(self.sort_key))
+        self._updating = False
+        self._update_genre_model(preserve=True)
+        return self.collection_scroll_positions[self.active_collection]
+
+    def _sync_collection_selection(self) -> None:
         was_updating = self._updating
         self._updating = True
-        if self.active_status == "Watchlist":
-            self.status_list.unselect_all()
-            self.collections_list.select_row(self.watchlist_row)
-        else:
-            self.collections_list.unselect_all()
-            self.status_list.select_row(self.status_rows[self.active_status])
+        self.destination_list.unselect_all()
+        self.collection_list.select_row(
+            self.collection_rows[self.active_collection]
+        )
         self._updating = was_updating
 
     def _update_sort_icon(self) -> None:
@@ -10793,30 +11003,15 @@ class GishehWindow:
             return
         if row.key != self.active_destination and self.details_open:
             self._set_details_open(False)
-        if row.key == "library":
-            if self.active_destination == "library":
-                return
-            if self.active_destination == "explore":
-                self.explore_selected_id = self.selected_id
-            self.active_destination = "library"
-            self.media_switcher.set_visible(True)
-            self.browser_stack.set_visible_child_name("library")
-            self.selected_id = self.library_selected_id
-            self._sync_library_filter_selection()
-            self._refresh_results()
-            self._close_sidebar_overlay()
-            self._queue_responsive_layout()
-            return
         if row.key == "calendar":
-            if self.active_destination == "library":
-                self.library_selected_id = self.selected_id
+            if self.active_destination == "collection":
+                self._remember_active_collection_state()
             elif self.active_destination == "explore":
                 self.explore_selected_id = self.selected_id
             self.active_destination = "calendar"
             self.media_switcher.set_visible(False)
             self._updating = True
-            self.status_list.unselect_all()
-            self.collections_list.unselect_all()
+            self.collection_list.unselect_all()
             self._updating = False
             self.browser_stack.set_visible_child_name("calendar")
             self._close_sidebar_overlay()
@@ -10828,13 +11023,12 @@ class GishehWindow:
             return
         if row.key != "explore":
             return
-        if self.active_destination == "library":
-            self.library_selected_id = self.selected_id
+        if self.active_destination == "collection":
+            self._remember_active_collection_state()
         self.active_destination = "explore"
         self.media_switcher.set_visible(True)
         self._updating = True
-        self.status_list.unselect_all()
-        self.collections_list.unselect_all()
+        self.collection_list.unselect_all()
         self._updating = False
         self.browser_stack.set_visible_child_name("explore")
         self._update_explore_genre_model()
@@ -10849,16 +11043,15 @@ class GishehWindow:
             return
         if self.details_open:
             self._set_details_open(False)
-        if self.active_destination == "library":
-            self.library_selected_id = self.selected_id
+        if self.active_destination == "collection":
+            self._remember_active_collection_state()
         elif self.active_destination == "explore":
             self.explore_selected_id = self.selected_id
         self.active_destination = "profile"
         self.media_switcher.set_visible(False)
         self._updating = True
         self.destination_list.unselect_all()
-        self.status_list.unselect_all()
-        self.collections_list.unselect_all()
+        self.collection_list.unselect_all()
         self._updating = False
         self.browser_stack.set_visible_child_name("profile")
         self._refresh_profile()
@@ -10925,7 +11118,7 @@ class GishehWindow:
                 return int(surface.get_width())
         except Exception:
             pass
-        return self.explore_pane.get_width() or self.library_pane.get_width() or 0
+        return self.explore_pane.get_width() or self.collection_pane.get_width() or 0
 
     def _apply_responsive_layout(self) -> bool:
         self._responsive_layout_source_id = 0
@@ -10970,7 +11163,7 @@ class GishehWindow:
         allocation.  A cached width is only useful before the first allocation.
         """
         del details_open
-        allocated = self.explore_pane.get_width() or self.library_pane.get_width()
+        allocated = self.explore_pane.get_width() or self.collection_pane.get_width()
         if allocated > 0:
             return allocated
         return max(0, self._last_explore_layout_width)
@@ -11142,53 +11335,43 @@ class GishehWindow:
         self._queue_explore_resize()
         return GLib.SOURCE_REMOVE
 
-    def _on_status_selected(
+    def _on_collection_selected(
         self,
         _list_box: Gtk.ListBox,
         row: SidebarRow | None,
     ) -> None:
         if self._updating or row is None:
             return
-        self._updating = True
-        self.collections_list.unselect_all()
-        self._updating = False
-        self._activate_library_filter(row.key)
+        self._activate_collection(row.key)
 
-    def _activate_library_filter(self, filter_name: str) -> None:
-        returning_to_library = self.active_destination != "library"
-        previous_status = self.active_status
-        if returning_to_library:
+    def _activate_collection(self, collection_name: str) -> None:
+        """Open one direct collection destination in the shared view."""
+        if collection_name not in COLLECTION_NAMES:
+            return
+        returning_to_collection = self.active_destination != "collection"
+        collection_changed = collection_name != self.active_collection
+        if not returning_to_collection and not collection_changed:
+            self._sync_collection_selection()
+            self._close_sidebar_overlay()
+            return
+        if self.details_open:
+            self._set_details_open(False)
+        if not returning_to_collection:
+            self._remember_active_collection_state()
+        else:
             if self.active_destination == "explore":
                 self.explore_selected_id = self.selected_id
-            self.active_destination = "library"
-            self.media_switcher.set_visible(True)
-            self._updating = True
-            self.destination_list.select_row(self.library_row)
-            self._updating = False
-            self.browser_stack.set_visible_child_name("library")
-            self.selected_id = self.library_selected_id
-        self.active_status = filter_name
-        if not returning_to_library or filter_name != previous_status:
-            self._updating = True
-            self.search_entry.set_text("")
-            self.genre_dropdown.set_selected(0)
-            self.genre = "All genres"
-            self._updating = False
+        self.active_destination = "collection"
+        self.active_collection = collection_name
+        self.media_switcher.set_visible(True)
+        self.browser_stack.set_visible_child_name("collection")
+        self._sync_collection_selection()
+        scroll_position = self._restore_active_collection_state()
         self._refresh_results()
+        self._scroll_to_value(self.results_scroller, scroll_position)
+        self._save_user_state(remember_collection=False)
         self._close_sidebar_overlay()
         self._queue_responsive_layout()
-
-    def _on_library_list_selected(
-        self,
-        _list_box: Gtk.ListBox,
-        row: SidebarRow | None,
-    ) -> None:
-        if self._updating or row is None:
-            return
-        self._updating = True
-        self.status_list.unselect_all()
-        self._updating = False
-        self._activate_library_filter(row.key)
 
     def _on_search_changed(self, _entry: Gtk.SearchEntry) -> None:
         if not self._updating:
@@ -11633,14 +11816,14 @@ class GishehWindow:
         if self.active_destination == "profile":
             self._refresh_profile()
         else:
-            self._defer_library_refresh_for_detail_mutation()
+            self._defer_collection_refresh_for_detail_mutation()
 
-    def _defer_library_refresh_for_detail_mutation(self) -> None:
+    def _defer_collection_refresh_for_detail_mutation(self) -> None:
         """Keep the open title stable, then refresh its filter after closing."""
-        if self.active_destination != "library":
+        if self.active_destination != "collection":
             return
         if getattr(self, "details_open", False):
-            self._library_results_dirty = True
+            self._collection_results_dirty = True
             return
         self._refresh_results()
 
@@ -11833,7 +12016,7 @@ class GishehWindow:
             if self.active_destination == "profile":
                 self._refresh_profile()
             else:
-                self._defer_library_refresh_for_detail_mutation()
+                self._defer_collection_refresh_for_detail_mutation()
 
         if not self._simkl_writable():
             if self._local_mode_active():
@@ -11915,7 +12098,7 @@ class GishehWindow:
             if self.active_destination == "profile":
                 self._refresh_profile()
             else:
-                self._defer_library_refresh_for_detail_mutation()
+                self._defer_collection_refresh_for_detail_mutation()
 
         if not self._simkl_writable():
             if self._local_mode_active():
@@ -11948,7 +12131,7 @@ class GishehWindow:
         if self._updating or row is None:
             return
         self.selected_id = row.record.id
-        self.library_selected_id = self.selected_id
+        self.collection_selected_ids[self.active_collection] = self.selected_id
         self._updating = True
         grid_child = self._grid_children.get(self.selected_id)
         if grid_child is not None:
@@ -11964,7 +12147,7 @@ class GishehWindow:
         row: Gtk.ListBoxRow,
     ) -> None:
         self.selected_id = row.record.id
-        self.library_selected_id = self.selected_id
+        self.collection_selected_ids[self.active_collection] = self.selected_id
         self._update_details()
         self._set_details_open(True)
         self._load_tmdb_details_async(self.records_by_id[self.selected_id])
@@ -11977,7 +12160,7 @@ class GishehWindow:
             return
         child = selected[0]
         self.selected_id = child.record.id
-        self.library_selected_id = self.selected_id
+        self.collection_selected_ids[self.active_collection] = self.selected_id
         self._updating = True
         list_row = self._list_rows.get(self.selected_id)
         if list_row is not None:
@@ -11993,7 +12176,7 @@ class GishehWindow:
         child: Gtk.FlowBoxChild,
     ) -> None:
         self.selected_id = child.record.id
-        self.library_selected_id = self.selected_id
+        self.collection_selected_ids[self.active_collection] = self.selected_id
         self._update_details()
         self._set_details_open(True)
         self._load_tmdb_details_async(self.records_by_id[self.selected_id])
@@ -12105,9 +12288,9 @@ class GishehWindow:
     def _on_details_transition_complete(self) -> bool:
         self._details_resize_source_id = 0
         self._pending_details_mode = None
-        if not self.details_open and getattr(self, "_library_results_dirty", False):
-            self._library_results_dirty = False
-            if self.active_destination == "library":
+        if not self.details_open and getattr(self, "_collection_results_dirty", False):
+            self._collection_results_dirty = False
+            if self.active_destination == "collection":
                 self._refresh_results()
         self._queue_explore_resize()
         self._queue_responsive_layout()
@@ -12144,6 +12327,7 @@ class GishehWindow:
         return True
 
     def _on_window_close_request(self, _window: Gtk.Window) -> bool:
+        self._save_user_state()
         if not self.details_open:
             return False
         self._set_details_open(False)
@@ -12360,7 +12544,8 @@ class GishehWindow:
         elif self.active_destination == "explore":
             self._refresh_explore(reset_scroll=False)
         else:
-            self._refresh_results()
+            self._update_details()
+            self._defer_collection_refresh_for_detail_mutation()
 
     def _run_simkl_mutation(
         self,
@@ -12568,7 +12753,8 @@ class GishehWindow:
             elif self.active_destination == "explore":
                 self._refresh_explore(reset_scroll=False)
             else:
-                self._refresh_results()
+                self._update_details()
+                self._defer_collection_refresh_for_detail_mutation()
 
         if not self._simkl_writable():
             if self._local_mode_active():
@@ -12673,7 +12859,7 @@ class GishehWindow:
             self.status_overrides[canonical] = "Watched"
             self._save_user_state()
             self._update_details()
-            self._refresh_results()
+            self._defer_collection_refresh_for_detail_mutation()
             self._toast("Watch date changed locally")
             return
 
@@ -12741,8 +12927,12 @@ class GishehWindow:
             self._save_user_state()
             if self.active_destination == "explore":
                 self._refresh_explore(reset_scroll=False)
+            elif self.active_destination == "profile":
+                self._refresh_profile()
             else:
-                self._refresh_results()
+                if self.selected_id in self.records_by_id:
+                    self._update_details()
+                self._defer_collection_refresh_for_detail_mutation()
 
         self._write_simkl_list_change(
             record,
@@ -12786,7 +12976,8 @@ class GishehWindow:
             elif self.active_destination == "profile":
                 self._refresh_profile()
             else:
-                self._refresh_results()
+                self._update_details()
+                self._defer_collection_refresh_for_detail_mutation()
 
         if getattr(self, "library_mode", LIBRARY_MODE_LOCAL) == LIBRARY_MODE_LOCAL:
             apply_rating()

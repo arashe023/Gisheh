@@ -67,7 +67,7 @@ class LocalFirstLibraryTests(unittest.TestCase):
         self.assertEqual(
             totals,
             {
-                media_type: {status: 0 for status in gisheh.LIBRARY_FILTERS}
+                media_type: {status: 0 for status in gisheh.COLLECTION_NAMES}
                 for media_type in gisheh.MEDIA_TYPES
             },
         )

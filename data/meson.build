@@ -1,4 +1,8 @@
-app_id = 'io.github.gisheh.Gisheh'
+app_id = 'io.github.arashe023.Gisheh'
+
+release_configuration = configuration_data()
+release_configuration.set('PROJECT_VERSION', meson.project_version())
+release_configuration.set('RELEASE_DATE', release_date)
 
 desktop_file = configure_file(
   input: app_id + '.desktop.in',
@@ -8,10 +12,12 @@ desktop_file = configure_file(
   install_dir: get_option('datadir') / 'applications',
 )
 
-install_data(
-  app_id + '.metainfo.xml.in',
+metainfo_file = configure_file(
+  input: app_id + '.metainfo.xml.in',
+  output: app_id + '.metainfo.xml',
+  configuration: release_configuration,
+  install: true,
   install_dir: get_option('datadir') / 'metainfo',
-  rename: app_id + '.metainfo.xml',
 )
 
 install_data(
@@ -41,7 +47,7 @@ if appstreamcli.found()
   test(
     'validate-appstream',
     appstreamcli,
-    args: ['validate', '--no-net', meson.current_source_dir() / (app_id + '.metainfo.xml.in')],
+    args: ['validate', '--no-net', metainfo_file],
   )
 endif
 

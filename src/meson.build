@@ -1,7 +1,8 @@
-app_id = 'io.github.gisheh.Gisheh'
+app_id = 'io.github.arashe023.Gisheh'
 python_package_dir = python.get_install_dir() / 'gisheh'
 
 build_configuration = configuration_data()
+build_configuration.set_quoted('APP_VERSION', meson.project_version())
 build_configuration.set_quoted('SIMKL_CLIENT_ID', get_option('simkl_client_id'))
 build_configuration.set_quoted('TMDB_READ_TOKEN', get_option('tmdb_read_token'))
 configured_build_module = configure_file(
@@ -19,6 +20,7 @@ python.install_sources(
     'gisheh/main.py',
     'gisheh/onboarding.py',
     'gisheh/state_store.py',
+    'gisheh/version.py',
     'gisheh/window.py',
   ),
   subdir: 'gisheh',
@@ -62,7 +64,7 @@ gisheh_launcher = custom_target(
 glib_compile_resources = find_program('glib-compile-resources')
 gisheh_resources = custom_target(
   'gisheh-resources',
-  input: 'gisheh/io.github.gisheh.Gisheh.gresource.xml',
+  input: 'gisheh/io.github.arashe023.Gisheh.gresource.xml',
   depend_files: files(
     'gisheh/ui/window.ui',
     'gisheh/style.css',

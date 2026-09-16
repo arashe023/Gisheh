@@ -18,7 +18,7 @@ from .services import simkl_client
 from .state_store import LIBRARY_MODE_LOCAL, LIBRARY_MODE_SIMKL
 
 
-RESOURCE_PREFIX = "/io/github/gisheh/Gisheh"
+RESOURCE_PREFIX = "/io/github/arashe023/Gisheh"
 CSS_RESOURCE = f"{RESOURCE_PREFIX}/style.css"
 CSS_FILE = Path(__file__).resolve().parent / "style.css"
 

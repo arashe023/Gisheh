@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gresources>
-  <gresource prefix="/io/github/gisheh/Gisheh">
+  <gresource prefix="/io/github/arashe023/Gisheh">
     <file preprocess="xml-stripblanks">ui/window.ui</file>
     <file>style.css</file>
     <file>library.json</file>

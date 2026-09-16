@@ -24,7 +24,7 @@ from .window import APP_ID, APP_NAME, APP_VERSION, GishehWindow
 
 TMDB_URL = "https://www.themoviedb.org"
 SIMKL_URL = "https://simkl.com"
-TMDB_LOGO_RESOURCE = "/io/github/gisheh/Gisheh/assets/tmdb-logo.svg"
+TMDB_LOGO_RESOURCE = "/io/github/arashe023/Gisheh/assets/tmdb-logo.svg"
 TMDB_NOTICE = (
     "This product uses the TMDB API but is not endorsed or certified by TMDB."
 )

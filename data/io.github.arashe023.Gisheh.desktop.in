@@ -2,11 +2,11 @@
 Name=Gisheh
 Comment=Browse and track movies, shows and anime
 Exec=@EXECUTABLE@
-Icon=io.github.gisheh.Gisheh
+Icon=io.github.arashe023.Gisheh
 Terminal=false
 Type=Application
 Categories=AudioVideo;Video;
 PrefersNonDefaultGPU=true
 Keywords=Movies;Shows;Anime;Watchlist;
 StartupNotify=true
-StartupWMClass=io.github.gisheh.Gisheh
+StartupWMClass=io.github.arashe023.Gisheh

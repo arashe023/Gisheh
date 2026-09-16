@@ -15,6 +15,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from ..version import APP_VERSION
 from . import image_http
 
 try:
@@ -23,10 +24,10 @@ except ImportError:
     BUNDLED_TMDB_READ_TOKEN = ""
 
 
-APP_ID = "io.github.gisheh.Gisheh"
+APP_ID = "io.github.arashe023.Gisheh"
 API_ROOT = "https://api.themoviedb.org/3"
 IMAGE_ROOT = "https://image.tmdb.org/t/p"
-USER_AGENT = "Gisheh/1.3.0"
+USER_AGENT = f"Gisheh/{APP_VERSION}"
 
 
 class TmdbError(RuntimeError):

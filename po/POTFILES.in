@@ -1,6 +1,6 @@
-data/io.github.gisheh.Gisheh.desktop.in
-data/io.github.gisheh.Gisheh.metainfo.xml.in
-data/io.github.gisheh.Gisheh.gschema.xml
+data/io.github.arashe023.Gisheh.desktop.in
+data/io.github.arashe023.Gisheh.metainfo.xml.in
+data/io.github.arashe023.Gisheh.gschema.xml
 src/gisheh/application.py
 src/gisheh/window.py
 src/gisheh/ui/window.ui

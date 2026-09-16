@@ -2,6 +2,8 @@
 
 ## منتشرنشده
 
+## 1.4.0 — 2026-09-12
+
 - افزودن Welcome Tour سه‌مرحله‌ای بومی به سبک GNOME برای معرفی برنامه و انتخاب Local-first یا Simkl
 - افزودن حالت Local-first واقعی با ذخیرهٔ خصوصی و اتمیک Watchlist، Rating، تاریخ تماشا، وضعیت فصل/اپیزود و رکورد کامل عناوین روی دستگاه
 - افزودن انتخاب Data ownership در Preferences و نشانگر واقعی `Local`، `Synced` یا `Not synced` در HeaderBar

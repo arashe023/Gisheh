@@ -41,6 +41,7 @@ def _item(
         "first_air_date": "" if media_type == "movie" else year,
         "overview": f"Overview of {title}",
         "vote_average": rating,
+        "vote_count": 100,
         "genre_ids": [28, 12],
         "poster_path": f"/poster{tmdb_id}.jpg",
         "backdrop_path": f"/backdrop{tmdb_id}.jpg",

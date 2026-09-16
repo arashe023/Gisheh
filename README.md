@@ -1,8 +1,8 @@
-# Gisheh 1.3.0 — Python + GTK4 + libadwaita
+# Gisheh — Python + GTK4 + libadwaita
 
 یک برنامهٔ بومی لینوکس برای مدیریت فیلم، سریال و انیمه که با Python، GTK4 و libadwaita پیاده‌سازی شده است.
 
-نسخهٔ فعلی: `1.3.0` — شمارهٔ مرجع نسخه در فایل `VERSION` نگهداری می‌شود.
+شمارهٔ مرجع نسخه در فایل `VERSION` نگهداری می‌شود و Meson تمام خروجی‌های نسخه‌دار را هنگام build از آن تولید می‌کند.
 
 ## امکانات
 
@@ -44,10 +44,11 @@
 - `src/gisheh/application.py`: چرخهٔ استاندارد `Adw.Application` و actionهای عمومی
 - `src/gisheh/onboarding.py`: Welcome Tour و انتخاب روش مدیریت کتابخانه
 - `src/gisheh/state_store.py`: خواندن و نوشتن اتمیک state خصوصی کاربر
+- `src/gisheh/version.py`: نسخهٔ مشترک runtime با منبع اصلی `VERSION`
 - `src/gisheh/window.py`: کنترلر پنجره، نماها و رویدادهای رابط
 - `src/gisheh/ui/window.ui`: رابط GtkBuilder با `AdwNavigationSplitView`
 - `src/gisheh/services/`: کلاینت‌های مستقل TMDB، Simkl و انتقال تصاویر
-- `src/gisheh/io.github.gisheh.Gisheh.gresource.xml`: بسته‌بندی UI، CSS و fixtureهای تست در GResource
+- `src/gisheh/io.github.arashe023.Gisheh.gresource.xml`: بسته‌بندی UI، CSS و fixtureهای تست در GResource
 - `data/`: Desktop Entry، AppStream، GSettings و آیکن‌های hicolor
 - `build-aux/flatpak/`: manifest قابل‌شناسایی توسط GNOME Builder و Flatpak Builder
 - `po/`: زیرساخت gettext و فهرست منابع قابل‌ترجمه
@@ -65,7 +66,7 @@ Explore فقط از داده‌ها و تصاویر زندهٔ TMDB استفاد
 - **Local-first:** نیازی به حساب ندارد، دادهٔ شخصی را آپلود نمی‌کند و نسخهٔ کامل رکوردهای افزوده‌شده از Explore را برای راه‌اندازی بعدی روی دستگاه نگه می‌دارد.
 - **Sync with Simkl:** ورود PIN را آغاز می‌کند و Simkl را به‌عنوان منبع همگام کتابخانه، امتیازها و تاریخچه انتخاب می‌کند.
 
-انتخاب در `~/.local/state/io.github.gisheh.Gisheh/state.json` ذخیره می‌شود. در Flatpak این مسیر داخل فضای خصوصی برنامه قرار می‌گیرد. وضعیت فعال با نشانگر `Local` یا `Synced/Not synced` در HeaderBar قابل مشاهده است و از Preferences → Data ownership می‌توان روش مدیریت کتابخانه را تغییر داد. Welcome Tour فقط در اولین اجرا یا پس از اجرای Reset Gisheh نمایش داده می‌شود و ورودی تکراری آن در منوی اصلی وجود ندارد.
+انتخاب در `~/.local/state/io.github.arashe023.Gisheh/state.json` ذخیره می‌شود. در Flatpak این مسیر داخل فضای خصوصی برنامه قرار می‌گیرد. وضعیت فعال با نشانگر `Local` یا `Synced/Not synced` در HeaderBar قابل مشاهده است و از Preferences → Data ownership می‌توان روش مدیریت کتابخانه را تغییر داد. Welcome Tour فقط در اولین اجرا یا پس از اجرای Reset Gisheh نمایش داده می‌شود و ورودی تکراری آن در منوی اصلی وجود ندارد.
 
 اندازهٔ پیش‌فرض پنجره `1100×700` است تا در فضای کاری رایج `1366×768` جا شود؛ حداقل معتبر حدود `360×480` است.
 
@@ -98,7 +99,7 @@ meson install -C build
 
 ```bash
 flatpak-builder --user --install --force-clean flatpak-build \
-  build-aux/flatpak/io.github.gisheh.Gisheh.json
+  build-aux/flatpak/io.github.arashe023.Gisheh.json
 ```
 
 نسخه‌های عمومی باید Client ID ثبت‌شدهٔ Gisheh در Simkl و credential تأییدشدهٔ TMDB را هنگام build همراه برنامه کنند. در این حالت کاربر برای Simkl فقط دکمهٔ Connect را می‌زند و PIN نمایش‌داده‌شده را در مرورگر تأیید می‌کند؛ ساختن برنامهٔ توسعه‌دهنده یا واردکردن Client Secret لازم نیست. Access Token سیمکل ابتدا در Secret Service سیستم ذخیره می‌شود و اگر keyring در دسترس نباشد، برنامه از فایل خصوصی با مجوز `0600` استفاده می‌کند.
@@ -125,12 +126,14 @@ meson setup build \
 .
 ├── meson.build
 ├── meson_options.txt
-├── build-aux/flatpak/io.github.gisheh.Gisheh.json
+├── VERSION
+├── RELEASE_DATE
+├── build-aux/flatpak/io.github.arashe023.Gisheh.json
 ├── data/
 │   ├── meson.build
-│   ├── io.github.gisheh.Gisheh.desktop.in
-│   ├── io.github.gisheh.Gisheh.metainfo.xml.in
-│   ├── io.github.gisheh.Gisheh.gschema.xml
+│   ├── io.github.arashe023.Gisheh.desktop.in
+│   ├── io.github.arashe023.Gisheh.metainfo.xml.in
+│   ├── io.github.arashe023.Gisheh.gschema.xml
 │   └── icons/hicolor/
 ├── po/
 ├── src/
@@ -141,6 +144,7 @@ meson setup build \
 │       ├── main.py
 │       ├── onboarding.py
 │       ├── state_store.py
+│       ├── version.py
 │       ├── window.py
 │       ├── services/
 │       ├── ui/window.ui

@@ -11,8 +11,9 @@ from typing import Iterable
 
 import httpx
 
+from ..version import APP_VERSION
 
-USER_AGENT = "Gisheh/1.3.0"
+USER_AGENT = f"Gisheh/{APP_VERSION}"
 DEFAULT_RETRY_DELAYS = (0.0, 0.5, 2.0)
 _CLIENT: httpx.Client | None = None
 _CLIENT_LOCK = threading.Lock()

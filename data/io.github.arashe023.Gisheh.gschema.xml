@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist gettext-domain="gisheh">
-  <schema id="io.github.gisheh.Gisheh" path="/io/github/gisheh/Gisheh/">
+  <schema id="io.github.arashe023.Gisheh" path="/io/github/arashe023/Gisheh/">
     <key name="window-width" type="i">
       <default>1360</default>
       <summary>Window width</summary>

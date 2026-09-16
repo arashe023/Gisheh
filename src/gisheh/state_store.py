@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 
-APP_ID = "io.github.gisheh.Gisheh"
+APP_ID = "io.github.arashe023.Gisheh"
 LIBRARY_MODE_LOCAL = "local"
 LIBRARY_MODE_SIMKL = "simkl"
 LIBRARY_MODES = (LIBRARY_MODE_LOCAL, LIBRARY_MODE_SIMKL)

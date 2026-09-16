@@ -286,7 +286,7 @@ def _titled_controller() -> gisheh.GishehWindow:
     controller.ratings = {}
     controller.episode_status_overrides = {}
     controller.episode_watched_at = {}
-    controller.active_destination = "library"
+    controller.active_destination = "collection"
     controller.simkl_client_id = None
     controller.simkl_token = None
     controller.simkl_connected = False
@@ -396,7 +396,7 @@ class TitleWatchedFlowTests(unittest.TestCase):
         controller.completed.add(controller._canonical_record_id(record))
         controller.selected_id = record.id
         controller.records_by_id = {record.id: record}
-        controller.active_destination = "library"
+        controller.active_destination = "collection"
         shown: list[str] = []
         controller._show_watched_title_actions = lambda item: shown.append(item.id)  # type: ignore[method-assign]
         mutations: list[str] = []
@@ -501,7 +501,7 @@ class TitleWatchedFlowTests(unittest.TestCase):
         controller.records = (library_record,)
         controller.explore_records = (explore_record,)
         controller.active_media = "Movies"
-        controller.active_status = "Watched"
+        controller.active_collection = "Watched"
         self.assertNotIn(explore_record.id, [item.id for item in controller._library_records()])
         controller.completed.add(explore_record.id)
         controller.status_overrides[explore_record.id] = "Watched"
@@ -733,7 +733,7 @@ class SeasonEpisodeWatchedFlowTests(unittest.TestCase):
         controller.selected_id = record.id
         controller.detail_record_id = record.id
         controller.details_open = True
-        controller._library_results_dirty = False
+        controller._collection_results_dirty = False
         controller.library_mode = gisheh.LIBRARY_MODE_LOCAL
         controller.records = ()
         controller.library_ids = set()
@@ -756,7 +756,7 @@ class SeasonEpisodeWatchedFlowTests(unittest.TestCase):
         self.assertEqual(controller.selected_id, record.id)
         self.assertEqual(controller.detail_record_id, record.id)
         self.assertEqual(result_refreshes, [])
-        self.assertTrue(controller._library_results_dirty)
+        self.assertTrue(controller._collection_results_dirty)
 
         controller._unmark_episode_watched(
             record,
@@ -767,7 +767,7 @@ class SeasonEpisodeWatchedFlowTests(unittest.TestCase):
         self.assertEqual(controller.selected_id, record.id)
         self.assertEqual(controller.detail_record_id, record.id)
         self.assertEqual(result_refreshes, [])
-        self.assertTrue(controller._library_results_dirty)
+        self.assertTrue(controller._collection_results_dirty)
 
     def test_episode_mutation_is_episode_scoped(self) -> None:
         record, controller = self._show()

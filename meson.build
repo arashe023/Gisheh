@@ -1,6 +1,6 @@
 project(
   'gisheh',
-  version: '1.3.0',
+  version: files('VERSION'),
   meson_version: '>= 1.3.0',
   license: 'MIT',
 )
@@ -8,6 +8,9 @@ project(
 gnome = import('gnome')
 i18n = import('i18n')
 python = import('python').find_installation('python3')
+fs = import('fs')
+
+release_date = fs.read('RELEASE_DATE').strip()
 
 dependency('gtk4', version: '>= 4.12')
 dependency('libadwaita-1', version: '>= 1.9')

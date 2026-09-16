@@ -12,7 +12,7 @@ from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlsplit
 
 from gisheh.services import simkl_client
-from gisheh.window import GishehWindow
+from gisheh.window import CALENDAR_TIMELINE_PAGE_SIZE, GishehWindow
 
 
 TV_PAYLOAD = {
@@ -226,7 +226,7 @@ class CalendarIdentityAndFilterTests(unittest.TestCase):
         controller.calendar_include_dropped = True
         self.assertEqual(len(controller._calendar_events()), 1)
 
-    def test_title_outside_library_appears_only_in_all_releases(self) -> None:
+    def test_title_outside_library_is_hidden_from_my_calendar(self) -> None:
         controller, library, explore = self.controller()
         controller.records = ()
         controller.records_by_id = {explore.id: explore}
@@ -234,8 +234,6 @@ class CalendarIdentityAndFilterTests(unittest.TestCase):
         controller._library_records_by_canonical = {}
         controller._tmdb_record_aliases = {}
         self.assertEqual(controller._calendar_events(), ())
-        controller.calendar_scope = "all"
-        self.assertEqual(len(controller._calendar_events()), 1)
 
     def test_timeline_groups_events_by_local_day_in_chronological_order(self) -> None:
         controller, _library, _explore = self.controller()
@@ -303,6 +301,52 @@ class CalendarIdentityAndFilterTests(unittest.TestCase):
         copy = row.get_first_child().get_next_sibling()
         title = copy.get_first_child().get_next_sibling()
         self.assertIn("title-3", title.get_css_classes())
+
+    def test_month_navigation_supersedes_an_inflight_refresh(self) -> None:
+        controller, _library, _explore = self.controller()
+        controller._calendar_refresh_inflight = True
+        controller._calendar_generation = 4
+        controller.calendar_snapshot = object()
+        controller.calendar_timeline_limit = 999
+        refreshes: list[tuple[bool, bool]] = []
+
+        def start_refresh(force: bool = False, *, supersede: bool = False) -> bool:
+            refreshes.append((force, supersede))
+            return False
+
+        controller._start_calendar_refresh = start_refresh
+        controller._on_calendar_next(mock.Mock())
+
+        self.assertEqual(controller.calendar_month, date(2026, 8, 1))
+        self.assertEqual(controller.calendar_selected_date, date(2026, 8, 1))
+        self.assertIsNone(controller.calendar_snapshot)
+        self.assertEqual(controller.calendar_timeline_limit, CALENDAR_TIMELINE_PAGE_SIZE)
+        self.assertEqual(refreshes, [(False, True)])
+
+    def test_superseding_refresh_invalidates_old_generation_and_starts_new_worker(
+        self,
+    ) -> None:
+        controller, _library, _explore = self.controller()
+        controller._calendar_refresh_inflight = True
+        controller._calendar_generation = 4
+        controller.library_mode = "simkl"
+        controller.active_destination = "calendar"
+        controller.simkl_client_id = "client"
+        controller.simkl_settings = {}
+        controller.calendar_refresh_button = mock.Mock()
+
+        with mock.patch("gisheh.window.threading.Thread") as thread:
+            result = controller._start_calendar_refresh(False, supersede=True)
+
+        self.assertFalse(result)
+        self.assertTrue(controller._calendar_refresh_inflight)
+        self.assertEqual(controller._calendar_generation, 6)
+        controller.calendar_refresh_button.set_sensitive.assert_called_once_with(False)
+        controller.calendar_refresh_button.set_icon_name.assert_called_once_with(
+            "process-working-symbolic"
+        )
+        thread.assert_called_once()
+        thread.return_value.start.assert_called_once_with()
 
 
 class CalendarCacheTests(unittest.TestCase):

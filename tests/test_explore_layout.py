@@ -415,6 +415,26 @@ class SettingsDialogTests(unittest.TestCase):
             writer.auto_sync = False
             writer.default_media = "Anime"
             writer.preferred_view_mode = "grid"
+            writer.active_collection = "Dropped"
+            writer.collection_selected_ids = {
+                collection: (
+                    "tmdb-movie-77" if collection == "Dropped" else None
+                )
+                for collection in gisheh.COLLECTION_NAMES
+            }
+            writer.collection_scroll_positions = {
+                collection: (32.5 if collection == "Dropped" else 0.0)
+                for collection in gisheh.COLLECTION_NAMES
+            }
+            writer.collection_view_states = {
+                collection: {
+                    "query": "unfinished" if collection == "Dropped" else "",
+                    "genre": "Drama" if collection == "Dropped" else "All genres",
+                    "sortKey": "title" if collection == "Dropped" else "recent",
+                    "sortReversed": collection == "Dropped",
+                }
+                for collection in gisheh.COLLECTION_NAMES
+            }
             writer._save_user_state()
 
             reader = object.__new__(gisheh.GishehWindow)
@@ -444,6 +464,20 @@ class SettingsDialogTests(unittest.TestCase):
             self.assertEqual(reader.active_media, "Anime")
             self.assertEqual(reader.preferred_view_mode, "grid")
             self.assertEqual(reader.view_mode, "grid")
+            self.assertEqual(reader.active_collection, "Dropped")
+            self.assertEqual(
+                reader.collection_selected_ids["Dropped"], "tmdb-movie-77"
+            )
+            self.assertEqual(reader.collection_scroll_positions["Dropped"], 32.5)
+            self.assertEqual(
+                reader.collection_view_states["Dropped"],
+                {
+                    "query": "unfinished",
+                    "genre": "Drama",
+                    "sortKey": "title",
+                    "sortReversed": True,
+                },
+            )
 
 
 class DataSourceCreditsTests(unittest.TestCase):
@@ -453,7 +487,7 @@ class DataSourceCreditsTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         resource_manifest = (
             Path(__file__).resolve().parents[1]
-            / "src/gisheh/io.github.gisheh.Gisheh.gresource.xml"
+            / "src/gisheh/io.github.arashe023.Gisheh.gresource.xml"
         ).read_text(encoding="utf-8")
         logo = (
             Path(__file__).resolve().parents[1]
@@ -839,6 +873,7 @@ class SimklMappingTests(unittest.TestCase):
             "release_date": "2025-01-02",
             "runtime": 124,
             "vote_average": 7.8,
+            "vote_count": 120,
             "genres": [{"name": "Drama"}],
             "overview": "TMDB overview",
             "poster_path": "/poster.jpg",

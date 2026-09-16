@@ -120,7 +120,7 @@
                                 </child>
                                 <child>
                                   <object class="GtkLabel">
-                                    <property name="label">Status</property>
+                                    <property name="label">Collections</property>
                                     <property name="halign">start</property>
                                     <property name="margin-start">10</property>
                                     <property name="margin-bottom">4</property>
@@ -131,34 +131,7 @@
                                   </object>
                                 </child>
                                 <child>
-                                  <object class="GtkListBox" id="status_list">
-                                    <property name="selection-mode">single</property>
-                                    <property name="activate-on-single-click">true</property>
-                                    <style>
-                                      <class name="navigation-sidebar"/>
-                                    </style>
-                                  </object>
-                                </child>
-                                <child>
-                                  <object class="GtkSeparator">
-                                    <property name="margin-top">8</property>
-                                    <property name="margin-bottom">10</property>
-                                  </object>
-                                </child>
-                                <child>
-                                  <object class="GtkLabel">
-                                    <property name="label">Lists</property>
-                                    <property name="halign">start</property>
-                                    <property name="margin-start">10</property>
-                                    <property name="margin-bottom">4</property>
-                                    <style>
-                                      <class name="heading"/>
-                                      <class name="caption"/>
-                                    </style>
-                                  </object>
-                                </child>
-                                <child>
-                                  <object class="GtkListBox" id="collections_list">
+                                  <object class="GtkListBox" id="collection_list">
                                     <property name="selection-mode">single</property>
                                     <property name="activate-on-single-click">true</property>
                                     <style>
@@ -178,7 +151,7 @@
             </property>
             <property name="content">
               <object class="AdwNavigationPage" id="content_page">
-                <property name="title">Library</property>
+                <property name="title">Collections</property>
                 <property name="child">
                   <object class="AdwToolbarView" id="toolbar_view">
                     <property name="hexpand">true</property>
@@ -223,7 +196,7 @@
                         <property name="orientation">horizontal</property>
                         <property name="vexpand">true</property>
                         <child>
-                          <object class="GtkBox" id="library_pane">
+                          <object class="GtkBox" id="collection_pane">
                             <property name="orientation">vertical</property>
                             <property name="hexpand">true</property>
                             <property name="width-request">300</property>
@@ -231,7 +204,7 @@
                               <class name="main-content-pane"/>
                             </style>
                             <child>
-                              <object class="GtkBox" id="library_header">
+                              <object class="GtkBox" id="collection_header">
                                 <property name="orientation">vertical</property>
                                 <property name="spacing">14</property>
                                 <property name="margin-top">16</property>
@@ -246,7 +219,7 @@
                                         <property name="spacing">2</property>
                                         <child>
                                           <object class="GtkLabel" id="eyebrow_label">
-                                            <property name="label">My library / Movies</property>
+                                            <property name="label">Movies / Watched</property>
                                             <property name="halign">start</property>
                                             <style>
                                               <class name="dim-label"/>
@@ -280,7 +253,7 @@
                                       <object class="GtkSearchEntry" id="search_entry">
                                         <property name="hexpand">true</property>
                                         <property name="placeholder-text">Search movies…</property>
-                                        <property name="tooltip-text">Search library (Ctrl+K)</property>
+                                        <property name="tooltip-text">Search collection (Ctrl+K)</property>
                                       </object>
                                     </child>
                                     <child>
@@ -454,7 +427,8 @@
                                             </property>
                                             <property name="end-widget">
                                               <object class="GtkLabel" id="community_rating">
-                                                <property name="label">★ 6.6</property>
+                                                <property name="visible">false</property>
+                                                <property name="label"></property>
                                                 <property name="valign">start</property>
                                                 <style>
                                                   <class name="numeric"/>

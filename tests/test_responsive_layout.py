@@ -295,7 +295,7 @@ class ExploreColumnTests(unittest.TestCase):
         controller = object.__new__(gisheh.GishehWindow)
         controller._last_explore_layout_width = 300
         controller.explore_pane = SimpleNamespace(get_width=lambda: 0)
-        controller.library_pane = SimpleNamespace(get_width=lambda: 0)
+        controller.collection_pane = SimpleNamespace(get_width=lambda: 0)
         controller.explore_columns = 1
         for kind in ("poster", "landscape", "hero"):
             height = controller._explore_card_height(kind, 1)
@@ -309,7 +309,7 @@ class ExploreColumnTests(unittest.TestCase):
         controller._details_resize_source_id = 0
         controller._sidebar_resize_source_id = 0
         controller.explore_pane = SimpleNamespace(get_width=lambda: width["value"])
-        controller.library_pane = SimpleNamespace(get_width=lambda: 0)
+        controller.collection_pane = SimpleNamespace(get_width=lambda: 0)
         controller.explore_columns = 4
         controller._last_explore_layout_width = 0
         controller._last_explore_layout_bucket = None

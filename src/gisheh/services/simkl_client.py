@@ -19,6 +19,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import gi
 from gi.repository import GLib
 
+from ..version import APP_VERSION
 from . import image_http
 
 try:
@@ -27,9 +28,8 @@ except ImportError:
     BUNDLED_SIMKL_CLIENT_ID = ""
 
 
-APP_ID = "io.github.gisheh.Gisheh"
+APP_ID = "io.github.arashe023.Gisheh"
 APP_NAME = "gisheh"
-APP_VERSION = "1.3.0"
 API_ROOT = "https://api.simkl.com"
 CALENDAR_ROOT = "https://data.simkl.in/calendar/v2"
 USER_AGENT = f"Gisheh/{APP_VERSION}"
