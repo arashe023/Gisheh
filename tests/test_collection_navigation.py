@@ -112,7 +112,7 @@ class CollectionStructureTests(unittest.TestCase):
             gisheh.COLLECTIONS,
             (
                 ("Watching", "media-playback-start-symbolic"),
-                ("Watched", "emblem-ok-symbolic"),
+                ("Watched", "object-select-symbolic"),
                 ("On Hold", "media-playback-pause-symbolic"),
                 ("Dropped", "user-trash-symbolic"),
                 ("Watchlist", "bookmark-new-symbolic"),

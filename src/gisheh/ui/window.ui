@@ -167,26 +167,39 @@
                           </object>
                         </property>
                         <child type="end">
-                          <object class="GtkBox" id="header_data_status">
-                            <property name="spacing">5</property>
+                          <object class="GtkButton" id="header_data_status_button">
                             <property name="valign">center</property>
-                            <child>
-                              <object class="GtkImage" id="header_data_status_icon">
-                                <property name="icon-name">emblem-ok-symbolic</property>
-                                <style>
-                                  <class name="success"/>
-                                </style>
+                            <property name="tooltip-text" translatable="yes">Library data status</property>
+                            <property name="child">
+                              <object class="GtkBox">
+                                <property name="spacing">6</property>
+                                <child>
+                                  <object class="GtkImage" id="header_data_status_icon">
+                                    <property name="icon-name">object-select-symbolic</property>
+                                    <style>
+                                      <class name="success"/>
+                                    </style>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkSpinner" id="header_data_status_spinner">
+                                    <property name="visible">false</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkLabel" id="header_data_status_label">
+                                    <property name="label" translatable="yes">Synced</property>
+                                    <style>
+                                      <class name="caption"/>
+                                    </style>
+                                  </object>
+                                </child>
                               </object>
-                            </child>
-                            <child>
-                              <object class="GtkLabel" id="header_data_status_label">
-                                <property name="label" translatable="yes">Synced</property>
-                                <style>
-                                  <class name="dim-label"/>
-                                  <class name="caption"/>
-                                </style>
-                              </object>
-                            </child>
+                            </property>
+                            <style>
+                              <class name="flat"/>
+                              <class name="header-data-status"/>
+                            </style>
                           </object>
                         </child>
                       </object>

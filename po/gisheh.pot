@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: gisheh\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-16 21:09+0330\n"
+"POT-Creation-Date: 2026-09-16 21:56+0330\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -39,19 +39,19 @@ msgid ""
 "television shows and anime with TMDB metadata and Simkl watch history."
 msgstr ""
 
-#: data/io.github.arashe023.Gisheh.gschema.xml:6
+#: data/io.github.arashe023.Gisheh.gschema.xml:7
 msgid "Window width"
 msgstr ""
 
-#: data/io.github.arashe023.Gisheh.gschema.xml:10
+#: data/io.github.arashe023.Gisheh.gschema.xml:12
 msgid "Window height"
 msgstr ""
 
-#: data/io.github.arashe023.Gisheh.gschema.xml:14
+#: data/io.github.arashe023.Gisheh.gschema.xml:16
 msgid "Whether the window is maximized"
 msgstr ""
 
-#: data/io.github.arashe023.Gisheh.gschema.xml:22
+#: data/io.github.arashe023.Gisheh.gschema.xml:24
 msgid "Library presentation mode"
 msgstr ""
 
@@ -69,9 +69,9 @@ msgid "Could not save your choice"
 msgstr ""
 
 #: src/gisheh/application.py:125 src/gisheh/application.py:249
-#: src/gisheh/onboarding.py:522 src/gisheh/window.py:4830
-#: src/gisheh/window.py:4841 src/gisheh/window.py:5505
-#: src/gisheh/window.py:13013
+#: src/gisheh/onboarding.py:522 src/gisheh/window.py:4895
+#: src/gisheh/window.py:4906 src/gisheh/window.py:5579
+#: src/gisheh/window.py:13134
 msgid "Close"
 msgstr ""
 
@@ -91,11 +91,11 @@ msgstr ""
 msgid "The Movie Database"
 msgstr ""
 
-#: src/gisheh/application.py:194 src/gisheh/window.py:4488
+#: src/gisheh/application.py:194 src/gisheh/window.py:4542
 msgid "Simkl"
 msgstr ""
 
-#: src/gisheh/application.py:207 src/gisheh/window.py:3195
+#: src/gisheh/application.py:207 src/gisheh/window.py:3243
 msgid "Credits & Data Sources"
 msgstr ""
 
@@ -230,17 +230,17 @@ msgid ""
 "Gisheh will continue automatically."
 msgstr ""
 
-#: src/gisheh/onboarding.py:417 src/gisheh/window.py:5561
+#: src/gisheh/onboarding.py:417 src/gisheh/window.py:5637
 msgid "Waiting for approval…"
 msgstr ""
 
-#: src/gisheh/onboarding.py:420 src/gisheh/window.py:4195
-#: src/gisheh/window.py:4681 src/gisheh/window.py:4741
-#: src/gisheh/window.py:4775 src/gisheh/window.py:4807
-#: src/gisheh/window.py:5564 src/gisheh/window.py:6155
-#: src/gisheh/window.py:8927 src/gisheh/window.py:8977
-#: src/gisheh/window.py:9758 src/gisheh/window.py:11641
-#: src/gisheh/window.py:12646
+#: src/gisheh/onboarding.py:420 src/gisheh/window.py:4245
+#: src/gisheh/window.py:4739 src/gisheh/window.py:4802
+#: src/gisheh/window.py:4838 src/gisheh/window.py:4872
+#: src/gisheh/window.py:5640 src/gisheh/window.py:6259
+#: src/gisheh/window.py:9039 src/gisheh/window.py:9091
+#: src/gisheh/window.py:9872 src/gisheh/window.py:11759
+#: src/gisheh/window.py:12765
 msgid "Cancel"
 msgstr ""
 
@@ -252,245 +252,245 @@ msgstr ""
 msgid "Could not sign in to Simkl"
 msgstr ""
 
-#: src/gisheh/window.py:78
+#: src/gisheh/window.py:76
 msgid "Movies"
 msgstr ""
 
-#: src/gisheh/window.py:78
+#: src/gisheh/window.py:76
 msgid "Shows"
 msgstr ""
 
-#: src/gisheh/window.py:78
+#: src/gisheh/window.py:76
 msgid "Anime"
 msgstr ""
 
-#: src/gisheh/window.py:80
+#: src/gisheh/window.py:78
 msgid "Watching"
 msgstr ""
 
-#: src/gisheh/window.py:81 src/gisheh/window.py:6376 src/gisheh/window.py:10592
-#: src/gisheh/ui/window.ui:235 src/gisheh/ui/window.ui:388
-#: src/gisheh/ui/window.ui:457
+#: src/gisheh/window.py:79 src/gisheh/window.py:6483 src/gisheh/window.py:10708
+#: src/gisheh/ui/window.ui:248 src/gisheh/ui/window.ui:401
+#: src/gisheh/ui/window.ui:470
 msgid "Watched"
 msgstr ""
 
-#: src/gisheh/window.py:82
+#: src/gisheh/window.py:80
 msgid "On Hold"
 msgstr ""
 
-#: src/gisheh/window.py:83
+#: src/gisheh/window.py:81
 msgid "Dropped"
 msgstr ""
 
-#: src/gisheh/window.py:84
+#: src/gisheh/window.py:82
 msgid "Watchlist"
 msgstr ""
 
-#: src/gisheh/window.py:88
+#: src/gisheh/window.py:86
 msgid "Last watched"
 msgstr ""
 
-#: src/gisheh/window.py:89
+#: src/gisheh/window.py:87
 msgid "Title"
 msgstr ""
 
-#: src/gisheh/window.py:90
+#: src/gisheh/window.py:88
 msgid "Highest rated"
 msgstr ""
 
-#: src/gisheh/window.py:91
+#: src/gisheh/window.py:89
 msgid "Release year"
 msgstr ""
 
-#: src/gisheh/window.py:94
+#: src/gisheh/window.py:92
 msgid "Trending"
 msgstr ""
 
-#: src/gisheh/window.py:95
+#: src/gisheh/window.py:93
 msgid "Popular"
 msgstr ""
 
-#: src/gisheh/window.py:96
+#: src/gisheh/window.py:94
 msgid "Top rated"
 msgstr ""
 
-#: src/gisheh/window.py:97
+#: src/gisheh/window.py:95
 msgid "Coming soon"
 msgstr ""
 
-#: src/gisheh/window.py:99
+#: src/gisheh/window.py:97
 msgid "This month"
 msgstr ""
 
-#: src/gisheh/window.py:99
+#: src/gisheh/window.py:97
 msgid "This year"
 msgstr ""
 
-#: src/gisheh/window.py:99
+#: src/gisheh/window.py:97
 msgid "All releases"
 msgstr ""
 
-#: src/gisheh/window.py:109
+#: src/gisheh/window.py:107
 msgid "Follow system"
 msgstr ""
 
-#: src/gisheh/window.py:109
+#: src/gisheh/window.py:107
 msgid "Light"
 msgstr ""
 
-#: src/gisheh/window.py:109
+#: src/gisheh/window.py:107
 msgid "Dark"
 msgstr ""
 
-#: src/gisheh/window.py:132
+#: src/gisheh/window.py:130
 msgid "Adventure"
 msgstr ""
 
-#: src/gisheh/window.py:133
+#: src/gisheh/window.py:131
 msgid "Fantasy"
 msgstr ""
 
-#: src/gisheh/window.py:134
+#: src/gisheh/window.py:132
 msgid "Animation"
 msgstr ""
 
-#: src/gisheh/window.py:135
+#: src/gisheh/window.py:133
 msgid "Drama"
 msgstr ""
 
-#: src/gisheh/window.py:136
+#: src/gisheh/window.py:134
 msgid "Horror"
 msgstr ""
 
-#: src/gisheh/window.py:137
+#: src/gisheh/window.py:135
 msgid "Action"
 msgstr ""
 
-#: src/gisheh/window.py:138
+#: src/gisheh/window.py:136
 msgid "Comedy"
 msgstr ""
 
-#: src/gisheh/window.py:139
+#: src/gisheh/window.py:137
 msgid "History"
 msgstr ""
 
-#: src/gisheh/window.py:140
+#: src/gisheh/window.py:138
 msgid "Western"
 msgstr ""
 
-#: src/gisheh/window.py:141
+#: src/gisheh/window.py:139
 msgid "Thriller"
 msgstr ""
 
-#: src/gisheh/window.py:142
+#: src/gisheh/window.py:140
 msgid "Crime"
 msgstr ""
 
-#: src/gisheh/window.py:143
+#: src/gisheh/window.py:141
 msgid "Documentary"
 msgstr ""
 
-#: src/gisheh/window.py:144
+#: src/gisheh/window.py:142
 msgid "Science Fiction"
 msgstr ""
 
-#: src/gisheh/window.py:145
+#: src/gisheh/window.py:143
 msgid "Mystery"
 msgstr ""
 
-#: src/gisheh/window.py:146
+#: src/gisheh/window.py:144
 msgid "Music"
 msgstr ""
 
-#: src/gisheh/window.py:147
+#: src/gisheh/window.py:145
 msgid "Romance"
 msgstr ""
 
-#: src/gisheh/window.py:148
+#: src/gisheh/window.py:146
 msgid "Family"
 msgstr ""
 
-#: src/gisheh/window.py:149
+#: src/gisheh/window.py:147
 msgid "War"
 msgstr ""
 
-#: src/gisheh/window.py:150
+#: src/gisheh/window.py:148
 msgid "Action & Adventure"
 msgstr ""
 
-#: src/gisheh/window.py:151
+#: src/gisheh/window.py:149
 msgid "Kids"
 msgstr ""
 
-#: src/gisheh/window.py:152
+#: src/gisheh/window.py:150
 msgid "News"
 msgstr ""
 
-#: src/gisheh/window.py:153
+#: src/gisheh/window.py:151
 msgid "Reality"
 msgstr ""
 
-#: src/gisheh/window.py:154
+#: src/gisheh/window.py:152
 msgid "Sci-Fi & Fantasy"
 msgstr ""
 
-#: src/gisheh/window.py:155
+#: src/gisheh/window.py:153
 msgid "Soap"
 msgstr ""
 
-#: src/gisheh/window.py:156
+#: src/gisheh/window.py:154
 msgid "Talk"
 msgstr ""
 
-#: src/gisheh/window.py:157
+#: src/gisheh/window.py:155
 msgid "War & Politics"
 msgstr ""
 
-#: src/gisheh/window.py:1550
+#: src/gisheh/window.py:1545
 msgid "Loading from TMDB…"
 msgstr ""
 
-#: src/gisheh/window.py:1565
+#: src/gisheh/window.py:1560
 msgid "Catalog metadata is loading from TMDB."
 msgstr ""
 
-#: src/gisheh/window.py:1586
+#: src/gisheh/window.py:1581
 msgid "Progress"
 msgstr ""
 
-#: src/gisheh/window.py:2043
+#: src/gisheh/window.py:2038
 msgid "Back to Gisheh"
 msgstr ""
 
-#: src/gisheh/window.py:2048
+#: src/gisheh/window.py:2043
 msgid "Media Viewer"
 msgstr ""
 
-#: src/gisheh/window.py:2054
+#: src/gisheh/window.py:2049
 msgid "Copy image"
 msgstr ""
 
-#: src/gisheh/window.py:2061
+#: src/gisheh/window.py:2056
 msgid "Toggle fullscreen"
 msgstr ""
 
-#: src/gisheh/window.py:2092
+#: src/gisheh/window.py:2087
 msgid "Previous image (Left)"
 msgstr ""
 
-#: src/gisheh/window.py:2101
+#: src/gisheh/window.py:2096
 msgid "Next image (Right)"
 msgstr ""
 
-#: src/gisheh/window.py:2114
+#: src/gisheh/window.py:2109
 msgid "Zoom out (Ctrl+-)"
 msgstr ""
 
-#: src/gisheh/window.py:2118 src/gisheh/window.py:2229
+#: src/gisheh/window.py:2113 src/gisheh/window.py:2224
 msgid "Fit"
 msgstr ""
 
-#: src/gisheh/window.py:2124
+#: src/gisheh/window.py:2119
 msgid "Zoom in (Ctrl++)"
 msgstr ""
 
@@ -506,857 +506,873 @@ msgstr ""
 msgid "Details"
 msgstr ""
 
-#: src/gisheh/window.py:3136
+#: src/gisheh/window.py:3184
 msgid "Hide sidebar (Ctrl+B)"
 msgstr ""
 
-#: src/gisheh/window.py:3193 src/gisheh/window.py:4386
+#: src/gisheh/window.py:3241 src/gisheh/window.py:4440
 msgid "Preferences"
 msgstr ""
 
-#: src/gisheh/window.py:3194 src/gisheh/window.py:4552
-#: src/gisheh/window.py:12981
+#: src/gisheh/window.py:3242 src/gisheh/window.py:4608
+#: src/gisheh/window.py:13102
 msgid "Application Log"
 msgstr ""
 
-#: src/gisheh/window.py:3196
+#: src/gisheh/window.py:3244
 msgid "About Gisheh"
 msgstr ""
 
-#: src/gisheh/window.py:3197
+#: src/gisheh/window.py:3245
 msgid "Quit"
 msgstr ""
 
-#: src/gisheh/window.py:3203 src/gisheh/ui/window.ui:723
+#: src/gisheh/window.py:3251 src/gisheh/ui/window.ui:736
 msgid "Explore"
 msgstr ""
 
-#: src/gisheh/window.py:3208 src/gisheh/window.py:3382
+#: src/gisheh/window.py:3256 src/gisheh/window.py:3430
 msgid "Calendar"
 msgstr ""
 
-#: src/gisheh/window.py:3250 src/gisheh/window.py:9261
+#: src/gisheh/window.py:3298 src/gisheh/window.py:9375
 msgid "No titles found"
 msgstr ""
 
-#: src/gisheh/window.py:3251 src/gisheh/window.py:9263
+#: src/gisheh/window.py:3299 src/gisheh/window.py:9377
 msgid "Try a different search term or clear the genre filter."
 msgstr ""
 
-#: src/gisheh/window.py:3254
+#: src/gisheh/window.py:3302
 msgid "Clear filters"
 msgstr ""
 
-#: src/gisheh/window.py:3263 src/gisheh/window.py:9327
+#: src/gisheh/window.py:3311 src/gisheh/window.py:9441
 msgid "Nothing new here yet"
 msgstr ""
 
-#: src/gisheh/window.py:3264 src/gisheh/window.py:9329
+#: src/gisheh/window.py:3312 src/gisheh/window.py:9443
 msgid "Try another search, period, or genre."
 msgstr ""
 
-#: src/gisheh/window.py:3267
+#: src/gisheh/window.py:3315
 msgid "Reset Explore filters"
 msgstr ""
 
-#: src/gisheh/window.py:3301
+#: src/gisheh/window.py:3349
 msgid "Loading more from TMDB…"
 msgstr ""
 
-#: src/gisheh/window.py:3320
+#: src/gisheh/window.py:3368
 msgid "Loading recommendations from TMDB"
 msgstr ""
 
-#: src/gisheh/window.py:3323
+#: src/gisheh/window.py:3371
 msgid "Loading recommendations"
 msgstr ""
 
-#: src/gisheh/window.py:3326
+#: src/gisheh/window.py:3374
 msgid "Finding films and series you might enjoy…"
 msgstr ""
 
-#: src/gisheh/window.py:3378
+#: src/gisheh/window.py:3426
 msgid "Browse / Simkl"
 msgstr ""
 
-#: src/gisheh/window.py:3389
+#: src/gisheh/window.py:3437
 msgid "My Calendar"
 msgstr ""
 
-#: src/gisheh/window.py:3396
+#: src/gisheh/window.py:3445
 msgid "Filter releases by media type"
 msgstr ""
 
-#: src/gisheh/window.py:3401
+#: src/gisheh/window.py:3451
 msgid "Calendar status filters"
 msgstr ""
 
-#: src/gisheh/window.py:3409
+#: src/gisheh/window.py:3459
 msgid "Show watched"
 msgstr ""
 
-#: src/gisheh/window.py:3410
+#: src/gisheh/window.py:3460
 msgid "Show dropped"
 msgstr ""
 
-#: src/gisheh/window.py:3421
+#: src/gisheh/window.py:3471
 msgid "Previous month"
 msgstr ""
 
-#: src/gisheh/window.py:3424
+#: src/gisheh/window.py:3474
 msgid "Today"
 msgstr ""
 
-#: src/gisheh/window.py:3424
+#: src/gisheh/window.py:3474
 msgid "Go to today"
 msgstr ""
 
-#: src/gisheh/window.py:3427
+#: src/gisheh/window.py:3477
 msgid "Next month"
 msgstr ""
 
-#: src/gisheh/window.py:3430
+#: src/gisheh/window.py:3480
 msgid "Refresh Calendar"
 msgstr ""
 
-#: src/gisheh/window.py:3583
+#: src/gisheh/window.py:3633
 msgid "Calendar refresh failed; showing cached schedule"
 msgstr ""
 
-#: src/gisheh/window.py:4076
+#: src/gisheh/window.py:4126
 msgid "Add to Watchlist"
 msgstr ""
 
-#: src/gisheh/window.py:4172
+#: src/gisheh/window.py:4222
 msgid "Could not open this Simkl page"
 msgstr ""
 
-#: src/gisheh/window.py:4196
+#: src/gisheh/window.py:4246
 msgid "Open in Browser"
 msgstr ""
 
-#: src/gisheh/window.py:4212
+#: src/gisheh/window.py:4262
 msgid "Could not open the link in your browser"
 msgstr ""
 
-#: src/gisheh/window.py:4229
+#: src/gisheh/window.py:4279
 msgid "No external page is available for this title"
 msgstr ""
 
-#: src/gisheh/window.py:4233
+#: src/gisheh/window.py:4283
 msgid "Open an external link?"
 msgstr ""
 
-#: src/gisheh/window.py:4244
+#: src/gisheh/window.py:4294
 msgid "Connect Simkl to add this title"
 msgstr ""
 
-#: src/gisheh/window.py:4293
+#: src/gisheh/window.py:4343
 msgid "Local-first mode is active"
 msgstr ""
 
-#: src/gisheh/window.py:4294
+#: src/gisheh/window.py:4345
 msgid ""
 "Calendar downloads use Simkl. Your local library remains fully available "
 "without connecting an account."
 msgstr ""
 
-#: src/gisheh/window.py:4305
+#: src/gisheh/window.py:4357
 msgid "Simkl integration is unavailable"
 msgstr ""
 
-#: src/gisheh/window.py:4306
+#: src/gisheh/window.py:4359
 msgid "This build does not include Gisheh's public Simkl application ID."
 msgstr ""
 
-#: src/gisheh/window.py:4317
+#: src/gisheh/window.py:4371
 msgid "Calendar is unavailable"
 msgstr ""
 
-#: src/gisheh/window.py:4320
+#: src/gisheh/window.py:4374
 msgid "Retry"
 msgstr ""
 
-#: src/gisheh/window.py:4329
+#: src/gisheh/window.py:4383
 msgid "Schedule not published"
 msgstr ""
 
-#: src/gisheh/window.py:4330
+#: src/gisheh/window.py:4384
 msgid "Simkl has not published this month yet."
 msgstr ""
 
-#: src/gisheh/window.py:4340
+#: src/gisheh/window.py:4394
 msgid "Nothing scheduled in My Calendar"
 msgstr ""
 
-#: src/gisheh/window.py:4347
+#: src/gisheh/window.py:4401
 msgid "Open Explore"
 msgstr ""
 
-#: src/gisheh/window.py:4390
+#: src/gisheh/window.py:4444
 msgid "General"
 msgstr ""
 
-#: src/gisheh/window.py:4394
+#: src/gisheh/window.py:4448
 msgid "Services"
 msgstr ""
 
-#: src/gisheh/window.py:4399
+#: src/gisheh/window.py:4453
 msgid "Data ownership"
 msgstr ""
 
-#: src/gisheh/window.py:4400
+#: src/gisheh/window.py:4454
 msgid "Choose where Gisheh keeps your personal library state."
 msgstr ""
 
-#: src/gisheh/window.py:4402
+#: src/gisheh/window.py:4456
 msgid "Library mode"
 msgstr ""
 
-#: src/gisheh/window.py:4403
+#: src/gisheh/window.py:4457
 msgid "Change…"
 msgstr ""
 
-#: src/gisheh/window.py:4413
+#: src/gisheh/window.py:4467
 msgid "Appearance"
 msgstr ""
 
-#: src/gisheh/window.py:4414
+#: src/gisheh/window.py:4468
 msgid "Choose how Gisheh looks on this device."
 msgstr ""
 
-#: src/gisheh/window.py:4417
+#: src/gisheh/window.py:4471
 msgid "Color scheme"
 msgstr ""
 
-#: src/gisheh/window.py:4418
+#: src/gisheh/window.py:4472
 msgid "Use the system style or override it for Gisheh."
 msgstr ""
 
-#: src/gisheh/window.py:4434
+#: src/gisheh/window.py:4488
 msgid "Library"
 msgstr ""
 
-#: src/gisheh/window.py:4435
+#: src/gisheh/window.py:4489
 msgid "Set the view Gisheh uses when it starts."
 msgstr ""
 
-#: src/gisheh/window.py:4438
+#: src/gisheh/window.py:4492
 msgid "Default media type"
 msgstr ""
 
-#: src/gisheh/window.py:4439
+#: src/gisheh/window.py:4493
 msgid "Open this catalog first on the next launch."
 msgstr ""
 
-#: src/gisheh/window.py:4449
+#: src/gisheh/window.py:4503
 msgid "Library layout"
 msgstr ""
 
-#: src/gisheh/window.py:4450
+#: src/gisheh/window.py:4504
 msgid "Choose between the compact list and poster grid."
 msgstr ""
 
-#: src/gisheh/window.py:4463
+#: src/gisheh/window.py:4517
 msgid "Accounts &amp; Sync"
 msgstr ""
 
-#: src/gisheh/window.py:4464
+#: src/gisheh/window.py:4518
 msgid "Gisheh uses Simkl for your library and TMDB for metadata."
 msgstr ""
 
-#: src/gisheh/window.py:4467
+#: src/gisheh/window.py:4521
 msgid "Sync Simkl on startup"
 msgstr ""
 
-#: src/gisheh/window.py:4468
+#: src/gisheh/window.py:4522
 msgid "Refresh cloud library state whenever Gisheh starts."
 msgstr ""
 
-#: src/gisheh/window.py:4477
+#: src/gisheh/window.py:4531
 msgid "Refresh Calendar automatically"
 msgstr ""
 
-#: src/gisheh/window.py:4478
+#: src/gisheh/window.py:4532
 msgid "Use a fresh local schedule cache and update it when needed."
 msgstr ""
 
-#: src/gisheh/window.py:4496
+#: src/gisheh/window.py:4550
 msgid "Disconnect Simkl"
 msgstr ""
 
-#: src/gisheh/window.py:4506
+#: src/gisheh/window.py:4560
 msgid "TMDB"
 msgstr ""
 
-#: src/gisheh/window.py:4514
+#: src/gisheh/window.py:4568
 msgid "Remove TMDB token"
 msgstr ""
 
-#: src/gisheh/window.py:4526
+#: src/gisheh/window.py:4580
 msgid "Data &amp; Diagnostics"
 msgstr ""
 
-#: src/gisheh/window.py:4527
+#: src/gisheh/window.py:4582
 msgid "Manage reproducible downloads and troubleshooting information."
 msgstr ""
 
-#: src/gisheh/window.py:4530
+#: src/gisheh/window.py:4586
 msgid "Downloaded TMDB data"
 msgstr ""
 
-#: src/gisheh/window.py:4531
+#: src/gisheh/window.py:4587
 msgid "Posters, backdrops, cast photos and metadata cache."
 msgstr ""
 
-#: src/gisheh/window.py:4533 src/gisheh/window.py:4544
-#: src/gisheh/window.py:4742 src/gisheh/window.py:4776
+#: src/gisheh/window.py:4589 src/gisheh/window.py:4600
+#: src/gisheh/window.py:4803 src/gisheh/window.py:4839
 msgid "Clear Cache"
 msgstr ""
 
-#: src/gisheh/window.py:4541
+#: src/gisheh/window.py:4597
 msgid "Calendar cache"
 msgstr ""
 
-#: src/gisheh/window.py:4553
+#: src/gisheh/window.py:4609
 msgid "Review sync, loading and recoverable error messages."
 msgstr ""
 
-#: src/gisheh/window.py:4555
+#: src/gisheh/window.py:4611
 msgid "Open Log"
 msgstr ""
 
-#: src/gisheh/window.py:4564
+#: src/gisheh/window.py:4620
 msgid "Reset"
 msgstr ""
 
-#: src/gisheh/window.py:4565
+#: src/gisheh/window.py:4621
 msgid "Erase local Gisheh data and return to first-run setup."
 msgstr ""
 
-#: src/gisheh/window.py:4568
+#: src/gisheh/window.py:4624
 msgid "Reset Gisheh"
 msgstr ""
 
-#: src/gisheh/window.py:4569
+#: src/gisheh/window.py:4625
 msgid "Delete your library, preferences, accounts, caches and logs."
 msgstr ""
 
-#: src/gisheh/window.py:4571
+#: src/gisheh/window.py:4627
 msgid "Reset…"
 msgstr ""
 
-#: src/gisheh/window.py:4674
+#: src/gisheh/window.py:4730
 msgid "Choose how your library is managed"
 msgstr ""
 
-#: src/gisheh/window.py:4676
+#: src/gisheh/window.py:4733
 msgid ""
 "Local-first keeps lists, ratings and watch history on this device. Simkl "
 "sync uses your Simkl account as the shared library source. Changing mode "
 "does not delete the saved local copy."
 msgstr ""
 
-#: src/gisheh/window.py:4682
+#: src/gisheh/window.py:4740
 msgid "Use Local-first"
 msgstr ""
 
-#: src/gisheh/window.py:4684
+#: src/gisheh/window.py:4742
 msgid "Use Simkl"
 msgstr ""
 
-#: src/gisheh/window.py:4735
+#: src/gisheh/window.py:4794
 msgid "Clear Calendar cache?"
 msgstr ""
 
-#: src/gisheh/window.py:4737
+#: src/gisheh/window.py:4797
 msgid ""
 "Downloaded Simkl schedules will be removed. Gisheh can download them again "
 "when Calendar is opened."
 msgstr ""
 
-#: src/gisheh/window.py:4759
+#: src/gisheh/window.py:4820
 msgid "Could not clear the Calendar cache"
 msgstr ""
 
-#: src/gisheh/window.py:4765
+#: src/gisheh/window.py:4826
 msgid "Calendar cache cleared"
 msgstr ""
 
-#: src/gisheh/window.py:4769
+#: src/gisheh/window.py:4830
 msgid "Clear downloaded TMDB data?"
 msgstr ""
 
-#: src/gisheh/window.py:4771
+#: src/gisheh/window.py:4833
 msgid ""
 "Downloaded posters, backdrops, cast photos and metadata will be removed. "
 "Gisheh can download them again when needed."
 msgstr ""
 
-#: src/gisheh/window.py:4789
+#: src/gisheh/window.py:4852
 msgid "Could not clear the TMDB cache"
 msgstr ""
 
-#: src/gisheh/window.py:4795
+#: src/gisheh/window.py:4858
 msgid "TMDB cache cleared"
 msgstr ""
 
-#: src/gisheh/window.py:4799
+#: src/gisheh/window.py:4862
 msgid "Reset Gisheh completely?"
 msgstr ""
 
-#: src/gisheh/window.py:4801
+#: src/gisheh/window.py:4865
 msgid ""
 "Your local library, watch history, ratings, preferences, connected accounts, "
 "downloaded artwork, metadata, Calendar cache and application logs will be "
 "permanently deleted. Gisheh will restart at the Welcome screen."
 msgstr ""
 
-#: src/gisheh/window.py:4808
+#: src/gisheh/window.py:4873
 msgid "Delete Everything & Restart"
 msgstr ""
 
-#: src/gisheh/window.py:4827
+#: src/gisheh/window.py:4892
 msgid "Gisheh could not be fully reset"
 msgstr ""
 
-#: src/gisheh/window.py:4838
+#: src/gisheh/window.py:4903
 msgid "Gisheh was reset but could not restart"
 msgstr ""
 
-#: src/gisheh/window.py:5115
+#: src/gisheh/window.py:5180
 msgid "Watch time"
 msgstr ""
 
-#: src/gisheh/window.py:5139
+#: src/gisheh/window.py:5204
 msgid "Daily activity"
 msgstr ""
 
-#: src/gisheh/window.py:5203
+#: src/gisheh/window.py:5268
 msgid "Activity through the year"
 msgstr ""
 
-#: src/gisheh/window.py:5242
+#: src/gisheh/window.py:5307
 msgid "Review"
 msgstr ""
 
-#: src/gisheh/window.py:5242
+#: src/gisheh/window.py:5307
 msgid "Your activity over time"
 msgstr ""
 
-#: src/gisheh/window.py:5245
+#: src/gisheh/window.py:5310
 msgid "Month"
 msgstr ""
 
-#: src/gisheh/window.py:5246
+#: src/gisheh/window.py:5311
 msgid "Year"
 msgstr ""
 
-#: src/gisheh/window.py:5285
+#: src/gisheh/window.py:5351
 msgid "Watching habits"
 msgstr ""
 
-#: src/gisheh/window.py:5285
+#: src/gisheh/window.py:5351
 msgid "All-time library totals"
 msgstr ""
 
-#: src/gisheh/window.py:5308
+#: src/gisheh/window.py:5375
 msgid "Ratings"
 msgstr ""
 
-#: src/gisheh/window.py:5338
+#: src/gisheh/window.py:5406
 msgid "Favorite genres"
 msgstr ""
 
-#: src/gisheh/window.py:5338
+#: src/gisheh/window.py:5406
 msgid "Based on watched titles"
 msgstr ""
 
-#: src/gisheh/window.py:5373
+#: src/gisheh/window.py:5442
 msgid "Total watch time"
 msgstr ""
 
-#: src/gisheh/window.py:5378
+#: src/gisheh/window.py:5447
 msgid "Completed titles"
 msgstr ""
 
-#: src/gisheh/window.py:5383
+#: src/gisheh/window.py:5452
 msgid "Episodes watched"
 msgstr ""
 
-#: src/gisheh/window.py:5388
+#: src/gisheh/window.py:5457
 msgid "Ratings given"
 msgstr ""
 
-#: src/gisheh/window.py:5474
+#: src/gisheh/window.py:5546
 msgid "Local-first mode enabled"
 msgstr ""
 
-#: src/gisheh/window.py:5498
+#: src/gisheh/window.py:5570
 msgid "Simkl is unavailable in this build"
 msgstr ""
 
-#: src/gisheh/window.py:5500
+#: src/gisheh/window.py:5573
 msgid ""
 "The distributor must register Gisheh with Simkl and include the public "
 "Client ID when building the application. You never need to create a "
 "developer app or enter a Client Secret."
 msgstr ""
 
-#: src/gisheh/window.py:5546
+#: src/gisheh/window.py:5620
 msgid "Enter this code on Simkl"
 msgstr ""
 
-#: src/gisheh/window.py:5548
+#: src/gisheh/window.py:5623
 msgid ""
 "The browser has been opened. Sign in to Simkl and enter the code below. "
 "Gisheh will finish automatically after approval."
 msgstr ""
 
-#: src/gisheh/window.py:5656
+#: src/gisheh/window.py:5733
 msgid "Simkl connected — syncing your library…"
 msgstr ""
 
-#: src/gisheh/window.py:6005
+#: src/gisheh/window.py:6085
 msgid "Simkl state synced — connect TMDB to load titles and artwork"
 msgstr ""
 
-#: src/gisheh/window.py:6099
+#: src/gisheh/window.py:6189
 msgid "Local"
 msgstr ""
 
-#: src/gisheh/window.py:6101
+#: src/gisheh/window.py:6190
 msgid "Local-first · Personal library data stays on this device"
 msgstr ""
 
-#: src/gisheh/window.py:6107 src/gisheh/ui/window.ui:183
+#: src/gisheh/window.py:6192
+msgid "Syncing…"
+msgstr ""
+
+#: src/gisheh/window.py:6193
+msgid "Refreshing your Simkl library"
+msgstr ""
+
+#: src/gisheh/window.py:6196
+msgid "Sync failed"
+msgstr ""
+
+#: src/gisheh/window.py:6197
+msgid "Sync failed. Click to try again."
+msgstr ""
+
+#: src/gisheh/window.py:6201 src/gisheh/ui/window.ui:191
 msgid "Synced"
 msgstr ""
 
-#: src/gisheh/window.py:6109
-msgid "Your library is connected to Simkl"
+#: src/gisheh/window.py:6202
+msgid "Synced with Simkl. Click to refresh now."
 msgstr ""
 
-#: src/gisheh/window.py:6115
+#: src/gisheh/window.py:6205
 msgid "Not synced"
 msgstr ""
 
-#: src/gisheh/window.py:6117
-msgid "Simkl mode is selected but no account is connected"
+#: src/gisheh/window.py:6206
+msgid "Simkl is not connected. Click to connect."
 msgstr ""
 
-#: src/gisheh/window.py:6149
+#: src/gisheh/window.py:6251
 msgid "Disconnect Simkl?"
 msgstr ""
 
-#: src/gisheh/window.py:6151
+#: src/gisheh/window.py:6254
 msgid ""
 "The local access token will be removed. Your Simkl account and cloud library "
 "will not be changed."
 msgstr ""
 
-#: src/gisheh/window.py:6156
+#: src/gisheh/window.py:6260
 msgid "Disconnect"
 msgstr ""
 
-#: src/gisheh/window.py:6228
+#: src/gisheh/window.py:6333
 msgid "Simkl disconnected"
 msgstr ""
 
-#: src/gisheh/window.py:6236 src/gisheh/window.py:6454
+#: src/gisheh/window.py:6341 src/gisheh/window.py:6561
 msgid "Cast & Crew"
 msgstr ""
 
-#: src/gisheh/window.py:6250
+#: src/gisheh/window.py:6356
 msgid "Episodes & Seasons"
 msgstr ""
 
-#: src/gisheh/window.py:6255
+#: src/gisheh/window.py:6362
 msgid "Videos"
 msgstr ""
 
-#: src/gisheh/window.py:6261
+#: src/gisheh/window.py:6368
 msgid "Backdrops"
 msgstr ""
 
-#: src/gisheh/window.py:6262
+#: src/gisheh/window.py:6369
 msgid "Posters"
 msgstr ""
 
-#: src/gisheh/window.py:6266
+#: src/gisheh/window.py:6373
 msgid "Images"
 msgstr ""
 
-#: src/gisheh/window.py:6280
+#: src/gisheh/window.py:6387
 msgid "More like this"
 msgstr ""
 
-#: src/gisheh/window.py:6296
+#: src/gisheh/window.py:6403
 msgid "Season"
 msgstr ""
 
-#: src/gisheh/window.py:6318
+#: src/gisheh/window.py:6425
 msgid "Episodes"
 msgstr ""
 
-#: src/gisheh/window.py:6364
+#: src/gisheh/window.py:6471
 msgid "Episode"
 msgstr ""
 
-#: src/gisheh/window.py:6431 src/gisheh/ui/window.ui:561
-#: src/gisheh/ui/window.ui:570
+#: src/gisheh/window.py:6538 src/gisheh/ui/window.ui:574
+#: src/gisheh/ui/window.ui:583
 msgid "Overview"
 msgstr ""
 
-#: src/gisheh/window.py:6699
+#: src/gisheh/window.py:6809
 msgid "Open this title on TMDB"
 msgstr ""
 
-#: src/gisheh/window.py:7229
+#: src/gisheh/window.py:7339
 msgid "Live TMDB data loaded"
 msgstr ""
 
-#: src/gisheh/window.py:7364
+#: src/gisheh/window.py:7474
 msgid "Could not load more titles from TMDB"
 msgstr ""
 
-#: src/gisheh/window.py:7392
+#: src/gisheh/window.py:7502
 msgid "Connect TMDB to search its catalog"
 msgstr ""
 
-#: src/gisheh/window.py:7611
+#: src/gisheh/window.py:7721
 msgid "Could not search TMDB"
 msgstr ""
 
-#: src/gisheh/window.py:7683
+#: src/gisheh/window.py:7793
 msgid "TMDB is unavailable — Explore could not be loaded"
 msgstr ""
 
-#: src/gisheh/window.py:8582
+#: src/gisheh/window.py:8692
 msgid "Season details could not be loaded from TMDB"
 msgstr ""
 
-#: src/gisheh/window.py:8803
+#: src/gisheh/window.py:8913
 msgid "Episode details could not be loaded from TMDB"
 msgstr ""
 
-#: src/gisheh/window.py:8918
+#: src/gisheh/window.py:9029
 msgid ""
 "Public releases should include Gisheh's approved TMDB credential. For local "
 "development only, you can enter your own API Read Access Token; it will be "
 "stored only for this user."
 msgstr ""
 
-#: src/gisheh/window.py:8925
+#: src/gisheh/window.py:9037
 msgid "TMDB API Read Access Token"
 msgstr ""
 
-#: src/gisheh/window.py:8928
+#: src/gisheh/window.py:9040
 msgid "Save and connect"
 msgstr ""
 
-#: src/gisheh/window.py:8945
+#: src/gisheh/window.py:9057
 msgid "Enter a TMDB Read Access Token"
 msgstr ""
 
-#: src/gisheh/window.py:8951
+#: src/gisheh/window.py:9063
 msgid "Could not save the TMDB token"
 msgstr ""
 
-#: src/gisheh/window.py:8964
+#: src/gisheh/window.py:9076
 msgid "Connecting to TMDB…"
 msgstr ""
 
-#: src/gisheh/window.py:8971
+#: src/gisheh/window.py:9083
 msgid "Remove the TMDB connection?"
 msgstr ""
 
-#: src/gisheh/window.py:8973
+#: src/gisheh/window.py:9086
 msgid ""
 "The locally stored read token will be removed. Downloaded artwork remains "
 "available until you clear the cache."
 msgstr ""
 
-#: src/gisheh/window.py:8978
+#: src/gisheh/window.py:9092
 msgid "Remove Token"
 msgstr ""
 
-#: src/gisheh/window.py:8993
+#: src/gisheh/window.py:9107
 msgid "Could not remove the TMDB token"
 msgstr ""
 
-#: src/gisheh/window.py:8998
+#: src/gisheh/window.py:9112
 msgid "The TMDB token is provided by the environment"
 msgstr ""
 
-#: src/gisheh/window.py:9001
+#: src/gisheh/window.py:9115
 msgid "TMDB disconnected"
 msgstr ""
 
-#: src/gisheh/window.py:9281 src/gisheh/ui/window.ui:295
+#: src/gisheh/window.py:9395 src/gisheh/ui/window.ui:308
 msgid "All"
 msgstr ""
 
-#: src/gisheh/window.py:9397
+#: src/gisheh/window.py:9511
 msgid "Data & images provided by TMDB"
 msgstr ""
 
-#: src/gisheh/window.py:9734
+#: src/gisheh/window.py:9848
 msgid "Choose a score from 1 to 10, then save your rating."
 msgstr ""
 
-#: src/gisheh/window.py:9759
+#: src/gisheh/window.py:9873
 msgid "Save rating"
 msgstr ""
 
-#: src/gisheh/window.py:9954
+#: src/gisheh/window.py:10068
 msgid "Watch trailer"
 msgstr ""
 
-#: src/gisheh/window.py:9969
+#: src/gisheh/window.py:10083
 msgid "Open the trailer?"
 msgstr ""
 
-#: src/gisheh/window.py:10137
+#: src/gisheh/window.py:10251
 msgid "Loading cast member"
 msgstr ""
 
-#: src/gisheh/window.py:10532 src/gisheh/window.py:11496
+#: src/gisheh/window.py:10647 src/gisheh/window.py:11614
 msgid "Wait for all episode details to finish loading"
 msgstr ""
 
-#: src/gisheh/window.py:10676
+#: src/gisheh/window.py:10792
 msgid "Open the video?"
 msgstr ""
 
-#: src/gisheh/window.py:11568
+#: src/gisheh/window.py:11686
 msgid "When did you watch this?"
 msgstr ""
 
-#: src/gisheh/window.py:11575
+#: src/gisheh/window.py:11693
 msgid "Date"
 msgstr ""
 
-#: src/gisheh/window.py:11586
+#: src/gisheh/window.py:11704
 msgid "Time"
 msgstr ""
 
-#: src/gisheh/window.py:11604
+#: src/gisheh/window.py:11722
 msgid "Hour"
 msgstr ""
 
-#: src/gisheh/window.py:11612
+#: src/gisheh/window.py:11730
 msgid "Minute"
 msgstr ""
 
-#: src/gisheh/window.py:11618
+#: src/gisheh/window.py:11736
 msgid "AM or PM"
 msgstr ""
 
-#: src/gisheh/window.py:11626
+#: src/gisheh/window.py:11744
 msgid "Now"
 msgstr ""
 
-#: src/gisheh/window.py:11627
+#: src/gisheh/window.py:11745
 msgid "Reset to the current date and time"
 msgstr ""
 
-#: src/gisheh/window.py:11642
+#: src/gisheh/window.py:11760
 msgid "Mark as Watched"
 msgstr ""
 
-#: src/gisheh/window.py:11812
+#: src/gisheh/window.py:11930
 msgid "Season watched time saved locally (not synced)"
 msgstr ""
 
-#: src/gisheh/window.py:11814 src/gisheh/window.py:11873
-#: src/gisheh/window.py:11972 src/gisheh/window.py:12052
+#: src/gisheh/window.py:11932 src/gisheh/window.py:11991
+#: src/gisheh/window.py:12090 src/gisheh/window.py:12170
 msgid "Connect Simkl to change episode history"
 msgstr ""
 
-#: src/gisheh/window.py:11841
+#: src/gisheh/window.py:11959
 msgid "Simkl did not add any episodes to watched history."
 msgstr ""
 
-#: src/gisheh/window.py:11845
+#: src/gisheh/window.py:11963
 msgid "Season marked as watched"
 msgstr ""
 
-#: src/gisheh/window.py:11871
+#: src/gisheh/window.py:11989
 msgid "Season marked as unwatched locally (not synced)"
 msgstr ""
 
-#: src/gisheh/window.py:11970
+#: src/gisheh/window.py:12088
 msgid "Episode watched time saved locally (not synced)"
 msgstr ""
 
-#: src/gisheh/window.py:11998
+#: src/gisheh/window.py:12116
 msgid "Simkl did not add this episode to watched history."
 msgstr ""
 
-#: src/gisheh/window.py:12002
+#: src/gisheh/window.py:12120
 msgid "Episode marked as watched"
 msgstr ""
 
-#: src/gisheh/window.py:12050
+#: src/gisheh/window.py:12168
 msgid "Episode marked as unwatched locally (not synced)"
 msgstr ""
 
-#: src/gisheh/window.py:12498
+#: src/gisheh/window.py:12617
 msgid "Connect Simkl to change ratings or lists"
 msgstr ""
 
-#: src/gisheh/window.py:12647
+#: src/gisheh/window.py:12766
 msgid "Change watched date"
 msgstr ""
 
-#: src/gisheh/window.py:12648
+#: src/gisheh/window.py:12767
 msgid "Mark as unwatched"
 msgstr ""
 
-#: src/gisheh/window.py:12698
+#: src/gisheh/window.py:12817
 msgid "Marked as unwatched locally (not synced)"
 msgstr ""
 
-#: src/gisheh/window.py:12700 src/gisheh/window.py:12737
+#: src/gisheh/window.py:12819 src/gisheh/window.py:12856
 msgid "Connect Simkl to change watch history"
 msgstr ""
 
-#: src/gisheh/window.py:12735
+#: src/gisheh/window.py:12854
 msgid "Watched time saved locally (not synced)"
 msgstr ""
 
-#: src/gisheh/window.py:12764
+#: src/gisheh/window.py:12884
 msgid ""
 "This title is already marked as watched on Simkl. Use Change watched date or "
 "unmark it first."
 msgstr ""
 
-#: src/gisheh/window.py:12770
+#: src/gisheh/window.py:12891
 msgid "Simkl did not confirm this watched update."
 msgstr ""
 
-#: src/gisheh/window.py:12773
+#: src/gisheh/window.py:12894
 msgid "Marked as watched"
 msgstr ""
 
-#: src/gisheh/window.py:12797
+#: src/gisheh/window.py:12918
 msgid "Watch date changed locally"
 msgstr ""
 
-#: src/gisheh/window.py:12818
+#: src/gisheh/window.py:12939
 msgid "Watched date changed"
 msgstr ""
 
-#: src/gisheh/window.py:13004
+#: src/gisheh/window.py:13125
 msgid "Refresh"
 msgstr ""
 
-#: src/gisheh/window.py:13007
+#: src/gisheh/window.py:13128
 msgid "Copy Log"
 msgstr ""
 
-#: src/gisheh/window.py:13023
+#: src/gisheh/window.py:13144
 msgid "Application log copied"
 msgstr ""
 
@@ -1384,122 +1400,126 @@ msgstr ""
 msgid "Media type"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:222
+#: src/gisheh/ui/window.ui:172
+msgid "Library data status"
+msgstr ""
+
+#: src/gisheh/ui/window.ui:235
 msgid "Movies / Watched"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:255
+#: src/gisheh/ui/window.ui:268
 msgid "Search movies…"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:256
+#: src/gisheh/ui/window.ui:269
 msgid "Search collection (Ctrl+K)"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:262
+#: src/gisheh/ui/window.ui:275
 msgid "Sort by"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:268
+#: src/gisheh/ui/window.ui:281
 msgid "Filter by genre"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:274
+#: src/gisheh/ui/window.ui:287
 msgid "View mode"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:303
+#: src/gisheh/ui/window.ui:316
 msgid "Showing 6 recent entries"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:315
+#: src/gisheh/ui/window.ui:328
 msgid "Reverse sort direction"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:355
+#: src/gisheh/ui/window.ui:368
 msgid "Title details"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:403
+#: src/gisheh/ui/window.ui:416
 msgid "2013 · Iran"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:417
+#: src/gisheh/ui/window.ui:430
 msgid "Hush! Girls Don't Scream"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:467
+#: src/gisheh/ui/window.ui:480
 msgid "Rate this title"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:482
+#: src/gisheh/ui/window.ui:495
 msgid "Your rating"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:490
+#: src/gisheh/ui/window.ui:503
 msgid "Not rated"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:514
+#: src/gisheh/ui/window.ui:527
 msgid "Bookmark"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:526
+#: src/gisheh/ui/window.ui:539
 msgid "1h 44m"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:542
+#: src/gisheh/ui/window.ui:555
 msgid "Drama · Crime"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:592
+#: src/gisheh/ui/window.ui:605
 msgid "Director / Creator"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:597
+#: src/gisheh/ui/window.ui:610
 msgid "Release"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:602
+#: src/gisheh/ui/window.ui:615
 msgid "Country"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:607
+#: src/gisheh/ui/window.ui:620
 msgid "Activity"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:629
+#: src/gisheh/ui/window.ui:642
 msgid "Your activity"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:639
+#: src/gisheh/ui/window.ui:652
 msgid "Completed"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:710
+#: src/gisheh/ui/window.ui:723
 msgid "Discover / Movies"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:742
+#: src/gisheh/ui/window.ui:755
 msgid "Search TMDB…"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:743
+#: src/gisheh/ui/window.ui:756
 msgid "Search all matching titles on TMDB (Ctrl+K)"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:754
+#: src/gisheh/ui/window.ui:767
 msgid "Explore order"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:760
+#: src/gisheh/ui/window.ui:773
 msgid "Release period"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:766
+#: src/gisheh/ui/window.ui:779
 msgid "Explore genre"
 msgstr ""
 
-#: src/gisheh/ui/window.ui:772
+#: src/gisheh/ui/window.ui:785
 msgid "Open release calendar"
 msgstr ""

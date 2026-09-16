@@ -76,7 +76,7 @@ class PrivateRotatingFileHandler(RotatingFileHandler):
 MEDIA_TYPES = (N_("Movies"), N_("Shows"), N_("Anime"))
 COLLECTIONS = (
     (N_("Watching"), "media-playback-start-symbolic"),
-    (N_("Watched"), "emblem-ok-symbolic"),
+    (N_("Watched"), "object-select-symbolic"),
     (N_("On Hold"), "media-playback-pause-symbolic"),
     (N_("Dropped"), "user-trash-symbolic"),
     (N_("Watchlist"), "bookmark-new-symbolic"),
@@ -2502,6 +2502,7 @@ class GishehWindow:
         self._log_dialog: Adw.AlertDialog | None = None
         self._log_text_view: Gtk.TextView | None = None
         self._simkl_sync_started_at = 0.0
+        self._simkl_sync_error: str | None = None
         self._simkl_mutations_inflight: set[str] = set()
         self._simkl_state_generation = 0
         self.color_scheme = "system"
@@ -2617,7 +2618,9 @@ class GishehWindow:
             "toast_overlay",
             "workspace",
             "header_bar",
+            "header_data_status_button",
             "header_data_status_icon",
+            "header_data_status_spinner",
             "header_data_status_label",
             "media_switcher",
             "main_menu_button",
@@ -5439,7 +5442,7 @@ class GishehWindow:
                 _("Total watch time"),
             ),
             self._profile_metric(
-                "emblem-ok-symbolic",
+                "object-select-symbolic",
                 str(len(stats["watched_records"])),
                 _("Completed titles"),
             ),
@@ -5471,6 +5474,7 @@ class GishehWindow:
     def begin_simkl_connection(self) -> bool:
         """Enter Simkl mode and start its PIN or refresh flow."""
         self.library_mode = LIBRARY_MODE_SIMKL
+        self._simkl_sync_error = None
         if not self.simkl_token:
             self.simkl_token = simkl_client.read_token()
         self._save_user_state()
@@ -5491,7 +5495,10 @@ class GishehWindow:
                 self.begin_simkl_connection()
             return
 
+        self._simkl_sync_error = None
+
         if mode == LIBRARY_MODE_LOCAL:
+            self._simkl_sync_started_at = 0.0
             stored_state = read_state(self.state_file)
             self.library_mode = mode
             save_library_mode(mode, self.state_file)
@@ -5707,6 +5714,7 @@ class GishehWindow:
 
     def _on_simkl_authorized(self, access_token: str) -> bool:
         self._simkl_poll_cancelled = True
+        self._simkl_sync_error = None
         try:
             simkl_client.clear_account_cache()
             storage = simkl_client.store_token(access_token)
@@ -5734,8 +5742,10 @@ class GishehWindow:
             or not self.simkl_token
         ):
             return
+        self._simkl_sync_error = None
         self._simkl_sync_started_at = time.monotonic()
         self._app_log("Simkl sync started.")
+        self._update_header_data_status()
         self._update_settings_account_rows(syncing=True)
         generation = self._simkl_state_generation
         threading.Thread(
@@ -6139,6 +6149,7 @@ class GishehWindow:
             elapsed,
         )
         self._simkl_sync_started_at = 0.0
+        self._simkl_sync_error = None
         self._update_profile_identity()
         self._update_settings_account_rows()
         return GLib.SOURCE_REMOVE
@@ -6164,30 +6175,52 @@ class GishehWindow:
     def _update_header_data_status(self) -> None:
         if not hasattr(self, "header_data_status_label"):
             return
+        syncing = (
+            self.library_mode == LIBRARY_MODE_SIMKL
+            and bool(getattr(self, "_simkl_sync_started_at", 0.0))
+        )
+        sync_error = getattr(self, "_simkl_sync_error", None)
+        self.header_data_status_icon.set_visible(not syncing)
+        self.header_data_status_spinner.set_visible(syncing)
+        self.header_data_status_spinner.set_spinning(syncing)
+        self.header_data_status_button.set_sensitive(not syncing)
+        self.header_data_status_icon.remove_css_class("success")
+        self.header_data_status_icon.remove_css_class("accent")
+
         if self.library_mode == LIBRARY_MODE_LOCAL:
             self.header_data_status_icon.set_from_icon_name("drive-harddisk-symbolic")
-            self.header_data_status_icon.remove_css_class("success")
             self.header_data_status_icon.add_css_class("accent")
             self.header_data_status_label.set_label(_("Local"))
-            self.header_data_status_label.set_tooltip_text(
-                _("Local-first · Personal library data stays on this device")
-            )
+            tooltip = _("Local-first · Personal library data stays on this device")
+        elif syncing:
+            self.header_data_status_label.set_label(_("Syncing…"))
+            tooltip = _("Refreshing your Simkl library")
+        elif sync_error:
+            self.header_data_status_icon.set_from_icon_name("dialog-warning-symbolic")
+            self.header_data_status_label.set_label(_("Sync failed"))
+            tooltip = _("Sync failed. Click to try again.")
         elif self.simkl_connected:
-            self.header_data_status_icon.set_from_icon_name("emblem-ok-symbolic")
-            self.header_data_status_icon.remove_css_class("accent")
+            self.header_data_status_icon.set_from_icon_name("object-select-symbolic")
             self.header_data_status_icon.add_css_class("success")
             self.header_data_status_label.set_label(_("Synced"))
-            self.header_data_status_label.set_tooltip_text(
-                _("Your library is connected to Simkl")
-            )
+            tooltip = _("Synced with Simkl. Click to refresh now.")
         else:
             self.header_data_status_icon.set_from_icon_name("network-offline-symbolic")
-            self.header_data_status_icon.remove_css_class("success")
-            self.header_data_status_icon.remove_css_class("accent")
             self.header_data_status_label.set_label(_("Not synced"))
-            self.header_data_status_label.set_tooltip_text(
-                _("Simkl mode is selected but no account is connected")
-            )
+            tooltip = _("Simkl is not connected. Click to connect.")
+
+        self.header_data_status_button.set_tooltip_text(tooltip)
+        self.header_data_status_button.update_property(
+            [Gtk.AccessibleProperty.LABEL, Gtk.AccessibleProperty.DESCRIPTION],
+            [self.header_data_status_label.get_label(), tooltip],
+        )
+
+    def _on_header_data_status_clicked(self, _button: Gtk.Button) -> None:
+        """Make the header status a direct action for its current state."""
+        if self.library_mode == LIBRARY_MODE_LOCAL:
+            self._on_preferences_clicked(None)
+            return
+        self._on_simkl_button_clicked(None)
 
     def _on_simkl_failed(self, message: str, code: int | None) -> bool:
         elapsed = (
@@ -6202,6 +6235,7 @@ class GishehWindow:
             level=logging.ERROR,
         )
         self._simkl_sync_started_at = 0.0
+        self._simkl_sync_error = message
         self._simkl_poll_cancelled = True
         if code == 401:
             try:
@@ -6258,6 +6292,7 @@ class GishehWindow:
             )
         self.simkl_token = None
         self.simkl_connected = False
+        self._simkl_sync_error = None
         self.simkl_settings = {}
         self.simkl_stats = {}
         records, _explore, _totals = load_catalog()
@@ -6766,6 +6801,9 @@ class GishehWindow:
         self.image_switcher.connect("notify::active-name", self._on_image_mode_changed)
         self.search_button.connect("clicked", self._on_search_requested)
         self.profile_button.connect("clicked", self._on_profile_clicked)
+        self.header_data_status_button.connect(
+            "clicked", self._on_header_data_status_clicked
+        )
         self.watched_button.connect("clicked", self._on_watched_clicked)
         self.bookmark_button.connect("toggled", self._on_bookmark_toggled)
         title_click = Gtk.GestureClick()

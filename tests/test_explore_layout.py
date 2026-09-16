@@ -328,6 +328,86 @@ class DetailActionLayoutTests(unittest.TestCase):
         self.assertNotIn("profile_sidebar_row", objects)
 
 
+class HeaderDataStatusTests(unittest.TestCase):
+    @staticmethod
+    def _controller() -> gisheh.GishehWindow:
+        from gi.repository import Gtk
+
+        controller = object.__new__(gisheh.GishehWindow)
+        controller.library_mode = gisheh.LIBRARY_MODE_LOCAL
+        controller.simkl_connected = False
+        controller._simkl_sync_started_at = 0.0
+        controller._simkl_sync_error = None
+        controller.header_data_status_button = Gtk.Button()
+        controller.header_data_status_icon = Gtk.Image()
+        controller.header_data_status_spinner = Gtk.Spinner()
+        controller.header_data_status_label = Gtk.Label()
+        return controller
+
+    def test_header_status_is_a_real_button_with_loading_indicator(self) -> None:
+        root = ET.parse(gisheh.UI_FILE).getroot()
+        objects = {
+            item.get("id"): item.get("class")
+            for item in root.iter("object")
+            if item.get("id")
+        }
+
+        self.assertEqual(objects["header_data_status_button"], "GtkButton")
+        self.assertEqual(objects["header_data_status_spinner"], "GtkSpinner")
+
+    def test_header_status_reflects_local_syncing_synced_and_failed_states(
+        self,
+    ) -> None:
+        controller = self._controller()
+
+        controller._update_header_data_status()
+        self.assertEqual(controller.header_data_status_label.get_label(), "Local")
+        self.assertEqual(
+            controller.header_data_status_icon.get_icon_name(),
+            "drive-harddisk-symbolic",
+        )
+        self.assertTrue(controller.header_data_status_button.get_sensitive())
+
+        controller.library_mode = gisheh.LIBRARY_MODE_SIMKL
+        controller._simkl_sync_started_at = 1.0
+        controller._update_header_data_status()
+        self.assertEqual(controller.header_data_status_label.get_label(), "Syncing…")
+        self.assertTrue(controller.header_data_status_spinner.get_spinning())
+        self.assertFalse(controller.header_data_status_button.get_sensitive())
+
+        controller._simkl_sync_started_at = 0.0
+        controller.simkl_connected = True
+        controller._update_header_data_status()
+        self.assertEqual(controller.header_data_status_label.get_label(), "Synced")
+        self.assertEqual(
+            controller.header_data_status_icon.get_icon_name(),
+            "object-select-symbolic",
+        )
+        self.assertTrue(controller.header_data_status_button.get_sensitive())
+
+        controller._simkl_sync_error = "Network unavailable"
+        controller._update_header_data_status()
+        self.assertEqual(controller.header_data_status_label.get_label(), "Sync failed")
+        self.assertEqual(
+            controller.header_data_status_icon.get_icon_name(),
+            "dialog-warning-symbolic",
+        )
+
+    def test_header_button_runs_the_action_for_the_current_mode(self) -> None:
+        controller = self._controller()
+        actions: list[str] = []
+        controller._on_preferences_clicked = lambda _button: actions.append(
+            "preferences"
+        )
+        controller._on_simkl_button_clicked = lambda _button: actions.append("sync")
+
+        controller._on_header_data_status_clicked(controller.header_data_status_button)
+        controller.library_mode = gisheh.LIBRARY_MODE_SIMKL
+        controller._on_header_data_status_clicked(controller.header_data_status_button)
+
+        self.assertEqual(actions, ["preferences", "sync"])
+
+
 class SettingsDialogTests(unittest.TestCase):
     @staticmethod
     def _controller() -> gisheh.GishehWindow:
