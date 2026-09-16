@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 from typing import Any
 
-
 APP_ID = "io.github.arashe023.Gisheh"
 LIBRARY_MODE_LOCAL = "local"
 LIBRARY_MODE_SIMKL = "simkl"

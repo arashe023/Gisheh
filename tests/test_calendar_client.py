@@ -5,7 +5,6 @@ import tempfile
 import unittest
 from dataclasses import replace
 from datetime import date, datetime, timezone
-from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 from urllib.error import HTTPError
@@ -13,7 +12,6 @@ from urllib.parse import parse_qs, urlsplit
 
 from gisheh.services import simkl_client
 from gisheh.window import CALENDAR_TIMELINE_PAGE_SIZE, GishehWindow
-
 
 TV_PAYLOAD = {
     "calendar": [
@@ -63,9 +61,7 @@ class CalendarUrlTests(unittest.TestCase):
                 )
 
     def test_monthly_url_uses_simkl_unpadded_month_segment(self) -> None:
-        url = simkl_client.calendar_url(
-            "shows", 2026, 7, client_id="client"
-        )
+        url = simkl_client.calendar_url("shows", 2026, 7, client_id="client")
         self.assertIn("/calendar/v2/2026/7/tv.json?", url)
 
 
@@ -86,25 +82,39 @@ class CalendarParsingTests(unittest.TestCase):
 
     def test_anime_without_season_and_movie_without_episode(self) -> None:
         anime = {
-            "calendar": [{
-                "simkl_id": 1, "date": "2026-01-01T00:00:00Z",
-                "finale_type": 3,
-                "episode": {"episode": 12, "title": "Final", "url": "x"},
-            }],
-            "metadata": {"1": {
-                "title": "Anime", "ids": {"simkl_id": 1, "mal": 9},
-                "ratings": {"simkl": {}}, "anime_type": "tv",
-            }},
+            "calendar": [
+                {
+                    "simkl_id": 1,
+                    "date": "2026-01-01T00:00:00Z",
+                    "finale_type": 3,
+                    "episode": {"episode": 12, "title": "Final", "url": "x"},
+                }
+            ],
+            "metadata": {
+                "1": {
+                    "title": "Anime",
+                    "ids": {"simkl_id": 1, "mal": 9},
+                    "ratings": {"simkl": {}},
+                    "anime_type": "tv",
+                }
+            },
         }
         movie = {
-            "calendar": [{
-                "simkl_id": 2, "date": "2026-01-02T00:00:00Z",
-                "finale_type": None,
-            }],
-            "metadata": {"2": {
-                "title": "Movie", "ids": {"simkl_id": 2},
-                "ratings": {"simkl": {}}, "dvd_date": "02/03/2026",
-            }},
+            "calendar": [
+                {
+                    "simkl_id": 2,
+                    "date": "2026-01-02T00:00:00Z",
+                    "finale_type": None,
+                }
+            ],
+            "metadata": {
+                "2": {
+                    "title": "Movie",
+                    "ids": {"simkl_id": 2},
+                    "ratings": {"simkl": {}},
+                    "dvd_date": "02/03/2026",
+                }
+            },
         }
         anime_event = simkl_client.parse_calendar_payload(anime, "anime").events[0]
         movie_event = simkl_client.parse_calendar_payload(movie, "movies").events[0]
@@ -131,7 +141,11 @@ class CalendarParsingTests(unittest.TestCase):
     def test_all_finale_types(self) -> None:
         payload = {
             "calendar": [
-                {"simkl_id": value, "date": "2026-01-01T00:00:00Z", "finale_type": value}
+                {
+                    "simkl_id": value,
+                    "date": "2026-01-01T00:00:00Z",
+                    "finale_type": value,
+                }
                 for value in (1, 2, 3)
             ],
             "metadata": {
@@ -139,17 +153,24 @@ class CalendarParsingTests(unittest.TestCase):
                 for value in (1, 2, 3)
             },
         }
-        labels = [event.finale_label for event in simkl_client.parse_calendar_payload(payload, "shows").events]
-        self.assertEqual(labels, ["Mid-season finale", "Season finale", "Series finale"])
+        labels = [
+            event.finale_label
+            for event in simkl_client.parse_calendar_payload(payload, "shows").events
+        ]
+        self.assertEqual(
+            labels, ["Mid-season finale", "Season finale", "Series finale"]
+        )
 
     def test_merge_keeps_all_episodes_but_only_one_title(self) -> None:
         second = json.loads(json.dumps(TV_PAYLOAD))
         second["calendar"][0]["episode"]["episode"] = 11
         second["calendar"][0]["date"] = "2026-07-21T23:30:00Z"
-        merged = simkl_client.merge_calendar_snapshots([
-            simkl_client.parse_calendar_payload(TV_PAYLOAD, "shows"),
-            simkl_client.parse_calendar_payload(second, "shows"),
-        ])
+        merged = simkl_client.merge_calendar_snapshots(
+            [
+                simkl_client.parse_calendar_payload(TV_PAYLOAD, "shows"),
+                simkl_client.parse_calendar_payload(second, "shows"),
+            ]
+        )
         self.assertEqual(len(merged.events), 2)
         self.assertEqual(len(merged.titles), 1)
 
@@ -227,7 +248,7 @@ class CalendarIdentityAndFilterTests(unittest.TestCase):
         self.assertEqual(len(controller._calendar_events()), 1)
 
     def test_title_outside_library_is_hidden_from_my_calendar(self) -> None:
-        controller, library, explore = self.controller()
+        controller, _library, explore = self.controller()
         controller.records = ()
         controller.records_by_id = {explore.id: explore}
         controller.library_ids = set()
@@ -248,12 +269,10 @@ class CalendarIdentityAndFilterTests(unittest.TestCase):
             simkl_id=3,
             local_datetime=datetime(2026, 7, 20, 23, 45, tzinfo=timezone.utc),
         )
-        groups = controller._calendar_events_by_day(
-            (later_same_day, original, earlier)
+        groups = controller._calendar_events_by_day((later_same_day, original, earlier))
+        self.assertEqual(
+            [day for day, _events in groups], [date(2026, 7, 19), date(2026, 7, 20)]
         )
-        self.assertEqual([day for day, _events in groups], [
-            date(2026, 7, 19), date(2026, 7, 20)
-        ])
         self.assertEqual(groups[1][1], (original, later_same_day))
 
     def test_timeline_day_heading_has_relative_date_week_and_weekday(self) -> None:
@@ -292,8 +311,8 @@ class CalendarIdentityAndFilterTests(unittest.TestCase):
         controller, _library, _explore = self.controller()
         event = controller.calendar_snapshot.events[0]
         controller._calendar_record = lambda _event: None
-        controller._calendar_poster_overlay = (
-            lambda _title, _width, _height: Gtk.Overlay()
+        controller._calendar_poster_overlay = lambda _title, _width, _height: (
+            Gtk.Overlay()
         )
         controller._simkl_writable = lambda: False
         row = controller._calendar_event_row(event)
@@ -320,7 +339,9 @@ class CalendarIdentityAndFilterTests(unittest.TestCase):
         self.assertEqual(controller.calendar_month, date(2026, 8, 1))
         self.assertEqual(controller.calendar_selected_date, date(2026, 8, 1))
         self.assertIsNone(controller.calendar_snapshot)
-        self.assertEqual(controller.calendar_timeline_limit, CALENDAR_TIMELINE_PAGE_SIZE)
+        self.assertEqual(
+            controller.calendar_timeline_limit, CALENDAR_TIMELINE_PAGE_SIZE
+        )
         self.assertEqual(refreshes, [(False, True)])
 
     def test_superseding_refresh_invalidates_old_generation_and_starts_new_worker(
@@ -352,7 +373,9 @@ class CalendarIdentityAndFilterTests(unittest.TestCase):
 class CalendarCacheTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
-        self.env = mock.patch.dict("os.environ", {"XDG_CACHE_HOME": self.temporary.name})
+        self.env = mock.patch.dict(
+            "os.environ", {"XDG_CACHE_HOME": self.temporary.name}
+        )
         self.env.start()
 
     def tearDown(self) -> None:
@@ -361,9 +384,13 @@ class CalendarCacheTests(unittest.TestCase):
 
     def test_cache_round_trip_is_atomic_and_calendar_only_clear(self) -> None:
         path = simkl_client.store_calendar_cache(
-            "shows", TV_PAYLOAD, source_url="https://example/calendar",
-            fetched_at=datetime.now(timezone.utc), last_modified="stamp",
-            year=2026, month=7,
+            "shows",
+            TV_PAYLOAD,
+            source_url="https://example/calendar",
+            fetched_at=datetime.now(timezone.utc),
+            last_modified="stamp",
+            year=2026,
+            month=7,
         )
         self.assertTrue(path.is_file())
         self.assertFalse(any(path.parent.glob("*.tmp*")))
@@ -381,17 +408,18 @@ class CalendarCacheTests(unittest.TestCase):
         path = simkl_client.calendar_cache_dir() / "shows-2026-07.json"
         path.parent.mkdir(parents=True)
         path.write_text("not json")
-        self.assertIsNone(
-            simkl_client.load_calendar_cache("shows", year=2026, month=7)
-        )
+        self.assertIsNone(simkl_client.load_calendar_cache("shows", year=2026, month=7))
         self.assertFalse(path.exists())
 
     def test_304_reuses_cache_and_never_sends_authorization(self) -> None:
         simkl_client.store_calendar_cache(
-            "shows", TV_PAYLOAD, source_url="https://example/calendar",
+            "shows",
+            TV_PAYLOAD,
+            source_url="https://example/calendar",
             fetched_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
             last_modified="Mon, 01 Jan 2020 00:00:00 GMT",
-            year=2026, month=7,
+            year=2026,
+            month=7,
         )
 
         def not_modified(request, timeout):

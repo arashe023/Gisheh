@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 from __future__ import annotations
 
 import json
@@ -12,13 +10,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-
 SOURCE_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SOURCE_DIR))
 
 from gisheh import window as gisheh
 from gisheh.services import simkl_client
-
 
 UI_FILE = SOURCE_DIR / "gisheh" / "ui" / "window.ui"
 WINDOW_FILE = SOURCE_DIR / "gisheh" / "window.py"

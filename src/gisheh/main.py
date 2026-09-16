@@ -12,9 +12,7 @@ from gi.repository import Gio
 def _register_resources() -> Gio.Resource | None:
     configured = os.environ.get("GISHEH_RESOURCE_FILE")
     resource_file = (
-        Path(configured)
-        if configured
-        else Path(__file__).with_name("gisheh.gresource")
+        Path(configured) if configured else Path(__file__).with_name("gisheh.gresource")
     )
     if not resource_file.is_file():
         return None

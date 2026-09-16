@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Simkl authentication and user-state sync client."""
 
 from __future__ import annotations
@@ -77,9 +76,7 @@ def normalize_watched_at(
         raise SimklError("The watched timestamp is not a valid ISO-8601 date.")
     if moment.tzinfo is None:
         if default_timezone is None:
-            raise SimklError(
-                "The watched timestamp needs an explicit timezone offset."
-            )
+            raise SimklError("The watched timestamp needs an explicit timezone offset.")
         moment = moment.replace(tzinfo=default_timezone)
     return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -127,8 +124,7 @@ class CalendarTitle:
         if not self.poster:
             return "https://simkl.in/poster_no_pic.png"
         return (
-            "https://wsrv.nl/?url=https://simkl.in/posters/"
-            f"{self.poster}_m.webp&q=90"
+            f"https://wsrv.nl/?url=https://simkl.in/posters/{self.poster}_m.webp&q=90"
         )
 
 
@@ -307,9 +303,12 @@ def _calendar_title(raw: dict[str, Any], simkl_id: int) -> CalendarTitle:
         url=raw_url,
         network=str(raw.get("network") or "").strip() or None,
         genres=tuple(
-            str(item) for item in raw.get("genres", ())
+            str(item)
+            for item in raw.get("genres", ())
             if isinstance(item, str) and item.strip()
-        ) if isinstance(raw.get("genres", ()), (list, tuple)) else (),
+        )
+        if isinstance(raw.get("genres", ()), (list, tuple))
+        else (),
         runtime=str(raw.get("runtime") or "").strip() or None,
         status=str(raw.get("status") or "").strip() or None,
         total_episodes=_optional_int(raw.get("total_episodes")),
@@ -370,7 +369,9 @@ def parse_calendar_payload(
                 media_type=media,
                 date=str(item.get("date") or "").strip() or None,
                 utc_datetime=utc_moment,
-                local_datetime=(utc_moment.astimezone(local_zone) if utc_moment else None),
+                local_datetime=(
+                    utc_moment.astimezone(local_zone) if utc_moment else None
+                ),
                 finale_type=finale if finale in {1, 2, 3} else None,
                 season=episode_data.season if episode_data else None,
                 episode=episode_data.episode if episode_data else None,
@@ -412,22 +413,36 @@ def merge_calendar_snapshots(
         for event in snapshot.events:
             titles[(event.media_type, event.simkl_id)] = event.title
             key = (
-                event.media_type, event.simkl_id, event.date,
-                event.season, event.episode_number,
+                event.media_type,
+                event.simkl_id,
+                event.date,
+                event.season,
+                event.episode_number,
             )
             events[key] = event
-    ordered = tuple(sorted(events.values(), key=lambda event: (
-        event.utc_datetime is None,
-        event.utc_datetime or datetime.max.replace(tzinfo=timezone.utc),
-        event.media_type, event.simkl_id, event.episode_number or 0,
-    )))
+    ordered = tuple(
+        sorted(
+            events.values(),
+            key=lambda event: (
+                event.utc_datetime is None,
+                event.utc_datetime or datetime.max.replace(tzinfo=timezone.utc),
+                event.media_type,
+                event.simkl_id,
+                event.episode_number or 0,
+            ),
+        )
+    )
     return CalendarSnapshot(
         events=ordered,
         titles=tuple(titles.values()),
         source_url=", ".join(snapshot.source_url for snapshot in snapshots),
         fetched_at=max(snapshot.fetched_at for snapshot in snapshots),
         last_modified=max(
-            (snapshot.last_modified for snapshot in snapshots if snapshot.last_modified),
+            (
+                snapshot.last_modified
+                for snapshot in snapshots
+                if snapshot.last_modified
+            ),
             default=None,
         ),
         from_cache=all(snapshot.from_cache for snapshot in snapshots),
@@ -488,7 +503,10 @@ def load_calendar_cache(
     path = _calendar_cache_file(media_type, year, month)
     try:
         envelope = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(envelope, dict) or envelope.get("schema_version") != CALENDAR_SCHEMA_VERSION:
+        if (
+            not isinstance(envelope, dict)
+            or envelope.get("schema_version") != CALENDAR_SCHEMA_VERSION
+        ):
             raise ValueError("unsupported schema")
         payload = envelope.get("payload")
         fetched_at = _calendar_datetime(envelope.get("fetched_at"))
@@ -547,9 +565,7 @@ def fetch_calendar_poster(title: CalendarTitle) -> str | None:
         return None
     return (
         str(destination)
-        if image_http.download(
-            title.poster_url, destination, max_bytes=8 * 1024 * 1024
-        )
+        if image_http.download(title.poster_url, destination, max_bytes=8 * 1024 * 1024)
         else None
     )
 
@@ -566,7 +582,9 @@ def fetch_calendar(
 ) -> CalendarSnapshot:
     """Fetch one public v2 calendar, conditionally reusing its isolated cache."""
     if not client_id.strip():
-        raise SimklError("A Simkl Client ID is required for Calendar requests.", code=412)
+        raise SimklError(
+            "A Simkl Client ID is required for Calendar requests.", code=412
+        )
     media = _calendar_media_type(media_type)
     cached = load_calendar_cache(
         media, year=year, month=month, display_timezone=display_timezone
@@ -600,28 +618,39 @@ def fetch_calendar(
             )
             return refreshed[0] if refreshed else snapshot
         if code == 412:
-            raise SimklError("The Simkl Client ID is missing or invalid.", code=412) from None
+            raise SimklError(
+                "The Simkl Client ID is missing or invalid.", code=412
+            ) from None
         if code == 404 and year is not None and not cached:
             return CalendarSnapshot(
                 (), (), url, datetime.now(timezone.utc), unavailable=True
             )
         if cached:
             return CalendarSnapshot(
-                cached[0].events, cached[0].titles, cached[0].source_url,
-                cached[0].fetched_at, cached[0].last_modified,
-                from_cache=True, stale=True,
+                cached[0].events,
+                cached[0].titles,
+                cached[0].source_url,
+                cached[0].fetched_at,
+                cached[0].last_modified,
+                from_cache=True,
+                stale=True,
             )
         message = (
             "The Simkl Client ID is missing or invalid."
-            if code == 412 else f"Simkl Calendar request failed with HTTP {code}."
+            if code == 412
+            else f"Simkl Calendar request failed with HTTP {code}."
         )
         raise SimklError(message, code=code) from None
     except (URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError) as error:
         if cached:
             return CalendarSnapshot(
-                cached[0].events, cached[0].titles, cached[0].source_url,
-                cached[0].fetched_at, cached[0].last_modified,
-                from_cache=True, stale=True,
+                cached[0].events,
+                cached[0].titles,
+                cached[0].source_url,
+                cached[0].fetched_at,
+                cached[0].last_modified,
+                from_cache=True,
+                stale=True,
             )
         reason = getattr(error, "reason", error)
         raise SimklError(f"Could not reach the Simkl Calendar: {reason}") from None
@@ -629,12 +658,21 @@ def fetch_calendar(
         raise SimklError("Simkl returned an unexpected Calendar response.")
     fetched_at = datetime.now(timezone.utc)
     store_calendar_cache(
-        media, payload, source_url=url, fetched_at=fetched_at,
-        last_modified=last_modified, year=year, month=month,
+        media,
+        payload,
+        source_url=url,
+        fetched_at=fetched_at,
+        last_modified=last_modified,
+        year=year,
+        month=month,
     )
     return parse_calendar_payload(
-        payload, media, display_timezone=display_timezone, source_url=url,
-        fetched_at=fetched_at, last_modified=last_modified,
+        payload,
+        media,
+        display_timezone=display_timezone,
+        source_url=url,
+        fetched_at=fetched_at,
+        last_modified=last_modified,
     )
 
 
@@ -1136,9 +1174,7 @@ def change_watched_date(
     """
     normalized_new = normalize_watched_at(watched_at)
     normalized_previous = (
-        normalize_watched_at(previous_watched_at)
-        if previous_watched_at
-        else None
+        normalize_watched_at(previous_watched_at) if previous_watched_at else None
     )
     remove_from_library(client_id, token, group, ids)
     try:
@@ -1222,9 +1258,7 @@ def set_episode_watched(
             group: [
                 {
                     "ids": ids,
-                    "seasons": [
-                        {"number": season, "episodes": watched_episodes}
-                    ],
+                    "seasons": [{"number": season, "episodes": watched_episodes}],
                 }
             ]
         },
@@ -1257,9 +1291,7 @@ def remove_episode_watched(
             group: [
                 {
                     "ids": ids,
-                    "seasons": [
-                        {"number": season, "episodes": removed_episodes}
-                    ],
+                    "seasons": [{"number": season, "episodes": removed_episodes}],
                 }
             ]
         },
@@ -1313,9 +1345,7 @@ def fetch_library(client_id: str, token: str) -> dict[str, Any]:
         timeout=60,
     )
     return {
-        group: payload.get(group, [])
-        if isinstance(payload.get(group), list)
-        else []
+        group: payload.get(group, []) if isinstance(payload.get(group), list) else []
         for group in LIBRARY_GROUPS
     }
 

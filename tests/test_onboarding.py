@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 from __future__ import annotations
 
 import json
@@ -9,7 +7,6 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-
 
 SOURCE_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SOURCE_DIR))
@@ -159,9 +156,7 @@ class LocalFirstLibraryTests(unittest.TestCase):
 
     @staticmethod
     def _controller() -> tuple[gisheh.GishehWindow, gisheh.TitleRecord]:
-        records, explore, _totals = gisheh.load_catalog(
-            include_sample_data=True
-        )
+        records, explore, _totals = gisheh.load_catalog(include_sample_data=True)
         record = explore[0]
         controller = object.__new__(gisheh.GishehWindow)
         controller.library_mode = gisheh.LIBRARY_MODE_LOCAL
@@ -170,18 +165,14 @@ class LocalFirstLibraryTests(unittest.TestCase):
         controller.explore_search_records = ()
         controller.library_ids = {item.id for item in records}
         controller.explore_ids = {item.id for item in explore}
-        controller.records_by_id = {
-            item.id: item for item in (*records, *explore)
-        }
+        controller.records_by_id = {item.id: item for item in (*records, *explore)}
         controller.bookmarks = set()
         controller.completed = set()
         controller.ratings = {}
         controller.status_overrides = {}
         controller.local_library_records = {}
         controller._tmdb_record_aliases = {}
-        controller._library_records_by_canonical = {
-            item.id: item for item in records
-        }
+        controller._library_records_by_canonical = {item.id: item for item in records}
         controller.toasts = []
         controller._toast = controller.toasts.append
         return controller, record
@@ -258,9 +249,7 @@ class LocalFirstLibraryTests(unittest.TestCase):
                 destination,
             )
 
-            records, explore, _totals = gisheh.load_catalog(
-                include_sample_data=True
-            )
+            records, explore, _totals = gisheh.load_catalog(include_sample_data=True)
             reader = object.__new__(gisheh.GishehWindow)
             reader.state_file = destination
             reader.library_mode = gisheh.LIBRARY_MODE_LOCAL
@@ -268,13 +257,9 @@ class LocalFirstLibraryTests(unittest.TestCase):
             reader.explore_records = explore
             reader.explore_search_records = ()
             reader.library_ids = {item.id for item in records}
-            reader.records_by_id = {
-                item.id: item for item in (*records, *explore)
-            }
+            reader.records_by_id = {item.id: item for item in (*records, *explore)}
             reader._tmdb_record_aliases = {}
-            reader._library_records_by_canonical = {
-                item.id: item for item in records
-            }
+            reader._library_records_by_canonical = {item.id: item for item in records}
             reader.local_library_records = {}
             reader.simkl_token = None
             reader.simkl_connected = False
@@ -316,12 +301,8 @@ class LocalFirstLibraryTests(unittest.TestCase):
 class WelcomeTourStructureTests(unittest.TestCase):
     def test_tour_explains_both_modes_without_a_main_menu_entry(self) -> None:
         root = Path(__file__).resolve().parents[1]
-        onboarding = (root / "src/gisheh/onboarding.py").read_text(
-            encoding="utf-8"
-        )
-        application = (root / "src/gisheh/application.py").read_text(
-            encoding="utf-8"
-        )
+        onboarding = (root / "src/gisheh/onboarding.py").read_text(encoding="utf-8")
+        application = (root / "src/gisheh/application.py").read_text(encoding="utf-8")
         window = (root / "src/gisheh/window.py").read_text(encoding="utf-8")
 
         self.assertIn("Welcome to Gisheh", onboarding)
@@ -343,9 +324,7 @@ class WelcomeTourStructureTests(unittest.TestCase):
 
         stylesheet = (
             Path(__file__).resolve().parents[1] / "src/gisheh/style.css"
-        ).read_text(
-            encoding="utf-8"
-        )
+        ).read_text(encoding="utf-8")
         self.assertNotIn(".welcome-icon-surface", stylesheet)
 
     def test_simkl_choice_requires_pin_authorization_before_completion(self) -> None:

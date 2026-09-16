@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from gettext import gettext as _
 
 import gi
 
@@ -21,11 +22,10 @@ from .state_store import (
 )
 from .window import APP_ID, APP_NAME, APP_VERSION, GishehWindow
 
-
 TMDB_URL = "https://www.themoviedb.org"
 SIMKL_URL = "https://simkl.com"
 TMDB_LOGO_RESOURCE = "/io/github/arashe023/Gisheh/assets/tmdb-logo.svg"
-TMDB_NOTICE = (
+TMDB_NOTICE = _(
     "This product uses the TMDB API but is not endorsed or certified by TMDB."
 )
 
@@ -83,14 +83,16 @@ class GishehApplication(Adw.Application):
     ) -> None:
         try:
             self.controller = GishehWindow(self, library_mode=library_mode)
-        except Exception as error:
+        # This is the application startup boundary: unexpected constructor
+        # failures must become a visible error window instead of aborting GTK.
+        except Exception as error:  # noqa: BLE001
             print(f"Gisheh failed to start: {error}", file=sys.stderr)
             window = Adw.ApplicationWindow(application=self, title=APP_NAME)
             window.set_default_size(720, 480)
             window.set_content(
                 Adw.StatusPage(
                     icon_name="dialog-error-symbolic",
-                    title="Unable to start Gisheh",
+                    title=_("Unable to start Gisheh"),
                     description=str(error),
                 )
             )
@@ -117,10 +119,10 @@ class GishehApplication(Adw.Application):
             except OSError as error:
                 if self.welcome_window is not None:
                     dialog = Adw.AlertDialog(
-                        heading="Could not save your choice",
+                        heading=_("Could not save your choice"),
                         body=str(error),
                     )
-                    dialog.add_response("close", "Close")
+                    dialog.add_response("close", _("Close"))
                     dialog.present(self.welcome_window)
                 return
 
@@ -175,21 +177,21 @@ class GishehApplication(Adw.Application):
             application_icon=APP_ID,
             developer_name="Gisheh",
             version=APP_VERSION,
-            comments="A native GTK4 and Libadwaita media tracker.",
+            comments=_("A native GTK4 and Libadwaita media tracker."),
             license_type=Gtk.License.MIT_X11,
         )
         dialog.add_acknowledgement_section(
-            "Data providers",
+            _("Data providers"),
             ["The Movie Database (TMDB)", "Simkl"],
         )
         dialog.add_legal_section(
-            "The Movie Database (TMDB)",
+            _("The Movie Database (TMDB)"),
             None,
             Gtk.License.CUSTOM,
             TMDB_NOTICE,
         )
-        dialog.add_link("The Movie Database", TMDB_URL)
-        dialog.add_link("Simkl", SIMKL_URL)
+        dialog.add_link(_("The Movie Database"), TMDB_URL)
+        dialog.add_link(_("Simkl"), SIMKL_URL)
         dialog.present(window)
 
     def _show_credits_dialog(
@@ -202,8 +204,8 @@ class GishehApplication(Adw.Application):
             return
 
         dialog = Adw.AlertDialog(
-            heading="Credits & Data Sources",
-            body="Gisheh uses the following independent data services.",
+            heading=_("Credits & Data Sources"),
+            body=_("Gisheh uses the following independent data services."),
         )
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
 
@@ -214,7 +216,7 @@ class GishehApplication(Adw.Application):
         tmdb_logo.set_halign(Gtk.Align.CENTER)
         tmdb_logo.update_property(
             [Gtk.AccessibleProperty.LABEL],
-            ["The Movie Database (TMDB)"],
+            [_("The Movie Database (TMDB)")],
         )
         content.append(tmdb_logo)
 
@@ -224,7 +226,7 @@ class GishehApplication(Adw.Application):
         notice.set_max_width_chars(54)
         content.append(notice)
 
-        tmdb_link = Gtk.LinkButton(uri=TMDB_URL, label="Visit The Movie Database")
+        tmdb_link = Gtk.LinkButton(uri=TMDB_URL, label=_("Visit The Movie Database"))
         tmdb_link.set_halign(Gtk.Align.CENTER)
         content.append(tmdb_link)
 
@@ -233,8 +235,10 @@ class GishehApplication(Adw.Application):
 
         simkl_credit = Gtk.Label()
         simkl_credit.set_markup(
-            "Watch history, ratings and account synchronization are provided "
-            f'by <a href="{SIMKL_URL}">Simkl</a>.'
+            _(
+                "Watch history, ratings and account synchronization are provided "
+                'by <a href="{simkl_url}">Simkl</a>.'
+            ).format(simkl_url=SIMKL_URL)
         )
         simkl_credit.set_wrap(True)
         simkl_credit.set_justify(Gtk.Justification.CENTER)
@@ -242,7 +246,7 @@ class GishehApplication(Adw.Application):
         content.append(simkl_credit)
 
         dialog.set_extra_child(content)
-        dialog.add_response("close", "Close")
+        dialog.add_response("close", _("Close"))
         dialog.set_close_response("close")
         dialog.present(window)
 

@@ -8,7 +8,6 @@ from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from gisheh.services import tmdb_client
@@ -82,23 +81,25 @@ class TmdbClientTests(unittest.TestCase):
                 tmdb_client.clear_token()
 
     def test_clear_cache_removes_image_and_metadata_directories(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            with patch.dict(
+        with (
+            tempfile.TemporaryDirectory() as temporary_directory,
+            patch.dict(
                 os.environ,
                 {"XDG_CACHE_HOME": temporary_directory},
                 clear=False,
-            ):
-                image = tmdb_client.cache_dir() / "poster.jpg"
-                metadata = tmdb_client.metadata_cache_dir() / "movie-1.json"
-                image.parent.mkdir(parents=True)
-                metadata.parent.mkdir(parents=True)
-                image.write_bytes(b"image")
-                metadata.write_text("{}", encoding="utf-8")
+            ),
+        ):
+            image = tmdb_client.cache_dir() / "poster.jpg"
+            metadata = tmdb_client.metadata_cache_dir() / "movie-1.json"
+            image.parent.mkdir(parents=True)
+            metadata.parent.mkdir(parents=True)
+            image.write_bytes(b"image")
+            metadata.write_text("{}", encoding="utf-8")
 
-                tmdb_client.clear_cache()
+            tmdb_client.clear_cache()
 
-                self.assertFalse(tmdb_client.cache_dir().exists())
-                self.assertFalse(tmdb_client.metadata_cache_dir().exists())
+            self.assertFalse(tmdb_client.cache_dir().exists())
+            self.assertFalse(tmdb_client.metadata_cache_dir().exists())
 
     def test_fetch_explore_uses_expected_endpoints(self) -> None:
         calls: list[tuple[str, dict[str, object]]] = []
@@ -238,21 +239,21 @@ class TmdbClientTests(unittest.TestCase):
 
     def test_summary_is_fetched_from_tmdb_and_cached(self) -> None:
         payload = {"id": 42, "title": "TMDB title", "poster_path": "/p.jpg"}
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            with (
-                patch.dict(
-                    os.environ,
-                    {"XDG_CACHE_HOME": temporary_directory},
-                    clear=False,
-                ),
-                patch.object(
-                    tmdb_client,
-                    "request_json",
-                    return_value=payload,
-                ) as requester,
-            ):
-                result = tmdb_client.fetch_summary("token", "movie", 42)
-                cached = tmdb_client.load_summary("movie", 42)
+        with (
+            tempfile.TemporaryDirectory() as temporary_directory,
+            patch.dict(
+                os.environ,
+                {"XDG_CACHE_HOME": temporary_directory},
+                clear=False,
+            ),
+            patch.object(
+                tmdb_client,
+                "request_json",
+                return_value=payload,
+            ) as requester,
+        ):
+            result = tmdb_client.fetch_summary("token", "movie", 42)
+            cached = tmdb_client.load_summary("movie", 42)
 
         self.assertEqual(result, payload)
         self.assertEqual(cached, payload)
@@ -263,20 +264,22 @@ class TmdbClientTests(unittest.TestCase):
         )
 
     def test_cached_image_only_returns_complete_existing_file(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            with patch.dict(
+        with (
+            tempfile.TemporaryDirectory() as temporary_directory,
+            patch.dict(
                 os.environ,
                 {"XDG_CACHE_HOME": temporary_directory},
                 clear=False,
-            ):
-                self.assertIsNone(tmdb_client.cached_image("/poster.jpg", size="w500"))
-                destination = tmdb_client.cache_dir() / "w500-poster.jpg"
-                destination.parent.mkdir(parents=True)
-                destination.write_bytes(b"image")
-                self.assertEqual(
-                    tmdb_client.cached_image("/poster.jpg", size="w500"),
-                    str(destination),
-                )
+            ),
+        ):
+            self.assertIsNone(tmdb_client.cached_image("/poster.jpg", size="w500"))
+            destination = tmdb_client.cache_dir() / "w500-poster.jpg"
+            destination.parent.mkdir(parents=True)
+            destination.write_bytes(b"image")
+            self.assertEqual(
+                tmdb_client.cached_image("/poster.jpg", size="w500"),
+                str(destination),
+            )
 
     def test_cache_image_uses_shared_pooled_transport(self) -> None:
         def download(url: str, destination: Path, **kwargs: object) -> bool:
@@ -288,20 +291,20 @@ class TmdbClientTests(unittest.TestCase):
             destination.write_bytes(b"image")
             return True
 
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            with (
-                patch.dict(
-                    os.environ,
-                    {"XDG_CACHE_HOME": temporary_directory},
-                    clear=False,
-                ),
-                patch.object(
-                    tmdb_client.image_http,
-                    "download",
-                    side_effect=download,
-                ) as downloader,
-            ):
-                cached = tmdb_client.cache_image("/poster.jpg", size="w500")
+        with (
+            tempfile.TemporaryDirectory() as temporary_directory,
+            patch.dict(
+                os.environ,
+                {"XDG_CACHE_HOME": temporary_directory},
+                clear=False,
+            ),
+            patch.object(
+                tmdb_client.image_http,
+                "download",
+                side_effect=download,
+            ) as downloader,
+        ):
+            cached = tmdb_client.cache_image("/poster.jpg", size="w500")
         self.assertIsNotNone(cached)
         downloader.assert_called_once()
 
@@ -312,28 +315,28 @@ class TmdbClientTests(unittest.TestCase):
             destination.write_bytes(b"image")
             return True
 
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            with (
-                patch.dict(
-                    os.environ,
-                    {"XDG_CACHE_HOME": temporary_directory},
-                    clear=False,
-                ),
-                patch.object(
-                    tmdb_client.image_http,
-                    "download",
-                    side_effect=download,
-                ),
-            ):
-                cached = tmdb_client.cache_youtube_thumbnail("abc_123-XYZ")
-                self.assertEqual(
-                    cached,
-                    str(tmdb_client.cache_dir() / "youtube-abc_123-XYZ.jpg"),
-                )
-                self.assertEqual(
-                    tmdb_client.cached_youtube_thumbnail("abc_123-XYZ"),
-                    cached,
-                )
+        with (
+            tempfile.TemporaryDirectory() as temporary_directory,
+            patch.dict(
+                os.environ,
+                {"XDG_CACHE_HOME": temporary_directory},
+                clear=False,
+            ),
+            patch.object(
+                tmdb_client.image_http,
+                "download",
+                side_effect=download,
+            ),
+        ):
+            cached = tmdb_client.cache_youtube_thumbnail("abc_123-XYZ")
+            self.assertEqual(
+                cached,
+                str(tmdb_client.cache_dir() / "youtube-abc_123-XYZ.jpg"),
+            )
+            self.assertEqual(
+                tmdb_client.cached_youtube_thumbnail("abc_123-XYZ"),
+                cached,
+            )
 
         self.assertIsNone(tmdb_client.cache_youtube_thumbnail("../../unsafe"))
 

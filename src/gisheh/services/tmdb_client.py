@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Small dependency-free TMDB client used by the native Gisheh app."""
 
 from __future__ import annotations
@@ -252,7 +251,9 @@ def fetch_explore_page(
     }
 
 
-def fetch_explore(token: str, *, language: str = "en-US") -> dict[str, list[dict[str, Any]]]:
+def fetch_explore(
+    token: str, *, language: str = "en-US"
+) -> dict[str, list[dict[str, Any]]]:
     movies = fetch_explore_page(token, "Movies", 1, language=language)["results"]
     shows = fetch_explore_page(token, "Shows", 1, language=language)["results"]
     anime = fetch_explore_page(token, "Anime", 1, language=language)["results"]
@@ -292,17 +293,9 @@ def search_titles_page(
             "page": page,
         },
     )
-    results = [
-        item
-        for item in payload.get("results", ())
-        if isinstance(item, dict)
-    ]
+    results = [item for item in payload.get("results", ()) if isinstance(item, dict)]
     if media_type == "Anime":
-        results = [
-            item
-            for item in results
-            if 16 in item.get("genre_ids", ())
-        ]
+        results = [item for item in results if 16 in item.get("genre_ids", ())]
     return {
         "page": int(payload.get("page") or page),
         "total_pages": int(payload.get("total_pages") or page),
@@ -318,9 +311,7 @@ def fetch_details(
     language: str = "en-US",
 ) -> dict[str, Any]:
     namespace = "movie" if media_type == "movie" else "tv"
-    rating_resource = (
-        "release_dates" if namespace == "movie" else "content_ratings"
-    )
+    rating_resource = "release_dates" if namespace == "movie" else "content_ratings"
     return request_json(
         f"/{namespace}/{tmdb_id}",
         token=token,

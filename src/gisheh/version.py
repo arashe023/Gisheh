@@ -10,7 +10,9 @@ except ImportError:
     # Meson generates _build_config.py for installed builds. Tests and direct
     # source-tree runs intentionally read the same canonical VERSION file.
     APP_VERSION = (
-        Path(__file__).resolve().parents[2] / "VERSION"
-    ).read_text(encoding="utf-8").strip()
+        (Path(__file__).resolve().parents[2] / "VERSION")
+        .read_text(encoding="utf-8")
+        .strip()
+    )
 
 __version__ = APP_VERSION

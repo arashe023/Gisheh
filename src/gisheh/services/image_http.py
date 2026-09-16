@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Shared pooled HTTP transport for Gisheh image downloads."""
 
 from __future__ import annotations
@@ -6,8 +5,8 @@ from __future__ import annotations
 import atexit
 import threading
 import time
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 import httpx
 

@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 from __future__ import annotations
 
 import sys
@@ -17,9 +15,7 @@ from gisheh.services import tmdb_client
 
 
 def _base_record() -> gisheh.TitleRecord:
-    records, _explore, _totals = gisheh.load_catalog(
-        include_sample_data=True
-    )
+    records, _explore, _totals = gisheh.load_catalog(include_sample_data=True)
     base = next(record for record in records if record.media_type == "Shows")
     return base
 
@@ -56,15 +52,33 @@ class SeasonMergeTests(unittest.TestCase):
     def test_episodes_matched_by_number_despite_order(self) -> None:
         episodes = _episodes(1, 2, 3)
         payload = [
-            {"episode_number": 3, "name": "Third", "air_date": "2026-03-01",
-             "overview": "Third overview", "runtime": 45, "guest_stars": [],
-             "still_path": ""},
-            {"episode_number": 1, "name": "First", "air_date": "2026-01-01",
-             "overview": "First overview", "runtime": 50, "guest_stars": [],
-             "still_path": ""},
-            {"episode_number": 2, "name": "Second", "air_date": "2026-02-01",
-             "overview": "Second overview", "runtime": 55, "guest_stars": [],
-             "still_path": ""},
+            {
+                "episode_number": 3,
+                "name": "Third",
+                "air_date": "2026-03-01",
+                "overview": "Third overview",
+                "runtime": 45,
+                "guest_stars": [],
+                "still_path": "",
+            },
+            {
+                "episode_number": 1,
+                "name": "First",
+                "air_date": "2026-01-01",
+                "overview": "First overview",
+                "runtime": 50,
+                "guest_stars": [],
+                "still_path": "",
+            },
+            {
+                "episode_number": 2,
+                "name": "Second",
+                "air_date": "2026-02-01",
+                "overview": "Second overview",
+                "runtime": 55,
+                "guest_stars": [],
+                "still_path": "",
+            },
         ]
         merged = gisheh.merge_tmdb_season_episodes(episodes, payload)
         by_number = {episode.number: episode for episode in merged}
@@ -74,45 +88,63 @@ class SeasonMergeTests(unittest.TestCase):
 
     def test_empty_tmdb_values_preserve_existing(self) -> None:
         existing = gisheh.EpisodeInfo(
-            id="e1", number=1, title="Kept title", date="2026-01-01",
-            description="Kept overview", watched=True, image_variant=3,
-            artwork_file="/cache/kept.jpg", runtime="45m",
+            id="e1",
+            number=1,
+            title="Kept title",
+            date="2026-01-01",
+            description="Kept overview",
+            watched=True,
+            image_variant=3,
+            artwork_file="/cache/kept.jpg",
+            runtime="45m",
             cast=(gisheh.CastMember("Actor", "Lead"),),
         )
         payload = [
-            {"episode_number": 1, "name": "", "air_date": "",
-             "overview": "", "runtime": 0, "guest_stars": [],
-             "still_path": ""},
-            {"episode_number": 1, "name": "Ignored duplicate",
-             "air_date": "", "overview": "", "runtime": 0,
-             "guest_stars": [], "still_path": ""},
+            {
+                "episode_number": 1,
+                "name": "",
+                "air_date": "",
+                "overview": "",
+                "runtime": 0,
+                "guest_stars": [],
+                "still_path": "",
+            },
+            {
+                "episode_number": 1,
+                "name": "Ignored duplicate",
+                "air_date": "",
+                "overview": "",
+                "runtime": 0,
+                "guest_stars": [],
+                "still_path": "",
+            },
             "malformed",
             {"no_number": True},
         ]
-        with patch.object(
-            tmdb_client, "cached_image", return_value=None
-        ):
+        with patch.object(tmdb_client, "cached_image", return_value=None):
             merged = gisheh.merge_tmdb_season_episodes((existing,), payload)
         self.assertEqual(merged[0].title, "Kept title")
         self.assertEqual(merged[0].date, "2026-01-01")
         self.assertEqual(merged[0].description, "Kept overview")
         self.assertEqual(merged[0].runtime, "45m")
-        self.assertEqual(
-            merged[0].cast, (gisheh.CastMember("Actor", "Lead"),)
-        )
+        self.assertEqual(merged[0].cast, (gisheh.CastMember("Actor", "Lead"),))
         self.assertEqual(merged[0].artwork_file, "/cache/kept.jpg")
 
     def test_runtime_uses_format_watch_time(self) -> None:
         episodes = _episodes(4)
         payload = [
-            {"episode_number": 4, "name": "Runtime", "air_date": "2026-04-01",
-             "overview": "Overview", "runtime": 125, "guest_stars": [],
-             "still_path": ""},
+            {
+                "episode_number": 4,
+                "name": "Runtime",
+                "air_date": "2026-04-01",
+                "overview": "Overview",
+                "runtime": 125,
+                "guest_stars": [],
+                "still_path": "",
+            },
         ]
         merged = gisheh.merge_tmdb_season_episodes(episodes, payload)
-        self.assertEqual(
-            merged[0].runtime, gisheh.format_watch_time(125)
-        )
+        self.assertEqual(merged[0].runtime, gisheh.format_watch_time(125))
 
     def test_specials_season_zero_uses_real_number(self) -> None:
         self.assertEqual(
@@ -125,29 +157,44 @@ class SeasonMergeTests(unittest.TestCase):
         )
         episodes = _episodes(1)
         payload = [
-            {"episode_number": 1, "name": "Special One",
-             "air_date": "2026-01-01", "overview": "Special overview",
-             "runtime": 30, "guest_stars": [], "still_path": ""},
+            {
+                "episode_number": 1,
+                "name": "Special One",
+                "air_date": "2026-01-01",
+                "overview": "Special overview",
+                "runtime": 30,
+                "guest_stars": [],
+                "still_path": "",
+            },
         ]
         merged = gisheh.merge_tmdb_season_episodes(episodes, payload)
         self.assertEqual(merged[0].title, "Special One")
 
     def test_watched_state_and_identity_preserved(self) -> None:
         existing = gisheh.EpisodeInfo(
-            id="local-e7", number=7, title="Old", date="2026",
-            description="Old", watched=True, image_variant=9,
+            id="local-e7",
+            number=7,
+            title="Old",
+            date="2026",
+            description="Old",
+            watched=True,
+            image_variant=9,
             artwork_file="/cache/old.jpg",
         )
         payload = [
-            {"episode_number": 7, "name": "New", "air_date": "2026-07-01",
-             "overview": "New overview", "runtime": 42,
-             "guest_stars": [{"name": "Guest", "character": "Visitor",
-                              "profile_path": ""}],
-             "still_path": ""},
+            {
+                "episode_number": 7,
+                "name": "New",
+                "air_date": "2026-07-01",
+                "overview": "New overview",
+                "runtime": 42,
+                "guest_stars": [
+                    {"name": "Guest", "character": "Visitor", "profile_path": ""}
+                ],
+                "still_path": "",
+            },
         ]
-        with patch.object(
-            tmdb_client, "cached_image", return_value=None
-        ):
+        with patch.object(tmdb_client, "cached_image", return_value=None):
             merged = gisheh.merge_tmdb_season_episodes((existing,), payload)
         self.assertEqual(merged[0].id, "local-e7")
         self.assertTrue(merged[0].watched)
@@ -175,9 +222,7 @@ class SeasonRequestTests(unittest.TestCase):
             watched=0,
             episodes=2,
         )
-        return replace(
-            base, id="test-title", tmdb_id=20, seasons=(season, other)
-        )
+        return replace(base, id="test-title", tmdb_id=20, seasons=(season, other))
 
     def test_loading_request_is_deduplicated(self) -> None:
         record = self._record()
@@ -213,10 +258,7 @@ class SeasonRequestTests(unittest.TestCase):
             controller._tmdb_season_details_loaded.add(key_one)
             with self.assertRaises(AssertionError):
                 controller._load_tmdb_season_details_async(record, 1)
-            key_two = next(
-                key
-                for key in controller._tmdb_season_details_loading
-            )
+            key_two = next(key for key in controller._tmdb_season_details_loading)
         self.assertNotEqual(key_one, key_two)
         self.assertIn(":s1", key_one)
         self.assertIn(":s2", key_two)
@@ -296,8 +338,7 @@ class SeasonRequestTests(unittest.TestCase):
         self.assertIn("test-title:s1:e2", controller._tmdb_episode_details_loaded)
         stored = controller.records_by_id[record.id]
         titles = {
-            episode.number: episode.title
-            for episode in stored.seasons[0].episode_items
+            episode.number: episode.title for episode in stored.seasons[0].episode_items
         }
         self.assertEqual(titles[1], "One")
         self.assertEqual(titles[2], "Two")
@@ -321,9 +362,13 @@ class SeasonRequestTests(unittest.TestCase):
         }
 
         with (
-            patch.object(gisheh.tmdb_client, "fetch_season_details", return_value=payload),
+            patch.object(
+                gisheh.tmdb_client, "fetch_season_details", return_value=payload
+            ),
             patch.object(gisheh.tmdb_client, "cached_image", return_value=None),
-            patch.object(gisheh.tmdb_client, "cache_image", return_value="/cache/one.jpg"),
+            patch.object(
+                gisheh.tmdb_client, "cache_image", return_value="/cache/one.jpg"
+            ),
             patch.object(
                 gisheh.GLib,
                 "idle_add",
@@ -428,8 +473,14 @@ class EpisodePositionRemovalTests(unittest.TestCase):
             "def _detail_navigation_action"
         )[0]
         self.assertNotIn("episode_position", builder)
-        self.assertNotIn("CenterBox", builder.split("self.episode_hero_host")[1].split(
-            "self.episode_detail_box = Gtk.Box")[0] if "self.episode_detail_box = Gtk.Box" in builder else builder)
+        self.assertNotIn(
+            "CenterBox",
+            builder.split("self.episode_hero_host")[1].split(
+                "self.episode_detail_box = Gtk.Box"
+            )[0]
+            if "self.episode_detail_box = Gtk.Box" in builder
+            else builder,
+        )
         first_append = None
         for line in builder.splitlines():
             stripped = line.strip()
@@ -462,7 +513,9 @@ class EpisodePositionRemovalTests(unittest.TestCase):
                 f"self.episode_detail_box.append({component})",
                 episode_layout,
             )
-        self.assertNotIn("self.episode_detail_box.append(Gtk.Separator())", episode_layout)
+        self.assertNotIn(
+            "self.episode_detail_box.append(Gtk.Separator())", episode_layout
+        )
         self.assertIn('add_css_class("detail-tint-content")', episode_layout)
 
 

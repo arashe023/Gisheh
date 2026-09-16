@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 from __future__ import annotations
 
 import sys
@@ -10,12 +8,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from gisheh import window as gisheh
 from gisheh.services import simkl_client
-
 
 TEHRAN = timezone(timedelta(hours=3, minutes=30))
 
@@ -71,9 +67,7 @@ class TimestampParsingTests(unittest.TestCase):
         self.assertIsNotNone(parsed)
         assert parsed is not None
         self.assertIsNotNone(parsed.tzinfo)
-        self.assertEqual(
-            parsed.utcoffset(), datetime.now().astimezone().utcoffset()
-        )
+        self.assertEqual(parsed.utcoffset(), datetime.now().astimezone().utcoffset())
 
 
 class TimestampConstructionTests(unittest.TestCase):
@@ -116,9 +110,7 @@ class TimestampConstructionTests(unittest.TestCase):
     def test_local_offset_is_preserved(self) -> None:
         moment = gisheh.watched_datetime_from_parts(2026, 9, 4, 21, 35)
         assert moment is not None
-        self.assertEqual(
-            moment.utcoffset(), datetime.now().astimezone().utcoffset()
-        )
+        self.assertEqual(moment.utcoffset(), datetime.now().astimezone().utcoffset())
         reparsed = gisheh.parse_watched_datetime(moment.isoformat())
         assert reparsed is not None
         self.assertEqual(reparsed.replace(tzinfo=None), moment.replace(tzinfo=None))
@@ -226,10 +218,11 @@ class WatchedDialogTests(unittest.TestCase):
 
         confirmed: list[str] = []
         dialog = self._build(confirmed)
-        calendar, hour_spin, minute_spin, _ampm, _error = (
-            dialog._watched_time_controls  # type: ignore[attr-defined]
+        calendar, hour_spin, minute_spin, _ampm, _error = dialog._watched_time_controls  # type: ignore[attr-defined]
+        gisheh.set_calendar_date(
+            calendar,
+            GLib.DateTime.new_local(2000, 1, 2, 0, 0, 0.0),
         )
-        calendar.select_day(GLib.DateTime.new_local(2000, 1, 2, 0, 0, 0.0))
         hour_spin.set_value(hour_spin.get_adjustment().get_lower())
         minute_spin.set_value(minute_spin.get_adjustment().get_lower())
         today = datetime.now().astimezone().date()
@@ -262,12 +255,11 @@ class WatchedDialogTests(unittest.TestCase):
 
         confirmed: list[str] = []
         dialog = self._build(confirmed)
-        calendar, _hour, _minute, _ampm, error = (
-            dialog._watched_time_controls  # type: ignore[attr-defined]
-        )
+        calendar, _hour, _minute, _ampm, error = dialog._watched_time_controls  # type: ignore[attr-defined]
         future = datetime.now().astimezone() + timedelta(days=400)
-        calendar.select_day(
-            GLib.DateTime.new_local(future.year, future.month, future.day, 0, 0, 0.0)
+        gisheh.set_calendar_date(
+            calendar,
+            GLib.DateTime.new_local(future.year, future.month, future.day, 0, 0, 0.0),
         )
         calendar.emit("day-selected")
         self.assertFalse(dialog.get_response_enabled("mark"))
@@ -304,7 +296,9 @@ def _titled_controller() -> gisheh.GishehWindow:
     controller.logged: list[tuple[object, ...]] = []
     controller._save_user_state = lambda: controller.saved.append("save")  # type: ignore[method-assign]
     controller._toast = lambda message: controller.toasts.append(message)  # type: ignore[method-assign]
-    controller._app_log = lambda message, *args, **kwargs: controller.logged.append((message, *args))  # type: ignore[method-assign]
+    controller._app_log = lambda message, *args, **kwargs: controller.logged.append(
+        (message, *args)
+    )  # type: ignore[method-assign]
     controller._refresh_results = lambda: None  # type: ignore[method-assign]
     controller._refresh_profile = lambda: None  # type: ignore[method-assign]
     controller._update_details = lambda: None  # type: ignore[method-assign]
@@ -318,9 +312,7 @@ def _titled_controller() -> gisheh.GishehWindow:
 
 class TitleWatchedFlowTests(unittest.TestCase):
     def _record(self) -> gisheh.TitleRecord:
-        records, _explore, _totals = gisheh.load_catalog(
-            include_sample_data=True
-        )
+        records, _explore, _totals = gisheh.load_catalog(include_sample_data=True)
         base = next(record for record in records if record.media_type == "Movies")
         return replace(base, tmdb_id=20, tmdb_media_type="movie")
 
@@ -331,10 +323,13 @@ class TitleWatchedFlowTests(unittest.TestCase):
         controller._mark_title_watched(record, "2026-09-04T21:35:00+03:30")
         self.assertIn(controller._canonical_record_id(record), controller.completed)
         self.assertEqual(
-            controller.title_watched_at[controller._canonical_record_id(record)], "2026-09-04T21:35:00+03:30"
+            controller.title_watched_at[controller._canonical_record_id(record)],
+            "2026-09-04T21:35:00+03:30",
         )
         self.assertTrue(any("locally" in toast for toast in controller.toasts))
-        self.assertNotIn("synced", " ".join(controller.toasts).lower().replace("(not synced)", ""))
+        self.assertNotIn(
+            "synced", " ".join(controller.toasts).lower().replace("(not synced)", "")
+        )
 
     def test_online_mark_sends_timestamp_and_updates_after_success(self) -> None:
         controller = _titled_controller()
@@ -355,12 +350,8 @@ class TitleWatchedFlowTests(unittest.TestCase):
             controller.toasts.append(message)
 
         with (
-            patch.object(
-                controller, "_run_simkl_mutation", side_effect=fake_mutation
-            ),
-            patch.object(
-                simkl_client, "set_watched", side_effect=fake_set_watched
-            ),
+            patch.object(controller, "_run_simkl_mutation", side_effect=fake_mutation),
+            patch.object(simkl_client, "set_watched", side_effect=fake_set_watched),
         ):
             controller._mark_title_watched(record, "2026-09-04T21:35:00+03:30")
 
@@ -369,7 +360,8 @@ class TitleWatchedFlowTests(unittest.TestCase):
         self.assertTrue(calls[0][0][4])
         self.assertIn(controller._canonical_record_id(record), controller.completed)
         self.assertEqual(
-            controller.title_watched_at[controller._canonical_record_id(record)], "2026-09-04T21:35:00+03:30"
+            controller.title_watched_at[controller._canonical_record_id(record)],
+            "2026-09-04T21:35:00+03:30",
         )
         self.assertIn("Marked as watched", controller.toasts)
 
@@ -381,9 +373,7 @@ class TitleWatchedFlowTests(unittest.TestCase):
         def fake_mutation(key, op, on_success, message):
             controller._finish_simkl_mutation(key, None, message, "network down")
 
-        with patch.object(
-            controller, "_run_simkl_mutation", side_effect=fake_mutation
-        ):
+        with patch.object(controller, "_run_simkl_mutation", side_effect=fake_mutation):
             controller._run_simkl_mutation("key", lambda: None, lambda: None, "ok")
 
         self.assertNotIn(record.id, controller.completed)
@@ -447,7 +437,9 @@ class TitleWatchedFlowTests(unittest.TestCase):
         shown: list[str] = []
         controller._show_watched_time_dialog = lambda **kwargs: shown.append("dialog")  # type: ignore[method-assign]
         list_changes: list[str] = []
-        controller._write_simkl_list_change = lambda *args, **kwargs: list_changes.append("watchlist")  # type: ignore[method-assign]
+        controller._write_simkl_list_change = lambda *args, **kwargs: (
+            list_changes.append("watchlist")
+        )  # type: ignore[method-assign]
         controller._on_watched_clicked(object())
         self.assertEqual(shown, ["dialog"])
         self.assertEqual(list_changes, [])
@@ -475,12 +467,8 @@ class TitleWatchedFlowTests(unittest.TestCase):
             controller.toasts.append(message)
 
         with (
-            patch.object(
-                controller, "_run_simkl_mutation", side_effect=fake_mutation
-            ),
-            patch.object(
-                simkl_client, "set_watched", side_effect=fake_set_watched
-            ),
+            patch.object(controller, "_run_simkl_mutation", side_effect=fake_mutation),
+            patch.object(simkl_client, "set_watched", side_effect=fake_set_watched),
         ):
             controller._mark_title_watched(record, "2026-06-04T21:35:00+03:30")
 
@@ -491,9 +479,7 @@ class TitleWatchedFlowTests(unittest.TestCase):
 
     def test_watched_explore_record_is_promoted_to_library_views(self) -> None:
         controller = _titled_controller()
-        records, _explore, _totals = gisheh.load_catalog(
-            include_sample_data=True
-        )
+        records, _explore, _totals = gisheh.load_catalog(include_sample_data=True)
         library_record = next(
             record for record in records if record.media_type == "Movies"
         )
@@ -502,10 +488,14 @@ class TitleWatchedFlowTests(unittest.TestCase):
         controller.explore_records = (explore_record,)
         controller.active_media = "Movies"
         controller.active_collection = "Watched"
-        self.assertNotIn(explore_record.id, [item.id for item in controller._library_records()])
+        self.assertNotIn(
+            explore_record.id, [item.id for item in controller._library_records()]
+        )
         controller.completed.add(explore_record.id)
         controller.status_overrides[explore_record.id] = "Watched"
-        self.assertIn(explore_record.id, [item.id for item in controller._library_records()])
+        self.assertIn(
+            explore_record.id, [item.id for item in controller._library_records()]
+        )
         self.assertGreaterEqual(controller._status_total("Movies", "Watched"), 1)
 
     def test_library_and_explore_faces_share_canonical_state(self) -> None:
@@ -535,8 +525,9 @@ class TitleWatchedFlowTests(unittest.TestCase):
 
     def test_show_server_status_watching_does_not_complete_locally(self) -> None:
         controller = _titled_controller()
-        record = replace(self._record(), id="tmdb-tv-20", media_type="Shows",
-                         tmdb_media_type="tv")
+        record = replace(
+            self._record(), id="tmdb-tv-20", media_type="Shows", tmdb_media_type="tv"
+        )
         controller.records_by_id = {record.id: record}
         controller.simkl_client_id = "client"
         controller.simkl_token = "token"
@@ -576,8 +567,11 @@ class TitleWatchedFlowTests(unittest.TestCase):
 
         with (
             patch.object(controller, "_run_simkl_mutation", side_effect=fake_mutation),
-            patch.object(simkl_client, "set_episode_watched",
-                         return_value={"added": {"episodes": 0}}),
+            patch.object(
+                simkl_client,
+                "set_episode_watched",
+                return_value={"added": {"episodes": 0}},
+            ),
         ):
             controller._mark_episode_watched(record, 0, 2, "2026-09-04T21:35:00+03:30")
 
@@ -595,14 +589,10 @@ class TitleWatchedFlowTests(unittest.TestCase):
         self.assertTrue(
             any("abc at 2026-06-04" in str(entry) for entry in controller.logged)
         )
-        self.assertTrue(
-            any("movies" in str(entry) for entry in controller.logged)
-        )
+        self.assertTrue(any("movies" in str(entry) for entry in controller.logged))
 
     def test_simkl_history_changed_detects_server_noop(self) -> None:
-        self.assertTrue(
-            gisheh.simkl_history_changed({"added": {"movies": 1}})
-        )
+        self.assertTrue(gisheh.simkl_history_changed({"added": {"movies": 1}}))
         self.assertFalse(
             gisheh.simkl_history_changed(
                 {"added": {"movies": 0, "shows": 0, "episodes": 0}}
@@ -628,9 +618,7 @@ class TitleWatchedFlowTests(unittest.TestCase):
 
         noop = {"added": {"movies": 0, "shows": 0, "episodes": 0}}
         with (
-            patch.object(
-                controller, "_run_simkl_mutation", side_effect=fake_mutation
-            ),
+            patch.object(controller, "_run_simkl_mutation", side_effect=fake_mutation),
             patch.object(simkl_client, "set_watched", return_value=noop),
         ):
             controller._mark_title_watched(record, "2026-08-04T22:14:00+03:30")
@@ -675,9 +663,7 @@ class TitleWatchedFlowTests(unittest.TestCase):
 
 class SeasonEpisodeWatchedFlowTests(unittest.TestCase):
     def _show(self) -> tuple[gisheh.TitleRecord, gisheh.GishehWindow]:
-        records, _explore, _totals = gisheh.load_catalog(
-            include_sample_data=True
-        )
+        records, _explore, _totals = gisheh.load_catalog(include_sample_data=True)
         base = next(record for record in records if record.media_type == "Shows")
         season = gisheh.SeasonInfo(
             id="s1",
@@ -792,9 +778,7 @@ class SeasonEpisodeWatchedFlowTests(unittest.TestCase):
             on_success()
 
         with (
-            patch.object(
-                controller, "_run_simkl_mutation", side_effect=fake_mutation
-            ),
+            patch.object(controller, "_run_simkl_mutation", side_effect=fake_mutation),
             patch.object(
                 simkl_client, "set_episode_watched", side_effect=fake_set_episode
             ),
@@ -802,9 +786,7 @@ class SeasonEpisodeWatchedFlowTests(unittest.TestCase):
             controller._mark_episode_watched(record, 0, 2, "2026-09-04T21:35:00+03:30")
 
         self.assertEqual(captured["season"], 1)
-        self.assertEqual(
-            captured["episodes"], [(2, "2026-09-04T21:35:00+03:30")]
-        )
+        self.assertEqual(captured["episodes"], [(2, "2026-09-04T21:35:00+03:30")])
         key = controller._episode_key(record, 0, record.seasons[0].episode_items[1])
         self.assertTrue(controller.episode_status_overrides[key])
         self.assertEqual(
@@ -813,14 +795,14 @@ class SeasonEpisodeWatchedFlowTests(unittest.TestCase):
         self.assertNotIn(record.id, controller.completed)
 
     def test_profile_stats_work_with_iso_timestamps(self) -> None:
-        from datetime import date
+        from datetime import datetime
 
         record, controller = self._show()
         controller.records = (record,)
         controller.records_by_id = {record.id: record}
         controller.simkl_stats = {}
         controller.ratings = {}
-        today = date.today()
+        today = datetime.now().astimezone().date()
         iso_today = today.strftime("%Y-%m-%dT10:00:00+00:00")
         key = controller._episode_key(record, 0, record.seasons[0].episode_items[0])
         controller.episode_status_overrides[key] = True
@@ -847,9 +829,7 @@ class SeasonEpisodeWatchedFlowTests(unittest.TestCase):
             on_success()
 
         with (
-            patch.object(
-                controller, "_run_simkl_mutation", side_effect=fake_mutation
-            ),
+            patch.object(controller, "_run_simkl_mutation", side_effect=fake_mutation),
             patch.object(
                 simkl_client,
                 "remove_episode_watched",

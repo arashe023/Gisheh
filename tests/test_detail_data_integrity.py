@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 from __future__ import annotations
 
 import contextlib
@@ -11,7 +9,6 @@ from pathlib import Path
 from unittest.mock import Mock
 
 import gi
-
 
 SOURCE_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SOURCE_DIR))
@@ -25,9 +22,7 @@ from gisheh import window as gisheh
 class DetailDataIntegrityTests(unittest.TestCase):
     @staticmethod
     def _record(**changes: object) -> gisheh.TitleRecord:
-        records, _explore, _totals = gisheh.load_catalog(
-            include_sample_data=True
-        )
+        records, _explore, _totals = gisheh.load_catalog(include_sample_data=True)
         return replace(records[0], **changes)
 
     def test_rating_sources_do_not_fabricate_fallbacks(self) -> None:
@@ -53,9 +48,7 @@ class DetailDataIntegrityTests(unittest.TestCase):
         )
 
     def test_user_rating_never_becomes_the_tmdb_badge(self) -> None:
-        record = self._record(
-            external_ratings=(("Your rating", "8"),)
-        )
+        record = self._record(external_ratings=(("Your rating", "8"),))
 
         self.assertIsNone(gisheh.GishehWindow._tmdb_rating_value(record))
 
@@ -115,20 +108,15 @@ class DetailDataIntegrityTests(unittest.TestCase):
         empty = controller.detail_ratings_host.get_first_child()
         self.assertIsInstance(empty, Gtk.Label)
         assert isinstance(empty, Gtk.Label)
-        self.assertEqual(
-            empty.get_label(), "No rating information is available."
-        )
+        self.assertEqual(empty.get_label(), "No rating information is available.")
 
     def test_cast_members_are_real_ordered_and_limited_to_twelve(self) -> None:
         cast = tuple(
-            gisheh.CastMember(f"Person {index}", f"Role {index}")
-            for index in range(15)
+            gisheh.CastMember(f"Person {index}", f"Role {index}") for index in range(15)
         )
         record = self._record(cast=cast)
 
-        self.assertEqual(
-            gisheh.GishehWindow._cast_members(record), cast[:12]
-        )
+        self.assertEqual(gisheh.GishehWindow._cast_members(record), cast[:12])
         self.assertEqual(
             gisheh.GishehWindow._cast_members(replace(record, cast=())), ()
         )
@@ -144,17 +132,13 @@ class DetailDataIntegrityTests(unittest.TestCase):
         title_empty = title_box.get_first_child()
         self.assertIsInstance(title_empty, Gtk.Label)
         assert isinstance(title_empty, Gtk.Label)
-        self.assertEqual(
-            title_empty.get_label(), "Cast information is unavailable."
-        )
+        self.assertEqual(title_empty.get_label(), "Cast information is unavailable.")
 
         episode_box = Gtk.Box()
         controller._populate_cast_container(
             episode_box,
             record,
-            empty_message=(
-                "Guest cast information is unavailable for this episode."
-            ),
+            empty_message=("Guest cast information is unavailable for this episode."),
         )
         episode_empty = episode_box.get_first_child()
         self.assertIsInstance(episode_empty, Gtk.Label)

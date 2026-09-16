@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 from __future__ import annotations
 
 import sys
@@ -10,7 +8,6 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
-
 SOURCE_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SOURCE_DIR))
 
@@ -20,8 +17,7 @@ from gisheh import window as gisheh
 class ExploreLayoutTests(unittest.TestCase):
     def test_pagination_keeps_existing_order_and_appends_new_records(self) -> None:
         existing = tuple(
-            type("Record", (), {"id": record_id})()
-            for record_id in ("a", "b", "c")
+            type("Record", (), {"id": record_id})() for record_id in ("a", "b", "c")
         )
         filtered = tuple(
             type("Record", (), {"id": record_id})()
@@ -90,12 +86,12 @@ class ExploreLayoutTests(unittest.TestCase):
         assert avatar is not None
         self.assertIn("content-skeleton-avatar", avatar.get_css_classes())
 
-    def test_missing_artwork_uses_loading_surface_instead_of_generated_cover(self) -> None:
+    def test_missing_artwork_uses_loading_surface_instead_of_generated_cover(
+        self,
+    ) -> None:
         from gi.repository import Gtk
 
-        records, _explore, _totals = gisheh.load_catalog(
-            include_sample_data=True
-        )
+        records, _explore, _totals = gisheh.load_catalog(include_sample_data=True)
         record = replace(
             records[0],
             artwork_file=None,
@@ -115,9 +111,7 @@ class ExploreLayoutTests(unittest.TestCase):
     ) -> None:
         from gi.repository import Gtk
 
-        records, _explore, _totals = gisheh.load_catalog(
-            include_sample_data=True
-        )
+        records, _explore, _totals = gisheh.load_catalog(include_sample_data=True)
         record = next(item for item in records if item.media_type == "Shows")
         episode = gisheh.EpisodeInfo(
             id="episode-1",
@@ -155,15 +149,15 @@ class ExploreLayoutTests(unittest.TestCase):
         stylesheet = (
             Path(__file__).resolve().parents[1] / "src/gisheh/style.css"
         ).read_text(encoding="utf-8")
-        compact_rule = stylesheet.split(
-            "button.episode-watch-button {"
-        )[1].split("}")[0]
+        compact_rule = stylesheet.split("button.episode-watch-button {")[1].split("}")[
+            0
+        ]
         self.assertIn("min-width: 28px", compact_rule)
         self.assertIn("min-height: 28px", compact_rule)
         self.assertIn("padding: 0", compact_rule)
-        hover_rule = stylesheet.split(
-            "button.episode-watch-button:hover {"
-        )[1].split("}")[0]
+        hover_rule = stylesheet.split("button.episode-watch-button:hover {")[1].split(
+            "}"
+        )[0]
         self.assertIn("background-color: transparent", hover_rule)
         self.assertIn("box-shadow: none", hover_rule)
 
@@ -379,9 +373,7 @@ class SettingsDialogTests(unittest.TestCase):
             "Reset Gisheh",
         )
         self.assertTrue(
-            controller.settings_factory_reset_button.has_css_class(
-                "destructive-action"
-            )
+            controller.settings_factory_reset_button.has_css_class("destructive-action")
         )
 
     def test_connected_services_are_reflected_in_settings(self) -> None:
@@ -417,9 +409,7 @@ class SettingsDialogTests(unittest.TestCase):
             writer.preferred_view_mode = "grid"
             writer.active_collection = "Dropped"
             writer.collection_selected_ids = {
-                collection: (
-                    "tmdb-movie-77" if collection == "Dropped" else None
-                )
+                collection: ("tmdb-movie-77" if collection == "Dropped" else None)
                 for collection in gisheh.COLLECTION_NAMES
             }
             writer.collection_scroll_positions = {
@@ -465,9 +455,7 @@ class SettingsDialogTests(unittest.TestCase):
             self.assertEqual(reader.preferred_view_mode, "grid")
             self.assertEqual(reader.view_mode, "grid")
             self.assertEqual(reader.active_collection, "Dropped")
-            self.assertEqual(
-                reader.collection_selected_ids["Dropped"], "tmdb-movie-77"
-            )
+            self.assertEqual(reader.collection_selected_ids["Dropped"], "tmdb-movie-77")
             self.assertEqual(reader.collection_scroll_positions["Dropped"], 32.5)
             self.assertEqual(
                 reader.collection_view_states["Dropped"],
@@ -489,10 +477,7 @@ class DataSourceCreditsTests(unittest.TestCase):
             Path(__file__).resolve().parents[1]
             / "src/gisheh/io.github.arashe023.Gisheh.gresource.xml"
         ).read_text(encoding="utf-8")
-        logo = (
-            Path(__file__).resolve().parents[1]
-            / "src/gisheh/assets/tmdb-logo.svg"
-        )
+        logo = Path(__file__).resolve().parents[1] / "src/gisheh/assets/tmdb-logo.svg"
 
         self.assertIn(
             "This product uses the TMDB API but is not endorsed or certified by TMDB.",
@@ -503,7 +488,9 @@ class DataSourceCreditsTests(unittest.TestCase):
         self.assertIn("assets/tmdb-logo.svg", resource_manifest)
         self.assertTrue(logo.is_file())
 
-    def test_simkl_release_flow_never_asks_users_for_developer_credentials(self) -> None:
+    def test_simkl_release_flow_never_asks_users_for_developer_credentials(
+        self,
+    ) -> None:
         window_source = (
             Path(__file__).resolve().parents[1] / "src/gisheh/window.py"
         ).read_text(encoding="utf-8")
@@ -519,9 +506,7 @@ class SeasonProgressTests(unittest.TestCase):
     def _record_with_seasons(
         seasons: tuple[gisheh.SeasonInfo, ...],
     ) -> gisheh.TitleRecord:
-        records, _explore, _totals = gisheh.load_catalog(
-            include_sample_data=True
-        )
+        records, _explore, _totals = gisheh.load_catalog(include_sample_data=True)
         base = next(record for record in records if record.media_type == "Shows")
         return replace(base, seasons=seasons)
 
@@ -692,9 +677,7 @@ class SeasonProgressTests(unittest.TestCase):
 
 class MediaCollectionTests(unittest.TestCase):
     def test_media_items_keep_primary_first_and_remove_duplicates(self) -> None:
-        records, _explore, _totals = gisheh.load_catalog(
-            include_sample_data=True
-        )
+        records, _explore, _totals = gisheh.load_catalog(include_sample_data=True)
         with tempfile.TemporaryDirectory() as temporary_directory:
             first = Path(temporary_directory) / "first.jpg"
             second = Path(temporary_directory) / "second.jpg"
@@ -710,6 +693,7 @@ class MediaCollectionTests(unittest.TestCase):
 
         self.assertEqual([path for path, _label in items], [str(first), str(second)])
         self.assertEqual(items[0][1], f"{record.title} — Poster 1")
+
 
 class ProfileFormattingTests(unittest.TestCase):
     def test_runtime_minutes_handles_catalog_durations(self) -> None:
@@ -769,7 +753,7 @@ class SimklMappingTests(unittest.TestCase):
                         "year": 2022,
                         "ids": {"simkl": 104, "tmdb": 204},
                     },
-                }
+                },
             ],
         }
 
@@ -896,7 +880,9 @@ class SimklMappingTests(unittest.TestCase):
             (("TMDB", "7.8"), ("Your rating", "9")),
         )
 
-    def test_tv_runtime_falls_back_to_last_episode_when_average_is_missing(self) -> None:
+    def test_tv_runtime_falls_back_to_last_episode_when_average_is_missing(
+        self,
+    ) -> None:
         record = gisheh.title_record_from_tmdb(
             {
                 "id": 81356,
@@ -1026,9 +1012,7 @@ class TmdbCertificationTests(unittest.TestCase):
             },
         }
         fallback_payload = {
-            "content_ratings": {
-                "results": [{"iso_3166_1": "DE", "rating": "12"}]
-            }
+            "content_ratings": {"results": [{"iso_3166_1": "DE", "rating": "12"}]}
         }
 
         self.assertEqual(

@@ -4,19 +4,20 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
+from gettext import gettext as _
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
+from gi.repository import Adw, Gio, GLib, Gtk
 
 from .services import simkl_client
 from .state_store import LIBRARY_MODE_LOCAL, LIBRARY_MODE_SIMKL
-
 
 RESOURCE_PREFIX = "/io/github/arashe023/Gisheh"
 CSS_RESOURCE = f"{RESOURCE_PREFIX}/style.css"
@@ -34,13 +35,11 @@ class WelcomeTour(Adw.ApplicationWindow):
         on_complete: Callable[[str], None],
         initial_mode: str = LIBRARY_MODE_LOCAL,
     ) -> None:
-        super().__init__(application=application, title="Welcome to Gisheh")
+        super().__init__(application=application, title=_("Welcome to Gisheh"))
         self.set_default_size(720, 560)
         self.set_size_request(420, 460)
         self._on_complete = on_complete
-        self._selected_mode = (
-            initial_mode if simkl_available else LIBRARY_MODE_LOCAL
-        )
+        self._selected_mode = initial_mode if simkl_available else LIBRARY_MODE_LOCAL
         self._page_index = 0
         self._simkl_auth_generation = 0
         self._simkl_auth_active = False
@@ -62,7 +61,7 @@ class WelcomeTour(Adw.ApplicationWindow):
         toolbar = Adw.ToolbarView()
         header = Adw.HeaderBar()
         header.set_show_start_title_buttons(False)
-        header.set_title_widget(Adw.WindowTitle(title="Gisheh", subtitle="Welcome"))
+        header.set_title_widget(Adw.WindowTitle(title=_("Gisheh"), subtitle=_("Welcome")))
         toolbar.add_top_bar(header)
 
         layout = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -74,26 +73,30 @@ class WelcomeTour(Adw.ApplicationWindow):
         self.carousel.append(
             self._tour_page(
                 "🎬",
-                "Welcome to Gisheh",
-                "Keep films, shows and anime in one calm, native library built "
-                "for the GNOME desktop.",
+                _("Welcome to Gisheh"),
+                _(
+                    "Keep films, shows and anime in one calm, native library built "
+                    "for the GNOME desktop."
+                ),
                 (
-                    "Browse with TMDB metadata",
-                    "Track titles, seasons and episodes",
-                    "Use your GNOME accent colour automatically",
+                    _("Browse with TMDB metadata"),
+                    _("Track titles, seasons and episodes"),
+                    _("Use your GNOME accent colour automatically"),
                 ),
             )
         )
         self.carousel.append(
             self._tour_page(
                 "🔒",
-                "Your library stays yours",
-                "Gisheh can work entirely on this device, or keep your watch "
-                "activity synchronized through Simkl. You can change this later.",
+                _("Your library stays yours"),
+                _(
+                    "Gisheh can work entirely on this device, or keep your watch "
+                    "activity synchronized through Simkl. You can change this later."
+                ),
                 (
-                    "Local-first never requires an account",
-                    "Simkl uses a browser PIN—never your password",
-                    "TMDB supplies catalog details and artwork",
+                    _("Local-first never requires an account"),
+                    _("Simkl uses a browser PIN—never your password"),
+                    _("TMDB supplies catalog details and artwork"),
                 ),
             )
         )
@@ -102,7 +105,7 @@ class WelcomeTour(Adw.ApplicationWindow):
 
         footer = Gtk.CenterBox()
         footer.add_css_class("welcome-footer")
-        self.back_button = Gtk.Button(label="Back")
+        self.back_button = Gtk.Button(label=_("Back"))
         self.back_button.set_visible(False)
         self.back_button.connect("clicked", self._go_back)
         footer.set_start_widget(self.back_button)
@@ -111,7 +114,7 @@ class WelcomeTour(Adw.ApplicationWindow):
         indicator.set_carousel(self.carousel)
         footer.set_center_widget(indicator)
 
-        self.next_button = Gtk.Button(label="Next")
+        self.next_button = Gtk.Button(label=_("Next"))
         self.next_button.add_css_class("suggested-action")
         self.next_button.connect("clicked", self._go_forward)
         footer.set_end_widget(self.next_button)
@@ -240,16 +243,16 @@ class WelcomeTour(Adw.ApplicationWindow):
         content.add_css_class("welcome-page")
         content.set_valign(Gtk.Align.CENTER)
 
-        eyebrow = Gtk.Label(label="ONE CHOICE BEFORE YOU START")
+        eyebrow = Gtk.Label(label=_("ONE CHOICE BEFORE YOU START"))
         eyebrow.add_css_class("welcome-eyebrow")
         content.append(eyebrow)
-        title = Gtk.Label(label="How should Gisheh manage your library?")
+        title = Gtk.Label(label=_("How should Gisheh manage your library?"))
         title.add_css_class("welcome-choice-title")
         title.set_wrap(True)
         title.set_justify(Gtk.Justification.CENTER)
         content.append(title)
         description = Gtk.Label(
-            label="Your selection controls where watch history, lists and ratings are saved."
+            label=_("Your selection controls where watch history, lists and ratings are saved.")
         )
         description.add_css_class("welcome-body")
         description.set_wrap(True)
@@ -259,8 +262,8 @@ class WelcomeTour(Adw.ApplicationWindow):
         choices = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         choices.set_margin_top(8)
         self.local_button = self._choice_button(
-            "Local-first",
-            "Keep everything on this device. No account and no automatic upload.",
+            _("Local-first"),
+            _("Keep everything on this device. No account and no automatic upload."),
             "💾",
             LIBRARY_MODE_LOCAL,
         )
@@ -268,8 +271,10 @@ class WelcomeTour(Adw.ApplicationWindow):
         choices.append(self.local_button)
 
         self.simkl_button = self._choice_button(
-            "Sync with Simkl",
-            "Use a PIN to connect, then synchronize lists, ratings and watch history.",
+            _("Sync with Simkl"),
+            _(
+                "Use a PIN to connect, then synchronize lists, ratings and watch history."
+            ),
             "☁️",
             LIBRARY_MODE_SIMKL,
             self.local_button,
@@ -281,7 +286,7 @@ class WelcomeTour(Adw.ApplicationWindow):
 
         if not simkl_available:
             unavailable = Gtk.Label(
-                label="Simkl sync is unavailable in this build; Local-first will be used."
+                label=_("Simkl sync is unavailable in this build; Local-first will be used.")
             )
             unavailable.add_css_class("dim-label")
             unavailable.add_css_class("caption")
@@ -315,21 +320,25 @@ class WelcomeTour(Adw.ApplicationWindow):
         if not hasattr(self, "next_button"):
             return
         if self._simkl_auth_active:
-            self.next_button.set_label("Waiting for Simkl…")
+            self.next_button.set_label(_("Waiting for Simkl…"))
         elif self._page_index < 2:
-            self.next_button.set_label("Next")
+            self.next_button.set_label(_("Next"))
         elif self._selected_mode == LIBRARY_MODE_SIMKL:
-            self.next_button.set_label("Continue to Simkl sign in")
+            self.next_button.set_label(_("Continue to Simkl sign in"))
         else:
-            self.next_button.set_label("Start using Gisheh")
+            self.next_button.set_label(_("Start using Gisheh"))
 
     def _go_back(self, _button: Gtk.Button) -> None:
         if self._page_index > 0:
-            self.carousel.scroll_to(self.carousel.get_nth_page(self._page_index - 1), True)
+            self.carousel.scroll_to(
+                self.carousel.get_nth_page(self._page_index - 1), True
+            )
 
     def _go_forward(self, _button: Gtk.Button) -> None:
         if self._page_index < 2:
-            self.carousel.scroll_to(self.carousel.get_nth_page(self._page_index + 1), True)
+            self.carousel.scroll_to(
+                self.carousel.get_nth_page(self._page_index + 1), True
+            )
             return
         if self._selected_mode == LIBRARY_MODE_SIMKL:
             if simkl_client.read_token():
@@ -354,7 +363,7 @@ class WelcomeTour(Adw.ApplicationWindow):
         client_id = simkl_client.read_client_id()
         if not client_id:
             self._show_sign_in_error(
-                "This build does not include Gisheh's public Simkl Client ID."
+                _("This build does not include Gisheh's public Simkl Client ID.")
             )
             return
         self._simkl_auth_generation += 1
@@ -391,10 +400,10 @@ class WelcomeTour(Adw.ApplicationWindow):
         interval = max(5, int(payload.get("interval") or 5))
         expires_in = max(60, int(payload.get("expires_in") or 900))
         dialog = Adw.AlertDialog(
-            heading="Sign in to Simkl",
+            heading=_("Sign in to Simkl"),
             body=(
-                "The Simkl page has been opened in your browser. Sign in and "
-                "enter this code; Gisheh will continue automatically."
+                _("The Simkl page has been opened in your browser. Sign in and "
+                "enter this code; Gisheh will continue automatically.")
             ),
         )
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
@@ -405,10 +414,10 @@ class WelcomeTour(Adw.ApplicationWindow):
         waiting = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         waiting.set_halign(Gtk.Align.CENTER)
         waiting.append(Gtk.Spinner(spinning=True))
-        waiting.append(Gtk.Label(label="Waiting for approval…"))
+        waiting.append(Gtk.Label(label=_("Waiting for approval…")))
         content.append(waiting)
         dialog.set_extra_child(content)
-        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("cancel", _("Cancel"))
         dialog.set_close_response("cancel")
         dialog.connect("response", self._on_simkl_pin_response, generation)
         self._simkl_pin_dialog = dialog
@@ -438,35 +447,28 @@ class WelcomeTour(Adw.ApplicationWindow):
         deadline = time.monotonic() + expires_in
         while time.monotonic() < deadline:
             time.sleep(interval)
-            if (
-                generation != self._simkl_auth_generation
-                or not self._simkl_auth_active
-            ):
+            if generation != self._simkl_auth_generation or not self._simkl_auth_active:
                 return
             try:
                 payload = simkl_client.poll_pin(client_id, user_code)
             except simkl_client.SimklError as error:
-                GLib.idle_add(
-                    self._on_simkl_sign_in_failed, generation, str(error)
-                )
+                GLib.idle_add(self._on_simkl_sign_in_failed, generation, str(error))
                 return
             access_token = str(payload.get("access_token") or "")
             if payload.get("result") == "OK" and access_token:
-                GLib.idle_add(
-                    self._on_simkl_authorized, generation, access_token
-                )
+                GLib.idle_add(self._on_simkl_authorized, generation, access_token)
                 return
             if payload.get("device_code"):
                 GLib.idle_add(
                     self._on_simkl_sign_in_failed,
                     generation,
-                    "The Simkl PIN expired. Request a new code.",
+                    _("The Simkl PIN expired. Request a new code."),
                 )
                 return
         GLib.idle_add(
             self._on_simkl_sign_in_failed,
             generation,
-            "The Simkl PIN expired. Request a new code.",
+            _("The Simkl PIN expired. Request a new code."),
         )
 
     def _on_simkl_pin_response(
@@ -514,10 +516,10 @@ class WelcomeTour(Adw.ApplicationWindow):
 
     def _show_sign_in_error(self, message: str) -> None:
         dialog = Adw.AlertDialog(
-            heading="Could not sign in to Simkl",
+            heading=_("Could not sign in to Simkl"),
             body=message,
         )
-        dialog.add_response("close", "Close")
+        dialog.add_response("close", _("Close"))
         dialog.set_close_response("close")
         dialog.present(self)
 

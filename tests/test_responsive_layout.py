@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 from __future__ import annotations
 
 import sys
@@ -7,7 +5,6 @@ import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from types import SimpleNamespace
-
 
 SOURCE_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SOURCE_DIR))
@@ -18,37 +15,27 @@ from gisheh import window as gisheh
 class ResponsiveDecisionTests(unittest.TestCase):
     def test_very_wide_width_uses_expanded_sidebar_and_inline_details(self) -> None:
         for width in (1200, 1360, 2000):
-            layout = gisheh.responsive_layout_for_width(
-                width, details_open=True
-            )
+            layout = gisheh.responsive_layout_for_width(width, details_open=True)
             self.assertEqual(layout.sidebar_mode, gisheh.SIDEBAR_EXPANDED)
             self.assertEqual(layout.details_mode, gisheh.DETAILS_INLINE)
 
     def test_medium_width_uses_hidden_sidebar_and_inline_details(self) -> None:
         for width in (980, 1100, 1199):
-            layout = gisheh.responsive_layout_for_width(
-                width, details_open=True
-            )
+            layout = gisheh.responsive_layout_for_width(width, details_open=True)
             self.assertEqual(layout.sidebar_mode, gisheh.SIDEBAR_HIDDEN)
             self.assertEqual(layout.details_mode, gisheh.DETAILS_INLINE)
 
     def test_narrow_width_uses_hidden_sidebar_and_overlay_details(self) -> None:
         for width in (720, 900, 979):
-            layout = gisheh.responsive_layout_for_width(
-                width, details_open=True
-            )
+            layout = gisheh.responsive_layout_for_width(width, details_open=True)
             self.assertEqual(layout.sidebar_mode, gisheh.SIDEBAR_HIDDEN)
             self.assertEqual(layout.details_mode, gisheh.DETAILS_OVERLAY)
 
     def test_very_narrow_width_uses_hidden_sidebar_and_navigation(self) -> None:
         for width in (360, 480, 719):
-            layout = gisheh.responsive_layout_for_width(
-                width, details_open=True
-            )
+            layout = gisheh.responsive_layout_for_width(width, details_open=True)
             self.assertEqual(layout.sidebar_mode, gisheh.SIDEBAR_HIDDEN)
-            self.assertEqual(
-                layout.details_mode, gisheh.DETAILS_NAVIGATION
-            )
+            self.assertEqual(layout.details_mode, gisheh.DETAILS_NAVIGATION)
 
     def test_exact_threshold_boundaries(self) -> None:
         self.assertEqual(
@@ -60,21 +47,15 @@ class ResponsiveDecisionTests(unittest.TestCase):
             gisheh.SIDEBAR_HIDDEN,
         )
         self.assertEqual(
-            gisheh.responsive_layout_for_width(
-                980, details_open=True
-            ).details_mode,
+            gisheh.responsive_layout_for_width(980, details_open=True).details_mode,
             gisheh.DETAILS_INLINE,
         )
         self.assertEqual(
-            gisheh.responsive_layout_for_width(
-                979, details_open=True
-            ).details_mode,
+            gisheh.responsive_layout_for_width(979, details_open=True).details_mode,
             gisheh.DETAILS_OVERLAY,
         )
         self.assertEqual(
-            gisheh.responsive_layout_for_width(
-                720, details_open=True
-            ).details_mode,
+            gisheh.responsive_layout_for_width(720, details_open=True).details_mode,
             gisheh.DETAILS_OVERLAY,
         )
         self.assertEqual(
@@ -82,9 +63,7 @@ class ResponsiveDecisionTests(unittest.TestCase):
             gisheh.SIDEBAR_HIDDEN,
         )
         self.assertEqual(
-            gisheh.responsive_layout_for_width(
-                719, details_open=True
-            ).details_mode,
+            gisheh.responsive_layout_for_width(719, details_open=True).details_mode,
             gisheh.DETAILS_NAVIGATION,
         )
 
@@ -112,9 +91,7 @@ class ResponsiveDecisionTests(unittest.TestCase):
             + gisheh.EXPLORE_SAFE_CONTENT_WIDTH
             + gisheh.RESPONSIVE_LAYOUT_GAPS
         )
-        too_small = gisheh.responsive_layout_for_width(
-            required - 1, details_open=True
-        )
+        too_small = gisheh.responsive_layout_for_width(required - 1, details_open=True)
         large_enough = gisheh.responsive_layout_for_width(
             max(required, gisheh.RESPONSIVE_WIDE_ENTER_WIDTH),
             details_open=True,
@@ -124,9 +101,7 @@ class ResponsiveDecisionTests(unittest.TestCase):
         self.assertEqual(large_enough.details_mode, gisheh.DETAILS_INLINE)
 
     def test_hysteresis_retains_modes_inside_the_safe_band(self) -> None:
-        wide = gisheh.ResponsiveLayout(
-            gisheh.SIDEBAR_EXPANDED, gisheh.DETAILS_INLINE
-        )
+        wide = gisheh.ResponsiveLayout(gisheh.SIDEBAR_EXPANDED, gisheh.DETAILS_INLINE)
         retained_wide = gisheh.responsive_layout_for_width(
             gisheh.RESPONSIVE_WIDE_EXIT_WIDTH,
             details_open=True,
@@ -141,9 +116,7 @@ class ResponsiveDecisionTests(unittest.TestCase):
             ).sidebar_mode,
             gisheh.SIDEBAR_HIDDEN,
         )
-        inline = gisheh.ResponsiveLayout(
-            gisheh.SIDEBAR_HIDDEN, gisheh.DETAILS_INLINE
-        )
+        inline = gisheh.ResponsiveLayout(gisheh.SIDEBAR_HIDDEN, gisheh.DETAILS_INLINE)
         self.assertEqual(
             gisheh.responsive_layout_for_width(
                 gisheh.RESPONSIVE_INLINE_EXIT_WIDTH,
@@ -167,14 +140,10 @@ class ResponsiveDecisionTests(unittest.TestCase):
 
 class DetailsBackActionTests(unittest.TestCase):
     def test_episode_back_returns_to_season(self) -> None:
-        self.assertEqual(
-            gisheh.details_back_action("episode"), "pop-season"
-        )
+        self.assertEqual(gisheh.details_back_action("episode"), "pop-season")
 
     def test_season_back_returns_to_title(self) -> None:
-        self.assertEqual(
-            gisheh.details_back_action("season"), "pop-title"
-        )
+        self.assertEqual(gisheh.details_back_action("season"), "pop-title")
 
     def test_title_back_closes_details(self) -> None:
         self.assertEqual(gisheh.details_back_action("title"), "close")
@@ -184,9 +153,7 @@ class DetailsBackActionTests(unittest.TestCase):
 class RecordContextMenuTests(unittest.TestCase):
     @staticmethod
     def _record() -> gisheh.TitleRecord:
-        records, _explore, _totals = gisheh.load_catalog(
-            include_sample_data=True
-        )
+        records, _explore, _totals = gisheh.load_catalog(include_sample_data=True)
         return records[0]
 
     def test_menu_contains_watch_watchlist_and_rating_controls(self) -> None:
@@ -221,17 +188,17 @@ class RecordContextMenuTests(unittest.TestCase):
         controller = object.__new__(gisheh.GishehWindow)
         controller.records_by_id = {record.id: record}
         calls: list[tuple[object, ...]] = []
-        controller._activate_record_watched = (
-            lambda item: calls.append(("watched", item.id))
+        controller._activate_record_watched = lambda item: calls.append(
+            ("watched", item.id)
         )
-        controller._set_record_bookmarked = (
-            lambda item, adding: calls.append(("watchlist", item.id, adding))
+        controller._set_record_bookmarked = lambda item, adding: calls.append(
+            ("watchlist", item.id, adding)
         )
-        controller._set_record_rating = (
-            lambda item, score: calls.append(("rating", item.id, score))
+        controller._set_record_rating = lambda item, score: calls.append(
+            ("rating", item.id, score)
         )
-        controller._show_record_rating_dialog = (
-            lambda item: calls.append(("rating-dialog", item.id))
+        controller._show_record_rating_dialog = lambda item: calls.append(
+            ("rating-dialog", item.id)
         )
 
         controller._activate_context_watched(record.id)
@@ -244,52 +211,32 @@ class RecordContextMenuTests(unittest.TestCase):
 
     def test_rating_is_saved_from_a_separate_dialog(self) -> None:
         source = Path(gisheh.__file__).read_text(encoding="utf-8")
-        dialog = source.split("def _show_record_rating_dialog")[1].split(
-            "\n    def "
-        )[0]
-        self.assertIn('dialog.add_response("save", "Save rating")', dialog)
+        dialog = source.split("def _show_record_rating_dialog")[1].split("\n    def ")[
+            0
+        ]
+        self.assertIn('dialog.add_response("save", _("Save rating"))', dialog)
         self.assertIn('dialog.set_response_enabled("save"', dialog)
         self.assertIn("self._set_record_rating(current, score)", dialog)
 
 
 class ExploreColumnTests(unittest.TestCase):
     def test_very_narrow_width_returns_one_column(self) -> None:
-        self.assertEqual(
-            gisheh.GishehWindow._explore_columns_for_width(279), 1
-        )
-        self.assertEqual(
-            gisheh.GishehWindow._explore_columns_for_width(200), 1
-        )
+        self.assertEqual(gisheh.GishehWindow._explore_columns_for_width(279), 1)
+        self.assertEqual(gisheh.GishehWindow._explore_columns_for_width(200), 1)
 
     def test_narrow_width_returns_two_columns(self) -> None:
-        self.assertEqual(
-            gisheh.GishehWindow._explore_columns_for_width(280), 2
-        )
-        self.assertEqual(
-            gisheh.GishehWindow._explore_columns_for_width(389), 2
-        )
+        self.assertEqual(gisheh.GishehWindow._explore_columns_for_width(280), 2)
+        self.assertEqual(gisheh.GishehWindow._explore_columns_for_width(389), 2)
 
     def test_medium_widths_return_three_or_four_columns(self) -> None:
-        self.assertEqual(
-            gisheh.GishehWindow._explore_columns_for_width(390), 3
-        )
-        self.assertEqual(
-            gisheh.GishehWindow._explore_columns_for_width(539), 3
-        )
-        self.assertEqual(
-            gisheh.GishehWindow._explore_columns_for_width(540), 4
-        )
-        self.assertEqual(
-            gisheh.GishehWindow._explore_columns_for_width(759), 4
-        )
+        self.assertEqual(gisheh.GishehWindow._explore_columns_for_width(390), 3)
+        self.assertEqual(gisheh.GishehWindow._explore_columns_for_width(539), 3)
+        self.assertEqual(gisheh.GishehWindow._explore_columns_for_width(540), 4)
+        self.assertEqual(gisheh.GishehWindow._explore_columns_for_width(759), 4)
 
     def test_wide_width_returns_five_columns(self) -> None:
-        self.assertEqual(
-            gisheh.GishehWindow._explore_columns_for_width(760), 5
-        )
-        self.assertEqual(
-            gisheh.GishehWindow._explore_columns_for_width(1200), 5
-        )
+        self.assertEqual(gisheh.GishehWindow._explore_columns_for_width(760), 5)
+        self.assertEqual(gisheh.GishehWindow._explore_columns_for_width(1200), 5)
 
     def test_card_height_supports_one_column(self) -> None:
         controller = object.__new__(gisheh.GishehWindow)
@@ -318,8 +265,8 @@ class ExploreColumnTests(unittest.TestCase):
         controller.explore_scroller = SimpleNamespace(
             get_vadjustment=lambda: SimpleNamespace(get_value=lambda: 42.0)
         )
-        controller._populate_explore_feed = (
-            lambda **_kwargs: rebuilds.append(width["value"])
+        controller._populate_explore_feed = lambda **_kwargs: rebuilds.append(
+            width["value"]
         )
         controller._scroll_to_value = lambda *_args: None
 
@@ -390,12 +337,12 @@ class ExploreColumnTests(unittest.TestCase):
         )
         self.assertEqual((minimum, natural), (0, 0))
 
-    def test_async_explore_artwork_replacement_stays_horizontally_flexible(self) -> None:
+    def test_async_explore_artwork_replacement_stays_horizontally_flexible(
+        self,
+    ) -> None:
         from gi.repository import Gtk
 
-        records, _explore, _totals = gisheh.load_catalog(
-            include_sample_data=True
-        )
+        records, _explore, _totals = gisheh.load_catalog(include_sample_data=True)
         record = records[0]
         overlay = Gtk.Overlay()
         overlay.set_child(Gtk.Box())
@@ -480,26 +427,16 @@ class CompactRemovalTests(unittest.TestCase):
 
     @staticmethod
     def _css() -> str:
-        return (Path(gisheh.__file__).parent / "style.css").read_text(
-            encoding="utf-8"
-        )
+        return (Path(gisheh.__file__).parent / "style.css").read_text(encoding="utf-8")
 
     def test_compact_sidebar_constants_are_gone(self) -> None:
         self.assertFalse(hasattr(gisheh, "SIDEBAR_COMPACT"))
-        self.assertFalse(
-            hasattr(gisheh, "SIDEBAR_COMPACT_MIN_WIDTH")
-        )
-        self.assertFalse(
-            hasattr(gisheh, "SIDEBAR_COMPACT_MAX_WIDTH")
-        )
+        self.assertFalse(hasattr(gisheh, "SIDEBAR_COMPACT_MIN_WIDTH"))
+        self.assertFalse(hasattr(gisheh, "SIDEBAR_COMPACT_MAX_WIDTH"))
 
     def test_compact_sidebar_implementation_is_gone(self) -> None:
-        self.assertFalse(
-            hasattr(gisheh.GishehWindow, "_build_compact_sidebar")
-        )
-        self.assertFalse(
-            hasattr(gisheh.GishehWindow, "_on_compact_rail_clicked")
-        )
+        self.assertFalse(hasattr(gisheh.GishehWindow, "_build_compact_sidebar"))
+        self.assertFalse(hasattr(gisheh.GishehWindow, "_on_compact_rail_clicked"))
         self.assertFalse(
             hasattr(gisheh.GishehWindow, "_sync_compact_sidebar_selection")
         )
@@ -580,16 +517,14 @@ class ResponsiveStructureTests(unittest.TestCase):
 
     def test_details_surface_expands_in_navigation_mode(self) -> None:
         source = self._source()
-        mover = source.split("def _move_details_to_mobile")[1].split(
-            "\n    def "
-        )[0]
+        mover = source.split("def _move_details_to_mobile")[1].split("\n    def ")[0]
         self.assertIn("set_hexpand(True)", mover)
 
     def test_no_separator_in_full_page_path(self) -> None:
         source = self._source()
-        builder = source.split("def _build_content_navigation")[1].split(
-            "\n    def "
-        )[0]
+        builder = source.split("def _build_content_navigation")[1].split("\n    def ")[
+            0
+        ]
         self.assertNotIn("Separator", builder)
 
     def test_mobile_back_action_targets_content(self) -> None:
@@ -613,9 +548,7 @@ class ResponsiveStructureTests(unittest.TestCase):
 
     def test_details_wrap_hints_fit_the_inline_content_width(self) -> None:
         properties = self._ui_properties("detail_ratings_host")
-        self.assertEqual(
-            self._ui_object_classes()["detail_ratings_host"], "GtkGrid"
-        )
+        self.assertEqual(self._ui_object_classes()["detail_ratings_host"], "GtkGrid")
         inner_width = gisheh.DETAILS_INLINE_WIDTH - 32
         natural = int(properties.get("natural-line-length", "0") or 0)
         self.assertLessEqual(natural, inner_width)
@@ -634,9 +567,7 @@ class ResponsiveStructureTests(unittest.TestCase):
 
     def test_opening_details_does_not_resize_the_window(self) -> None:
         source = self._source()
-        opener = source.split("def _set_details_open")[1].split(
-            "\n    def "
-        )[0]
+        opener = source.split("def _set_details_open")[1].split("\n    def ")[0]
         self.assertNotIn("set_default_size", opener)
         self.assertNotIn("resize(", opener)
         self.assertNotIn("set_size_request", opener)
@@ -785,9 +716,7 @@ def _sync_controller(
     details_open: bool,
     mode: str,
     revealer_parent: object | None = None,
-) -> tuple[
-    gisheh.GishehWindow, FakeNavigation, FakeWidget, FakeWidget, list[str]
-]:
+) -> tuple[gisheh.GishehWindow, FakeNavigation, FakeWidget, FakeWidget, list[str]]:
     controller = object.__new__(gisheh.GishehWindow)
     navigation = FakeNavigation(visible_tag)
     surface = FakeWidget()
@@ -814,24 +743,20 @@ def _sync_controller(
 
 class DetailsSyncTests(unittest.TestCase):
     def test_closed_browser_stays_put(self) -> None:
-        controller, navigation, _surface, _revealer, _events = (
-            _sync_controller(
-                visible_tag="browser",
-                details_open=False,
-                mode=gisheh.DETAILS_NAVIGATION,
-            )
+        controller, navigation, _surface, _revealer, _events = _sync_controller(
+            visible_tag="browser",
+            details_open=False,
+            mode=gisheh.DETAILS_NAVIGATION,
         )
         controller._sync_details_presentation()
         self.assertEqual(navigation.calls, [])
         self.assertEqual(navigation.tag, "browser")
 
     def test_open_navigation_pushes_details_once(self) -> None:
-        controller, navigation, _surface, _revealer, _events = (
-            _sync_controller(
-                visible_tag="browser",
-                details_open=True,
-                mode=gisheh.DETAILS_NAVIGATION,
-            )
+        controller, navigation, _surface, _revealer, _events = _sync_controller(
+            visible_tag="browser",
+            details_open=True,
+            mode=gisheh.DETAILS_NAVIGATION,
         )
         controller._sync_details_presentation()
         pushes = [call for call in navigation.calls if call[0] == "push"]
@@ -839,12 +764,10 @@ class DetailsSyncTests(unittest.TestCase):
         self.assertEqual(navigation.tag, "details")
 
     def test_visible_details_are_not_pushed_twice(self) -> None:
-        controller, navigation, _surface, _revealer, _events = (
-            _sync_controller(
-                visible_tag="details",
-                details_open=True,
-                mode=gisheh.DETAILS_NAVIGATION,
-            )
+        controller, navigation, _surface, _revealer, _events = _sync_controller(
+            visible_tag="details",
+            details_open=True,
+            mode=gisheh.DETAILS_NAVIGATION,
         )
         controller._sync_details_presentation()
         self.assertEqual(navigation.calls, [])
@@ -863,7 +786,9 @@ class DetailsSyncTests(unittest.TestCase):
         self.assertEqual(surface.calls, first_surface_calls)
         self.assertEqual(revealer.calls, first_revealer_calls)
 
-    def test_opening_an_already_open_details_panel_does_not_restart_transition(self) -> None:
+    def test_opening_an_already_open_details_panel_does_not_restart_transition(
+        self,
+    ) -> None:
         controller = object.__new__(gisheh.GishehWindow)
         controller.details_open = True
         synchronized: list[str] = []
@@ -872,27 +797,21 @@ class DetailsSyncTests(unittest.TestCase):
         self.assertEqual(synchronized, ["sync"])
 
     def test_closing_pops_explicitly_to_browser(self) -> None:
-        controller, navigation, _surface, _revealer, _events = (
-            _sync_controller(
-                visible_tag="details",
-                details_open=False,
-                mode=gisheh.DETAILS_NAVIGATION,
-            )
+        controller, navigation, _surface, _revealer, _events = _sync_controller(
+            visible_tag="details",
+            details_open=False,
+            mode=gisheh.DETAILS_NAVIGATION,
         )
         controller._sync_details_presentation()
         self.assertIn(("pop_to_tag", "browser"), navigation.calls)
-        self.assertFalse(
-            any(call[0] == "pop" for call in navigation.calls)
-        )
+        self.assertFalse(any(call[0] == "pop" for call in navigation.calls))
         self.assertEqual(navigation.tag, "browser")
 
     def test_stale_open_state_heals(self) -> None:
-        controller, navigation, _surface, _revealer, _events = (
-            _sync_controller(
-                visible_tag="browser",
-                details_open=True,
-                mode=gisheh.DETAILS_NAVIGATION,
-            )
+        controller, navigation, _surface, _revealer, _events = _sync_controller(
+            visible_tag="browser",
+            details_open=True,
+            mode=gisheh.DETAILS_NAVIGATION,
         )
         controller._sync_details_presentation()
         self.assertEqual(navigation.tag, "details")
@@ -904,18 +823,14 @@ class DetailsSyncTests(unittest.TestCase):
 
     def test_open_path_synchronizes_without_timeout(self) -> None:
         source = Path(gisheh.__file__).read_text(encoding="utf-8")
-        opener = source.split("def _set_details_open")[1].split(
-            "\n    def "
-        )[0]
+        opener = source.split("def _set_details_open")[1].split("\n    def ")[0]
         self.assertIn("_sync_details_presentation()", opener)
 
     def test_external_pop_synchronizes_closed_state(self) -> None:
-        controller, navigation, _surface, _revealer, _events = (
-            _sync_controller(
-                visible_tag="browser",
-                details_open=True,
-                mode=gisheh.DETAILS_NAVIGATION,
-            )
+        controller, navigation, _surface, _revealer, _events = _sync_controller(
+            visible_tag="browser",
+            details_open=True,
+            mode=gisheh.DETAILS_NAVIGATION,
         )
         restored: list[str] = []
         scheduled: list[str] = []
@@ -928,25 +843,23 @@ class DetailsSyncTests(unittest.TestCase):
         self.assertEqual(navigation.calls, [])
 
     def test_external_pop_when_already_closed_is_ignored(self) -> None:
-        controller, navigation, _surface, _revealer, _events = (
-            _sync_controller(
-                visible_tag="browser",
-                details_open=False,
-                mode=gisheh.DETAILS_NAVIGATION,
-            )
+        controller, _navigation, _surface, _revealer, _events = _sync_controller(
+            visible_tag="browser",
+            details_open=False,
+            mode=gisheh.DETAILS_NAVIGATION,
         )
         controller._restore_details_return_focus = lambda: None  # type: ignore[method-assign]
-        controller._schedule_details_reset = lambda: (_ for _ in ()).throw(AssertionError("must not schedule"))  # type: ignore[method-assign]
+        controller._schedule_details_reset = lambda: (_ for _ in ()).throw(
+            AssertionError("must not schedule")
+        )  # type: ignore[method-assign]
         controller._on_content_navigation_page_changed(None, None)
         self.assertFalse(controller.details_open)
 
     def test_resize_to_overlay_removes_mobile_page(self) -> None:
-        controller, navigation, _surface, revealer, _events = (
-            _sync_controller(
-                visible_tag="details",
-                details_open=True,
-                mode=gisheh.DETAILS_OVERLAY,
-            )
+        controller, navigation, _surface, revealer, _events = _sync_controller(
+            visible_tag="details",
+            details_open=True,
+            mode=gisheh.DETAILS_OVERLAY,
         )
         revealer.set_parent(controller.main_workspace)
         controller.details_surface.set_parent(controller.mobile_details_host)
@@ -1012,9 +925,9 @@ class NarrowSizingTests(unittest.TestCase):
 
     def test_mobile_path_has_no_desktop_width(self) -> None:
         source = self._source()
-        builder = source.split("def _build_content_navigation")[1].split(
-            "\n    def "
-        )[0]
+        builder = source.split("def _build_content_navigation")[1].split("\n    def ")[
+            0
+        ]
         self.assertNotIn("set_size_request", builder)
         self.assertNotIn("388", builder)
         self.assertNotIn("384", builder)

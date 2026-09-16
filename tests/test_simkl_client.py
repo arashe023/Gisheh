@@ -7,10 +7,9 @@ import tempfile
 import unittest
 from io import BytesIO
 from pathlib import Path
+from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlparse
-from unittest.mock import patch
-
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -79,24 +78,24 @@ class SimklClientTests(unittest.TestCase):
                 self.assertFalse(simkl_client.token_file().exists())
 
     def test_bundled_client_id_is_used_without_user_configuration(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            with (
-                patch.dict(
-                    os.environ,
-                    {
-                        "XDG_CONFIG_HOME": temporary_directory,
-                        "SIMKL_CLIENT_ID": "",
-                    },
-                    clear=False,
-                ),
-                patch.object(
-                    simkl_client,
-                    "BUNDLED_SIMKL_CLIENT_ID",
-                    "bundled-client-id",
-                ),
-            ):
-                self.assertEqual(simkl_client.read_client_id(), "bundled-client-id")
-                self.assertEqual(simkl_client.client_id_source(), "bundled")
+        with (
+            tempfile.TemporaryDirectory() as temporary_directory,
+            patch.dict(
+                os.environ,
+                {
+                    "XDG_CONFIG_HOME": temporary_directory,
+                    "SIMKL_CLIENT_ID": "",
+                },
+                clear=False,
+            ),
+            patch.object(
+                simkl_client,
+                "BUNDLED_SIMKL_CLIENT_ID",
+                "bundled-client-id",
+            ),
+        ):
+            self.assertEqual(simkl_client.read_client_id(), "bundled-client-id")
+            self.assertEqual(simkl_client.client_id_source(), "bundled")
 
     def test_environment_credentials_have_priority(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -142,20 +141,24 @@ class SimklClientTests(unittest.TestCase):
         self.assertEqual(request.data, b"{}")
 
         unauthorized = HTTPError("https://api.simkl.com", 401, "", {}, None)
-        with patch.object(simkl_client, "urlopen", side_effect=unauthorized):
-            with self.assertRaises(simkl_client.SimklError) as raised:
-                simkl_client.fetch_settings("client-id", "secret-value")
+        with (
+            patch.object(simkl_client, "urlopen", side_effect=unauthorized),
+            self.assertRaises(simkl_client.SimklError) as raised,
+        ):
+            simkl_client.fetch_settings("client-id", "secret-value")
         self.assertEqual(raised.exception.code, 401)
         self.assertNotIn("secret-value", str(raised.exception))
 
     def test_pin_response_is_validated(self) -> None:
-        with patch.object(
-            simkl_client,
-            "_request_json",
-            return_value={"result": "KO", "message": "Invalid client"},
+        with (
+            patch.object(
+                simkl_client,
+                "_request_json",
+                return_value={"result": "KO", "message": "Invalid client"},
+            ),
+            self.assertRaisesRegex(simkl_client.SimklError, "Invalid client"),
         ):
-            with self.assertRaisesRegex(simkl_client.SimklError, "Invalid client"):
-                simkl_client.request_pin("client-id")
+            simkl_client.request_pin("client-id")
 
     def test_initial_library_fetches_only_the_required_state_endpoint(self) -> None:
         calls: list[tuple[str, dict[str, object]]] = []
@@ -326,22 +329,18 @@ class SimklClientTests(unittest.TestCase):
             )
 
         request = opener.call_args.args[0]
-        self.assertEqual(request.full_url.split("?", 1)[0], "https://api.simkl.com/sync/ratings")
+        self.assertEqual(
+            request.full_url.split("?", 1)[0], "https://api.simkl.com/sync/ratings"
+        )
         self.assertEqual(request.get_header("Authorization"), "Bearer access-token")
         self.assertEqual(request.get_header("Simkl-api-key"), "client-id")
         self.assertEqual(
             json.loads(request.data),
-            {
-                "movies": [
-                    {"rating": 9, "ids": {"simkl": 10, "tmdb": 20}}
-                ]
-            },
+            {"movies": [{"rating": 9, "ids": {"simkl": 10, "tmdb": 20}}]},
         )
 
     def test_watchlist_and_history_writes_use_expected_endpoints(self) -> None:
-        response = lambda: BytesIO(
-            b'{"added":{"shows":1},"not_found":{"shows":[]}}'
-        )
+        response = lambda: BytesIO(b'{"added":{"shows":1},"not_found":{"shows":[]}}')
         with patch.object(
             simkl_client,
             "urlopen",
@@ -362,7 +361,9 @@ class SimklClientTests(unittest.TestCase):
                 True,
             )
 
-        urls = [call.args[0].full_url.split("?", 1)[0] for call in opener.call_args_list]
+        urls = [
+            call.args[0].full_url.split("?", 1)[0] for call in opener.call_args_list
+        ]
         self.assertEqual(
             urls,
             [
@@ -442,7 +443,7 @@ class SimklClientTests(unittest.TestCase):
                                 "episodes": [
                                     {
                                         "number": 5,
-                        "watched_at": "2026-09-04T18:05:00Z",
+                                        "watched_at": "2026-09-04T18:05:00Z",
                                     },
                                     {
                                         "number": 6,
@@ -498,12 +499,18 @@ class SimklClientTests(unittest.TestCase):
         self.assertIsNone(simkl_client.normalize_watched_at(None))
 
     def test_invalid_timestamp_is_rejected_before_network_call(self) -> None:
-        with patch.object(simkl_client, "urlopen") as opener:
-            with self.assertRaises(simkl_client.SimklError):
-                simkl_client.set_watched(
-                    "client-id", "token", "movies", {"tmdb": 20}, True,
-                    watched_at="not-a-timestamp",
-                )
+        with (
+            patch.object(simkl_client, "urlopen") as opener,
+            self.assertRaises(simkl_client.SimklError),
+        ):
+            simkl_client.set_watched(
+                "client-id",
+                "token",
+                "movies",
+                {"tmdb": 20},
+                True,
+                watched_at="not-a-timestamp",
+            )
         opener.assert_not_called()
 
     def test_history_response_distinguishes_noop_status_and_not_found(self) -> None:
@@ -530,7 +537,9 @@ class SimklClientTests(unittest.TestCase):
         self.assertFalse(missing.noop)
         self.assertIn("movies", missing.not_found)
 
-    def test_change_watched_date_restores_previous_history_after_add_failure(self) -> None:
+    def test_change_watched_date_restores_previous_history_after_add_failure(
+        self,
+    ) -> None:
         with (
             patch.object(simkl_client, "remove_from_library") as remove,
             patch.object(
@@ -541,16 +550,16 @@ class SimklClientTests(unittest.TestCase):
                     {"added": {"movies": 1}},
                 ],
             ) as set_watched,
+            self.assertRaisesRegex(simkl_client.SimklError, "was restored"),
         ):
-            with self.assertRaisesRegex(simkl_client.SimklError, "was restored"):
-                simkl_client.change_watched_date(
-                    "client-id",
-                    "token",
-                    "movies",
-                    {"simkl": 10},
-                    previous_watched_at="2026-09-04T21:35:00+03:30",
-                    watched_at="2026-09-03T21:35:00+03:30",
-                )
+            simkl_client.change_watched_date(
+                "client-id",
+                "token",
+                "movies",
+                {"simkl": 10},
+                previous_watched_at="2026-09-04T21:35:00+03:30",
+                watched_at="2026-09-03T21:35:00+03:30",
+            )
 
         remove.assert_called_once()
         self.assertEqual(set_watched.call_count, 2)
@@ -568,6 +577,7 @@ class SimklClientTests(unittest.TestCase):
             simkl_client.remove_episode_watched(
                 "client-id", "token", "shows", {"simkl": 11}, 1, []
             )
+
 
 if __name__ == "__main__":
     unittest.main()
