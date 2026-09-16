@@ -408,6 +408,26 @@ class HeaderDataStatusTests(unittest.TestCase):
         self.assertEqual(actions, ["preferences", "sync"])
 
 
+class ProfileReviewTests(unittest.TestCase):
+    def test_daily_activity_section_is_removed(self) -> None:
+        source = Path(gisheh.__file__).read_text(encoding="utf-8")
+        stylesheet = (
+            Path(__file__).resolve().parents[1] / "src/gisheh/style.css"
+        ).read_text(encoding="utf-8")
+
+        for removed in (
+            "Daily activity",
+            "Current streak",
+            "Longest streak",
+            "Active this month",
+            "activity-cell",
+            "activity-level-",
+        ):
+            self.assertNotIn(removed, source)
+        self.assertNotIn(".activity-cell", stylesheet)
+        self.assertNotIn(".activity-level-", stylesheet)
+
+
 class SettingsDialogTests(unittest.TestCase):
     @staticmethod
     def _controller() -> gisheh.GishehWindow:

@@ -14,7 +14,7 @@ import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, replace
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from getpass import getuser
 from gettext import gettext as _
 from logging.handlers import RotatingFileHandler
@@ -5018,19 +5018,6 @@ class GishehWindow:
                         episode_events.append((watched_date, minutes))
 
         today = datetime.now().astimezone().date()
-        current_streak = 0
-        cursor = today
-        while activity.get(cursor, 0):
-            current_streak += 1
-            cursor -= timedelta(days=1)
-        longest_streak = 0
-        running = 0
-        previous: date | None = None
-        for active_day in sorted(activity):
-            running = running + 1 if previous == active_day - timedelta(days=1) else 1
-            longest_streak = max(longest_streak, running)
-            previous = active_day
-
         month_activity = {
             active_day: count
             for active_day, count in activity.items()
@@ -5141,8 +5128,6 @@ class GishehWindow:
             "year_movie_count": year_movie_count,
             "year_minutes": year_minutes,
             "year_month_activity": year_month_activity,
-            "current_streak": current_streak,
-            "longest_streak": longest_streak,
             "active_days_year": sum(
                 1 for active_day in activity if active_day.year == today.year
             ),
@@ -5201,56 +5186,6 @@ class GishehWindow:
             )
         )
 
-        content.append(self._profile_heading(_("Daily activity")))
-
-        grid = Gtk.Grid(column_spacing=7, row_spacing=7)
-        weekdays = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
-        for column, weekday in enumerate(weekdays):
-            label = Gtk.Label(label=weekday)
-            label.add_css_class("caption")
-            label.add_css_class("dim-label")
-            grid.attach(label, column, 0, 1, 1)
-
-        first = date(today.year, today.month, 1)
-        next_month = (
-            date(today.year + 1, 1, 1)
-            if today.month == 12
-            else date(today.year, today.month + 1, 1)
-        )
-        days_in_month = (next_month - first).days
-        maximum = max(stats["month_activity"].values(), default=1)
-        for day_number in range(1, days_in_month + 1):
-            current = date(today.year, today.month, day_number)
-            position = first.weekday() + day_number - 1
-            count = stats["month_activity"].get(current, 0)
-            level = 0 if count == 0 else max(1, math.ceil(count / maximum * 4))
-            cell = Gtk.Box()
-            cell.set_size_request(30, 30)
-            cell.add_css_class("activity-cell")
-            cell.add_css_class(f"activity-level-{level}")
-            if current == today:
-                cell.add_css_class("today")
-            cell.set_tooltip_text(f"{current.strftime('%B %d')}: {count} watched")
-            grid.attach(cell, position % 7, position // 7 + 1, 1, 1)
-        content.append(grid)
-
-        footer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, homogeneous=True)
-        for value, label in (
-            (stats["current_streak"], "Current streak"),
-            (stats["longest_streak"], "Longest streak"),
-            (len(stats["month_activity"]), "Active this month"),
-        ):
-            item = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-            value_label = Gtk.Label(label=str(value))
-            value_label.add_css_class("title-3")
-            value_label.add_css_class("accent")
-            item.append(value_label)
-            caption = Gtk.Label(label=label)
-            caption.add_css_class("caption")
-            caption.add_css_class("dim-label")
-            item.append(caption)
-            footer.append(item)
-        content.append(footer)
         return content
 
     def _build_yearly_review(self, stats: dict[str, Any]) -> Gtk.Box:
