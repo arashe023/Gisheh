@@ -22,6 +22,11 @@ from .state_store import LIBRARY_MODE_LOCAL, LIBRARY_MODE_SIMKL
 RESOURCE_PREFIX = "/io/github/arashe023/Gisheh"
 CSS_RESOURCE = f"{RESOURCE_PREFIX}/style.css"
 CSS_FILE = Path(__file__).resolve().parent / "style.css"
+ASSET_PREFIX = f"{RESOURCE_PREFIX}/assets"
+WELCOME_MEDIA_ICON = f"{ASSET_PREFIX}/welcome-media.svg"
+WELCOME_PRIVACY_ICON = f"{ASSET_PREFIX}/welcome-privacy.svg"
+WELCOME_LOCAL_ICON = f"{ASSET_PREFIX}/welcome-local.svg"
+WELCOME_SYNC_ICON = f"{ASSET_PREFIX}/welcome-sync.svg"
 
 
 class WelcomeTour(Adw.ApplicationWindow):
@@ -72,31 +77,19 @@ class WelcomeTour(Adw.ApplicationWindow):
         self.carousel.connect("notify::position", self._on_position_changed)
         self.carousel.append(
             self._tour_page(
-                "🎬",
+                WELCOME_MEDIA_ICON,
+                _("Media library"),
                 _("Welcome to Gisheh"),
                 _(
                     "Keep films, shows and anime in one calm, native library built "
-                    "for the GNOME desktop."
-                ),
-                (
-                    _("Browse with TMDB metadata"),
-                    _("Track titles, seasons and episodes"),
-                    _("Use your GNOME accent colour automatically"),
-                ),
-            )
-        )
-        self.carousel.append(
-            self._tour_page(
-                "🔒",
-                _("Your library stays yours"),
-                _(
-                    "Gisheh can work entirely on this device, or keep your watch "
-                    "activity synchronized through Simkl. You can change this later."
-                ),
-                (
-                    _("Local-first never requires an account"),
-                    _("Simkl uses a browser PIN—never your password"),
-                    _("TMDB supplies catalog details and artwork"),
+                    "for the GNOME desktop. Browse with TMDB metadata, track titles, "
+                    "seasons and episodes, and use your GNOME accent colour. Your "
+                    "library stays yours: Gisheh can work entirely on this device, "
+                    "or keep your watch "
+                    "activity synchronized through Simkl. Local-first never requires "
+                    "an account, Simkl connects through a browser PIN instead of your "
+                    "password, and TMDB supplies catalog details and artwork. You can "
+                    "change this later."
                 ),
             )
         )
@@ -124,27 +117,12 @@ class WelcomeTour(Adw.ApplicationWindow):
         self.set_content(toolbar)
         self._ui_ready = True
 
-    @staticmethod
-    def _feature_row(text: str) -> Gtk.Box:
-        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        row.set_halign(Gtk.Align.CENTER)
-        icon = Gtk.Label(label="✅")
-        icon.set_halign(Gtk.Align.CENTER)
-        icon.set_valign(Gtk.Align.CENTER)
-        icon.set_xalign(0.5)
-        icon.set_yalign(0.5)
-        icon.add_css_class("welcome-feature-emoji")
-        label = Gtk.Label(label=text, xalign=0)
-        row.append(icon)
-        row.append(label)
-        return row
-
     def _tour_page(
         self,
-        emoji: str,
+        icon_resource: str,
+        icon_label: str,
         title: str,
         description: str,
-        features: tuple[str, ...],
     ) -> Gtk.Widget:
         page = Gtk.ScrolledWindow()
         page.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -157,17 +135,13 @@ class WelcomeTour(Adw.ApplicationWindow):
         content.add_css_class("welcome-page")
         content.set_valign(Gtk.Align.CENTER)
 
-        icon_surface = Gtk.Box()
-        icon_surface.set_halign(Gtk.Align.CENTER)
-        icon_surface.set_valign(Gtk.Align.CENTER)
-        icon = Gtk.Label(label=emoji)
+        icon = Gtk.Image.new_from_resource(icon_resource)
         icon.set_halign(Gtk.Align.CENTER)
         icon.set_valign(Gtk.Align.CENTER)
-        icon.set_xalign(0.5)
-        icon.set_yalign(0.5)
-        icon.add_css_class("welcome-emoji")
-        icon_surface.append(icon)
-        content.append(icon_surface)
+        icon.set_pixel_size(72)
+        icon.add_css_class("welcome-hero-icon")
+        icon.update_property([Gtk.AccessibleProperty.LABEL], [icon_label])
+        content.append(icon)
 
         heading = Gtk.Label(label=title)
         heading.add_css_class("welcome-title")
@@ -181,12 +155,6 @@ class WelcomeTour(Adw.ApplicationWindow):
         body.set_justify(Gtk.Justification.CENTER)
         body.set_max_width_chars(58)
         content.append(body)
-
-        feature_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        feature_list.set_margin_top(8)
-        for feature in features:
-            feature_list.append(self._feature_row(feature))
-        content.append(feature_list)
         clamp.set_child(content)
         page.set_child(clamp)
         return page
@@ -195,7 +163,7 @@ class WelcomeTour(Adw.ApplicationWindow):
         self,
         title: str,
         subtitle: str,
-        emoji: str,
+        icon_resource: str,
         mode: str,
         leader: Gtk.ToggleButton | None = None,
     ) -> Gtk.ToggleButton:
@@ -205,12 +173,12 @@ class WelcomeTour(Adw.ApplicationWindow):
             button.set_group(leader)
 
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
-        icon = Gtk.Label(label=emoji)
+        icon = Gtk.Image.new_from_resource(icon_resource)
         icon.set_halign(Gtk.Align.CENTER)
         icon.set_valign(Gtk.Align.CENTER)
-        icon.set_xalign(0.5)
-        icon.set_yalign(0.5)
-        icon.add_css_class("welcome-choice-emoji")
+        icon.set_pixel_size(34)
+        icon.add_css_class("welcome-choice-icon")
+        icon.update_property([Gtk.AccessibleProperty.LABEL], [title])
         row.append(icon)
 
         copy = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
@@ -225,7 +193,7 @@ class WelcomeTour(Adw.ApplicationWindow):
         copy.append(subtitle_label)
         row.append(copy)
 
-        check = Gtk.Label(label="✓")
+        check = Gtk.Image.new_from_icon_name("object-select-symbolic")
         check.add_css_class("welcome-choice-check")
         row.append(check)
         button.set_child(row)
@@ -243,16 +211,16 @@ class WelcomeTour(Adw.ApplicationWindow):
         content.add_css_class("welcome-page")
         content.set_valign(Gtk.Align.CENTER)
 
-        eyebrow = Gtk.Label(label=_("ONE CHOICE BEFORE YOU START"))
-        eyebrow.add_css_class("welcome-eyebrow")
-        content.append(eyebrow)
         title = Gtk.Label(label=_("How should Gisheh manage your library?"))
         title.add_css_class("welcome-choice-title")
         title.set_wrap(True)
         title.set_justify(Gtk.Justification.CENTER)
         content.append(title)
         description = Gtk.Label(
-            label=_("Your selection controls where watch history, lists and ratings are saved.")
+            label=_(
+                "Before you start, choose where Gisheh should save your watch "
+                "history, lists and ratings."
+            )
         )
         description.add_css_class("welcome-body")
         description.set_wrap(True)
@@ -264,7 +232,7 @@ class WelcomeTour(Adw.ApplicationWindow):
         self.local_button = self._choice_button(
             _("Local-first"),
             _("Keep everything on this device. No account and no automatic upload."),
-            "💾",
+            WELCOME_LOCAL_ICON,
             LIBRARY_MODE_LOCAL,
         )
         self.local_button.set_active(self._selected_mode == LIBRARY_MODE_LOCAL)
@@ -275,7 +243,7 @@ class WelcomeTour(Adw.ApplicationWindow):
             _(
                 "Use a PIN to connect, then synchronize lists, ratings and watch history."
             ),
-            "☁️",
+            WELCOME_SYNC_ICON,
             LIBRARY_MODE_SIMKL,
             self.local_button,
         )
@@ -304,7 +272,7 @@ class WelcomeTour(Adw.ApplicationWindow):
             self._update_next_button()
             if (
                 self._ui_ready
-                and self._page_index == 2
+                and self._page_index == 1
                 and mode == LIBRARY_MODE_SIMKL
                 and not self._simkl_auth_active
                 and not simkl_client.read_token()
@@ -312,7 +280,7 @@ class WelcomeTour(Adw.ApplicationWindow):
                 GLib.idle_add(self._start_simkl_sign_in)
 
     def _on_position_changed(self, _carousel: Adw.Carousel, _parameter: object) -> None:
-        self._page_index = min(2, max(0, round(self.carousel.get_position())))
+        self._page_index = min(1, max(0, round(self.carousel.get_position())))
         self.back_button.set_visible(self._page_index > 0)
         self._update_next_button()
 
@@ -321,7 +289,7 @@ class WelcomeTour(Adw.ApplicationWindow):
             return
         if self._simkl_auth_active:
             self.next_button.set_label(_("Waiting for Simkl…"))
-        elif self._page_index < 2:
+        elif self._page_index < 1:
             self.next_button.set_label(_("Next"))
         elif self._selected_mode == LIBRARY_MODE_SIMKL:
             self.next_button.set_label(_("Continue to Simkl sign in"))
@@ -335,7 +303,7 @@ class WelcomeTour(Adw.ApplicationWindow):
             )
 
     def _go_forward(self, _button: Gtk.Button) -> None:
-        if self._page_index < 2:
+        if self._page_index < 1:
             self.carousel.scroll_to(
                 self.carousel.get_nth_page(self._page_index + 1), True
             )

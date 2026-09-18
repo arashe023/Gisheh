@@ -153,8 +153,8 @@ class ExploreLayoutTests(unittest.TestCase):
         compact_rule = stylesheet.split("button.episode-watch-button {")[1].split("}")[
             0
         ]
-        self.assertIn("min-width: 28px", compact_rule)
-        self.assertIn("min-height: 28px", compact_rule)
+        self.assertIn("min-width: 40px", compact_rule)
+        self.assertIn("min-height: 40px", compact_rule)
         self.assertIn("padding: 0", compact_rule)
         hover_rule = stylesheet.split("button.episode-watch-button:hover {")[1].split(
             "}"
@@ -438,6 +438,7 @@ class SettingsDialogTests(unittest.TestCase):
         controller.tmdb_token = None
         controller.auto_sync = True
         controller.color_scheme = "dark"
+        controller.temporary_language = "system"
         controller.default_media = "Movies"
         controller.preferred_view_mode = "list"
         return controller
@@ -457,6 +458,10 @@ class SettingsDialogTests(unittest.TestCase):
             "General",
         )
         self.assertEqual(controller.settings_color_scheme_row.get_selected(), 2)
+        self.assertEqual(controller.settings_language_row.get_selected(), 0)
+        self.assertIn(
+            "not saved", controller.settings_language_row.get_subtitle().lower()
+        )
         self.assertFalse(hasattr(controller, "settings_accent_row"))
         self.assertEqual(controller.settings_media_row.get_selected(), 0)
         self.assertEqual(controller.settings_view_row.get_selected(), 0)

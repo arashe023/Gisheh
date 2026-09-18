@@ -73,20 +73,14 @@ button.header-data-status:active {
   padding: 16px 30px 10px;
 }
 
-.welcome-emoji {
-  font-size: 4rem;
-  line-height: 1;
+.welcome-hero-icon {
+  min-width: 72px;
+  min-height: 72px;
 }
 
-.welcome-feature-emoji {
-  font-size: 1.05rem;
-  line-height: 1;
-}
-
-.welcome-choice-emoji {
+.welcome-choice-icon {
   min-width: 32px;
-  font-size: 1.8rem;
-  line-height: 1;
+  min-height: 32px;
 }
 
 .welcome-title {
@@ -99,13 +93,6 @@ button.header-data-status:active {
   font-size: 1.42em;
   font-weight: 800;
   letter-spacing: -0.025em;
-}
-
-.welcome-eyebrow {
-  color: @accent_color;
-  font-size: 0.76em;
-  font-weight: 700;
-  letter-spacing: 0.08em;
 }
 
 .welcome-body {
@@ -392,11 +379,17 @@ button.header-data-status:active {
 }
 
 button.episode-watch-button {
-  min-width: 28px;
-  min-height: 28px;
+  min-width: 40px;
+  min-height: 40px;
   padding: 0;
   background-color: transparent;
   box-shadow: none;
+}
+
+button.detail-title-link {
+  min-height: 0;
+  padding: 0;
+  font-weight: inherit;
 }
 
 button.episode-watch-button:hover {

@@ -1,16 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <defs>
-    <linearGradient id="background" x1="18" y1="12" x2="108" y2="118" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#62a0ea"/>
-      <stop offset="1" stop-color="#1c71d8"/>
-    </linearGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
-      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-opacity=".28"/>
-    </filter>
-  </defs>
-  <rect x="10" y="8" width="108" height="108" rx="27" fill="url(#background)" filter="url(#shadow)"/>
-  <rect x="29" y="31" width="70" height="62" rx="9" fill="none" stroke="#fff" stroke-width="8"/>
-  <path d="M44 31v62M84 31v62M29 49h15M29 75h15M84 49h15M84 75h15" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round"/>
-  <path d="m56 49 24 13-24 14Z" fill="#fff"/>
-  <path d="M36 108h56" stroke="#0d4f9f" stroke-opacity=".35" stroke-width="5" stroke-linecap="round"/>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <title>Gisheh</title>
+  <desc>A cinema ticket with a play symbol</desc>
+
+  <!-- Bottom profile: the subtle depth used by GNOME app icons. -->
+  <path fill="#613583" d="M24 18h80a8 8 0 0 1 8 8v22c-8 0-14 7-14 16s6 16 14 16v26a8 8 0 0 1-8 8H24a8 8 0 0 1-8-8V80c8 0 14-7 14-16s-6-16-14-16V26a8 8 0 0 1 8-8Z"/>
+
+  <!-- Ticket face. Flat color is intentional: the surface is straight. -->
+  <path fill="#9141ac" d="M24 14h80a8 8 0 0 1 8 8v22c-8 0-14 7-14 16s6 16 14 16v26a8 8 0 0 1-8 8H24a8 8 0 0 1-8-8V76c8 0 14-7 14-16s-6-16-14-16V22a8 8 0 0 1 8-8Z"/>
+
+  <!-- Perforation: large details remain legible at 32 px. -->
+  <path fill="#c061cb" d="M32 26h4v10h-4zm0 22h4v10h-4zm0 24h4v10h-4zm0 22h4v6h-4zM92 26h4v10h-4zm0 22h4v10h-4zm0 24h4v10h-4zm0 22h4v6h-4z"/>
+
+  <!-- A single, direct metaphor for movies and shows. -->
+  <rect width="44" height="56" x="42" y="32" fill="#f6f5f4" rx="8"/>
+  <path fill="#deddda" d="M42 80h44a8 8 0 0 1-8 8H50a8 8 0 0 1-8-8Z"/>
+  <path fill="#613583" d="m58 48 20 12-20 12Z"/>
 </svg>

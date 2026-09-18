@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<interface>
+<interface domain="gisheh">
   <requires lib="gtk" version="4.12"/>
   <requires lib="Adw" version="1.9"/>
   <object class="AdwApplicationWindow" id="window">
@@ -34,7 +34,7 @@
                             <property name="spacing">2</property>
                             <child>
                               <object class="GtkButton" id="profile_button">
-                                <property name="tooltip-text" translatable="yes">Open profile</property>
+                                <property name="tooltip-text" translatable="yes">Profile</property>
                                 <property name="child">
                                   <object class="AdwAvatar" id="sidebar_profile_avatar">
                                     <property name="size">28</property>
@@ -62,7 +62,7 @@
                         <child type="end">
                           <object class="GtkMenuButton" id="main_menu_button">
                             <property name="icon-name">open-menu-symbolic</property>
-                            <property name="tooltip-text" translatable="yes">Main menu</property>
+                            <property name="tooltip-text" translatable="yes">Main Menu</property>
                             <style>
                               <class name="flat"/>
                             </style>
@@ -204,6 +204,25 @@
                         </child>
                       </object>
                     </child>
+                    <child type="bottom">
+                      <object class="GtkBox" id="compact_media_bar">
+                        <property name="visible">false</property>
+                        <property name="orientation">vertical</property>
+                        <child>
+                          <object class="GtkSeparator"/>
+                        </child>
+                        <child>
+                          <object class="AdwToggleGroup" id="compact_media_switcher">
+                            <property name="homogeneous">true</property>
+                            <property name="margin-top">6</property>
+                            <property name="margin-bottom">6</property>
+                            <property name="margin-start">12</property>
+                            <property name="margin-end">12</property>
+                            <property name="tooltip-text" translatable="yes">Media Type</property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
                     <property name="content">
                       <object class="GtkBox" id="main_workspace">
                         <property name="orientation">horizontal</property>
@@ -266,7 +285,7 @@
                                       <object class="GtkSearchEntry" id="search_entry">
                                         <property name="hexpand">true</property>
                                         <property name="placeholder-text" translatable="yes">Search movies…</property>
-                                        <property name="tooltip-text" translatable="yes">Search collection (Ctrl+K)</property>
+                                        <property name="tooltip-text" translatable="yes">Search Collection (Ctrl+K)</property>
                                       </object>
                                     </child>
                                     <child>
@@ -426,15 +445,14 @@
                                         <child>
                                           <object class="GtkCenterBox">
                                             <property name="start-widget">
-                                              <object class="GtkLabel" id="detail_title">
+                                              <object class="GtkLinkButton" id="detail_title">
                                                 <property name="label" translatable="yes">Hush! Girls Don't Scream</property>
                                                 <property name="halign">start</property>
                                                 <property name="hexpand">true</property>
-                                                <property name="wrap">true</property>
-                                                <property name="max-width-chars">28</property>
-                                                <property name="xalign">0</property>
+                                                <property name="uri">https://www.themoviedb.org</property>
                                                 <style>
                                                   <class name="title-2"/>
+                                                  <class name="flat"/>
                                                 </style>
                                               </object>
                                             </property>
@@ -782,7 +800,7 @@
                 <child>
                   <object class="GtkButton" id="explore_calendar_button">
                     <property name="icon-name">x-office-calendar-symbolic</property>
-                    <property name="tooltip-text" translatable="yes">Open release calendar</property>
+                    <property name="tooltip-text" translatable="yes">Release Calendar</property>
                     <style>
                       <class name="flat"/>
                       <class name="circular"/>

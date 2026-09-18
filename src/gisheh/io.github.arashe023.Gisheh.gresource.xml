@@ -4,5 +4,9 @@
     <file preprocess="xml-stripblanks">ui/window.ui</file>
     <file>style.css</file>
     <file>assets/tmdb-logo.svg</file>
+    <file>assets/welcome-media.svg</file>
+    <file>assets/welcome-privacy.svg</file>
+    <file>assets/welcome-local.svg</file>
+    <file>assets/welcome-sync.svg</file>
   </gresource>
 </gresources>

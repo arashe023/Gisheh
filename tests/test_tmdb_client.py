@@ -4,9 +4,8 @@ import os
 import sys
 import tempfile
 import unittest
-from io import BytesIO
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -14,13 +13,54 @@ from gisheh.services import tmdb_client
 
 
 class TmdbClientTests(unittest.TestCase):
+    def test_application_language_selects_persian_tmdb_locale(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"GISHEH_LANGUAGE": "fa", "LANGUAGE": "en"},
+            clear=False,
+        ):
+            self.assertEqual(tmdb_client.active_language(), "fa-IR")
+
+        with patch.dict(
+            os.environ,
+            {"GISHEH_LANGUAGE": "en", "LANGUAGE": "fa"},
+            clear=False,
+        ):
+            self.assertEqual(tmdb_client.active_language(), "en-US")
+
+    def test_localized_merge_keeps_persian_and_fills_missing_english(self) -> None:
+        merged = tmdb_client.merge_localized_payloads(
+            {
+                "id": 10,
+                "title": "جدایی نادر از سیمین",
+                "overview": "",
+                "results": [{"id": 1, "name": "عنوان فارسی", "overview": ""}],
+            },
+            {
+                "id": 10,
+                "title": "A Separation",
+                "overview": "English overview",
+                "results": [
+                    {"id": 1, "name": "English title", "overview": "Fallback"}
+                ],
+            },
+        )
+
+        self.assertEqual(merged["title"], "جدایی نادر از سیمین")
+        self.assertEqual(merged["overview"], "English overview")
+        self.assertEqual(merged["results"][0]["name"], "عنوان فارسی")
+        self.assertEqual(merged["results"][0]["overview"], "Fallback")
+
     def test_request_uses_bearer_authorization(self) -> None:
-        response = BytesIO(b'{"success": true}')
-        with patch.object(tmdb_client, "urlopen", return_value=response) as opener:
+        response = Mock(status_code=200)
+        response.json.return_value = {"success": True}
+        client = Mock()
+        client.get.return_value = response
+        with patch.object(tmdb_client.image_http, "get_client", return_value=client):
             payload = tmdb_client.request_json("/test", token="test-token")
 
-        request = opener.call_args.args[0]
-        self.assertEqual(request.get_header("Authorization"), "Bearer test-token")
+        headers = client.get.call_args.kwargs["headers"]
+        self.assertEqual(headers["Authorization"], "Bearer test-token")
         self.assertTrue(payload["success"])
 
     def test_environment_token_has_priority(self) -> None:
@@ -200,6 +240,53 @@ class TmdbClientTests(unittest.TestCase):
         self.assertIn("content_ratings", tv_params["append_to_response"])
         self.assertNotIn("release_dates", tv_params["append_to_response"])
 
+    def test_persian_details_prioritize_fa_poster_then_fill_english_copy(self) -> None:
+        def response(
+            _path: str,
+            *,
+            token: str,
+            params: dict[str, object],
+        ) -> dict[str, object]:
+            self.assertEqual(token, "token")
+            if params["language"] == "fa-IR":
+                return {
+                    "id": 10,
+                    "title": "عنوان فارسی",
+                    "overview": "",
+                    "images": {
+                        "posters": [
+                            {"file_path": "/en.jpg", "iso_639_1": "en"},
+                            {"file_path": "/none.jpg", "iso_639_1": None},
+                            {"file_path": "/fa.jpg", "iso_639_1": "fa"},
+                        ]
+                    },
+                }
+            return {
+                "id": 10,
+                "title": "English title",
+                "overview": "English fallback overview",
+            }
+
+        with patch.object(
+            tmdb_client, "request_json", side_effect=response
+        ) as requester:
+            payload = tmdb_client.fetch_details(
+                "token", "movie", 10, language="fa-IR"
+            )
+
+        self.assertEqual(requester.call_count, 2)
+        self.assertEqual(payload["title"], "عنوان فارسی")
+        self.assertEqual(payload["overview"], "English fallback overview")
+        self.assertEqual(payload["poster_path"], "/fa.jpg")
+        self.assertEqual(
+            [item["file_path"] for item in payload["images"]["posters"]],
+            ["/fa.jpg", "/en.jpg", "/none.jpg"],
+        )
+        self.assertEqual(
+            requester.call_args_list[0].kwargs["params"]["include_image_language"],
+            "fa,en,null",
+        )
+
     def test_episode_details_use_the_episode_specific_tmdb_endpoint(self) -> None:
         with patch.object(
             tmdb_client,
@@ -213,6 +300,33 @@ class TmdbClientTests(unittest.TestCase):
             "/tv/20/season/3/episode/6",
             token="token",
             params={"language": "en-US"},
+        )
+
+    def test_episode_details_follow_temporary_application_language(self) -> None:
+        def response(
+            _path: str,
+            *,
+            token: str,
+            params: dict[str, object],
+        ) -> dict[str, object]:
+            self.assertEqual(token, "token")
+            return (
+                {"id": 99, "name": "نام فارسی", "overview": ""}
+                if params["language"] == "fa-IR"
+                else {"id": 99, "name": "English", "overview": "Fallback"}
+            )
+
+        with (
+            patch.dict(os.environ, {"GISHEH_LANGUAGE": "fa"}, clear=False),
+            patch.object(tmdb_client, "request_json", side_effect=response) as requester,
+        ):
+            payload = tmdb_client.fetch_episode_details("token", 20, 3, 6)
+
+        self.assertEqual(payload["name"], "نام فارسی")
+        self.assertEqual(payload["overview"], "Fallback")
+        self.assertEqual(
+            [call.kwargs["params"]["language"] for call in requester.call_args_list],
+            ["fa-IR", "en-US"],
         )
 
     def test_season_details_use_the_season_level_tmdb_endpoint(self) -> None:
@@ -262,6 +376,29 @@ class TmdbClientTests(unittest.TestCase):
             token="token",
             params={"language": "en-US"},
         )
+
+    def test_persian_and_english_metadata_use_separate_cache_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory, patch.dict(
+            os.environ,
+            {"XDG_CACHE_HOME": temporary_directory},
+            clear=False,
+        ):
+            english = tmdb_client.store_summary(
+                "movie", 42, {"title": "English"}, language="en-US"
+            )
+            persian = tmdb_client.store_summary(
+                "movie", 42, {"title": "فارسی"}, language="fa-IR"
+            )
+
+            self.assertNotEqual(english, persian)
+            self.assertEqual(
+                tmdb_client.load_summary("movie", 42, language="en-US")["title"],
+                "English",
+            )
+            self.assertEqual(
+                tmdb_client.load_summary("movie", 42, language="fa-IR")["title"],
+                "فارسی",
+            )
 
     def test_cached_image_only_returns_complete_existing_file(self) -> None:
         with (

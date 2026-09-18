@@ -323,6 +323,27 @@ class CollectionBehaviorTests(unittest.TestCase):
         self.assertNotIn(controller._canonical_record_id(record), controller.bookmarks)
         self.assertEqual(refreshes, ["collection"])
 
+    def test_watchlist_removal_undo_adds_the_same_record_back(self) -> None:
+        record = self._record()
+        controller = object.__new__(gisheh.GishehWindow)
+        captured: dict[str, object] = {}
+        restored: list[tuple[object, bool]] = []
+        controller._toast_with_action = lambda message, label, action: captured.update(
+            message=message, label=label, action=action
+        )
+        controller._set_record_bookmarked = (
+            lambda item, adding: restored.append((item, adding))
+        )
+
+        controller._show_watchlist_removed_undo(record)
+        action = captured["action"]
+        assert callable(action)
+        action()
+
+        self.assertEqual(captured["message"], "Removed from Watchlist")
+        self.assertEqual(captured["label"], "Undo")
+        self.assertEqual(restored, [(record, True)])
+
     def test_tmdb_refresh_updates_active_collection_and_preserves_scroll(self) -> None:
         controller = object.__new__(gisheh.GishehWindow)
         controller._tmdb_library_refresh_source_id = 9

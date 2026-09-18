@@ -14,6 +14,12 @@ from gisheh import window as gisheh
 
 
 class ResponsiveDecisionTests(unittest.TestCase):
+    def test_default_width_docks_sidebar_until_details_open(self) -> None:
+        closed = gisheh.responsive_layout_for_width(1100, details_open=False)
+        opened = gisheh.responsive_layout_for_width(1100, details_open=True)
+        self.assertEqual(closed.sidebar_mode, gisheh.SIDEBAR_EXPANDED)
+        self.assertEqual(opened.sidebar_mode, gisheh.SIDEBAR_HIDDEN)
+
     def test_very_wide_width_uses_expanded_sidebar_and_inline_details(self) -> None:
         for width in (1200, 1360, 2000):
             layout = gisheh.responsive_layout_for_width(width, details_open=True)
@@ -44,8 +50,12 @@ class ResponsiveDecisionTests(unittest.TestCase):
             gisheh.SIDEBAR_EXPANDED,
         )
         self.assertEqual(
-            gisheh.responsive_layout_for_width(1199).sidebar_mode,
+            gisheh.responsive_layout_for_width(1039).sidebar_mode,
             gisheh.SIDEBAR_HIDDEN,
+        )
+        self.assertEqual(
+            gisheh.responsive_layout_for_width(1040).sidebar_mode,
+            gisheh.SIDEBAR_EXPANDED,
         )
         self.assertEqual(
             gisheh.responsive_layout_for_width(980, details_open=True).details_mode,
@@ -604,8 +614,25 @@ class ResponsiveStructureTests(unittest.TestCase):
 
     def test_sidebar_toggle_is_binary(self) -> None:
         source = self._source()
-        self.assertIn("Hide sidebar (Ctrl+B)", source)
-        self.assertIn("Show sidebar (Ctrl+B)", source)
+        self.assertIn("Hide Sidebar (Ctrl+B)", source)
+        self.assertIn("Show Sidebar (Ctrl+B)", source)
+
+    def test_narrow_media_switcher_keeps_text_in_a_bottom_bar(self) -> None:
+        root = Path(gisheh.__file__).resolve().parent
+        ui = (root / "ui/window.ui").read_text(encoding="utf-8")
+        source = (root / "window.py").read_text(encoding="utf-8")
+        self.assertIn('id="compact_media_bar"', ui)
+        self.assertIn('id="compact_media_switcher"', ui)
+        self.assertIn("COMPACT_MEDIA_SWITCHER_WIDTH = 560", source)
+        self.assertIn("self.compact_media_switcher.add", source)
+
+    def test_detail_title_is_keyboard_activatable_link(self) -> None:
+        source = self._source()
+        ui = (
+            Path(gisheh.__file__).resolve().parent / "ui/window.ui"
+        ).read_text(encoding="utf-8")
+        self.assertIn('class="GtkLinkButton" id="detail_title"', ui)
+        self.assertNotIn("title_click = Gtk.GestureClick()", ui)
         self.assertNotIn("Use compact sidebar", source)
 
     def test_sidebar_shortcut_uses_the_same_logic(self) -> None:

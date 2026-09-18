@@ -23,6 +23,11 @@ def get_client() -> httpx.Client:
     with _CLIENT_LOCK:
         if _CLIENT is None:
             _CLIENT = httpx.Client(
+                # Some networks publish reachable IPv4 and unroutable IPv6
+                # addresses for the same CDN. Binding the desktop client to
+                # IPv4 avoids waiting on every unusable IPv6 address before a
+                # request can begin.
+                transport=httpx.HTTPTransport(local_address="0.0.0.0"),
                 follow_redirects=True,
                 timeout=httpx.Timeout(
                     connect=4.0,

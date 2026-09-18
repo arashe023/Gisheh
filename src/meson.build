@@ -5,6 +5,10 @@ build_configuration = configuration_data()
 build_configuration.set_quoted('APP_VERSION', meson.project_version())
 build_configuration.set_quoted('SIMKL_CLIENT_ID', get_option('simkl_client_id'))
 build_configuration.set_quoted('TMDB_READ_TOKEN', get_option('tmdb_read_token'))
+build_configuration.set_quoted(
+  'LOCALE_DIR',
+  get_option('prefix') / get_option('localedir'),
+)
 configured_build_module = configure_file(
   input: 'gisheh/_build_config.py.in',
   output: '_build_config.py',

@@ -155,6 +155,38 @@ class LocalFirstLibraryTests(unittest.TestCase):
         self.assertEqual(arguments[:3], [gisheh.sys.executable, "-m", "gisheh.main"])
         self.assertIn("PYTHONPATH", environment)
 
+    def test_temporary_language_is_applied_only_to_restarted_process(self) -> None:
+        environment = {"LANGUAGE": "de", "PYTHONPATH": "existing"}
+        with (
+            patch.dict(gisheh.os.environ, environment, clear=True),
+            patch.object(simkl_client, "close_image_http_client"),
+            patch.object(gisheh.os, "execvpe") as exec_process,
+        ):
+            gisheh.GishehWindow._restart_application(language="fa")
+
+        restarted_environment = exec_process.call_args.args[2]
+        self.assertEqual(restarted_environment["GISHEH_LANGUAGE"], "fa")
+        self.assertEqual(restarted_environment["LANGUAGE"], "fa")
+        self.assertEqual(restarted_environment["GISHEH_ORIGINAL_LANGUAGE"], "de")
+
+    def test_system_language_restores_environment_after_temporary_override(self) -> None:
+        environment = {
+            "LANGUAGE": "fa",
+            "GISHEH_LANGUAGE": "fa",
+            "GISHEH_ORIGINAL_LANGUAGE": "de",
+        }
+        with (
+            patch.dict(gisheh.os.environ, environment, clear=True),
+            patch.object(simkl_client, "close_image_http_client"),
+            patch.object(gisheh.os, "execvpe") as exec_process,
+        ):
+            gisheh.GishehWindow._restart_application(language="system")
+
+        restarted_environment = exec_process.call_args.args[2]
+        self.assertEqual(restarted_environment["LANGUAGE"], "de")
+        self.assertNotIn("GISHEH_LANGUAGE", restarted_environment)
+        self.assertNotIn("GISHEH_ORIGINAL_LANGUAGE", restarted_environment)
+
     @staticmethod
     def _controller() -> tuple[gisheh.GishehWindow, gisheh.TitleRecord]:
         records, explore, _totals = gisheh.load_catalog(sample_data_path=SAMPLE_DATA)
@@ -302,6 +334,14 @@ class LocalFirstLibraryTests(unittest.TestCase):
 
 
 class WelcomeTourStructureTests(unittest.TestCase):
+    def test_tour_has_two_steps(self) -> None:
+        onboarding = (
+            Path(__file__).resolve().parents[1] / "src/gisheh/onboarding.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("self._page_index = min(1", onboarding)
+        self.assertIn("self._page_index < 1", onboarding)
+        self.assertNotIn("self._page_index < 2", onboarding)
+
     def test_tour_explains_both_modes_without_a_main_menu_entry(self) -> None:
         root = Path(__file__).resolve().parents[1]
         onboarding = (root / "src/gisheh/onboarding.py").read_text(encoding="utf-8")
@@ -315,20 +355,30 @@ class WelcomeTourStructureTests(unittest.TestCase):
         self.assertIn("selected_library_mode()", application)
         self.assertNotIn('menu.append("Welcome Tour", "app.tour")', window)
 
-    def test_tour_uses_emoji_instead_of_svg_icon_widgets(self) -> None:
-        onboarding = (
-            Path(__file__).resolve().parents[1] / "src/gisheh/onboarding.py"
+    def test_tour_uses_bundled_svg_icons_and_body_copy(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        onboarding = (root / "src/gisheh/onboarding.py").read_text(encoding="utf-8")
+        resources = (
+            root / "src/gisheh/io.github.arashe023.Gisheh.gresource.xml"
         ).read_text(encoding="utf-8")
 
         for emoji in ("🎬", "🔒", "✅", "💾", "☁️"):
-            self.assertIn(emoji, onboarding)
-        self.assertNotIn("Gtk.Image.new_from_icon_name", onboarding)
-        self.assertNotIn("welcome-icon-surface", onboarding)
+            self.assertNotIn(emoji, onboarding)
+        for asset in (
+            "welcome-media.svg",
+            "welcome-privacy.svg",
+            "welcome-local.svg",
+            "welcome-sync.svg",
+        ):
+            self.assertIn(asset, resources)
+            self.assertTrue((root / "src/gisheh/assets" / asset).is_file())
 
-        stylesheet = (
-            Path(__file__).resolve().parents[1] / "src/gisheh/style.css"
-        ).read_text(encoding="utf-8")
-        self.assertNotIn(".welcome-icon-surface", stylesheet)
+        self.assertIn("Gtk.Image.new_from_resource", onboarding)
+        self.assertNotIn("def _feature_row", onboarding)
+        self.assertNotIn("welcome-feature-emoji", onboarding)
+        self.assertNotIn("ONE CHOICE BEFORE YOU START", onboarding)
+        self.assertIn("Browse with TMDB metadata, track titles", onboarding)
+        self.assertIn("Before you start, choose where Gisheh should save", onboarding)
 
     def test_simkl_choice_requires_pin_authorization_before_completion(self) -> None:
         onboarding = (
