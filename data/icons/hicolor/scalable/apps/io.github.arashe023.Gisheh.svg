@@ -1,19 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-  <title>Gisheh</title>
-  <desc>A cinema ticket with a play symbol</desc>
-
-  <!-- Bottom profile: the subtle depth used by GNOME app icons. -->
-  <path fill="#613583" d="M24 18h80a8 8 0 0 1 8 8v22c-8 0-14 7-14 16s6 16 14 16v26a8 8 0 0 1-8 8H24a8 8 0 0 1-8-8V80c8 0 14-7 14-16s-6-16-14-16V26a8 8 0 0 1 8-8Z"/>
-
-  <!-- Ticket face. Flat color is intentional: the surface is straight. -->
-  <path fill="#9141ac" d="M24 14h80a8 8 0 0 1 8 8v22c-8 0-14 7-14 16s6 16 14 16v26a8 8 0 0 1-8 8H24a8 8 0 0 1-8-8V76c8 0 14-7 14-16s-6-16-14-16V22a8 8 0 0 1 8-8Z"/>
-
-  <!-- Perforation: large details remain legible at 32 px. -->
-  <path fill="#c061cb" d="M32 26h4v10h-4zm0 22h4v10h-4zm0 24h4v10h-4zm0 22h4v6h-4zM92 26h4v10h-4zm0 22h4v10h-4zm0 24h4v10h-4zm0 22h4v6h-4z"/>
-
-  <!-- A single, direct metaphor for movies and shows. -->
-  <rect width="44" height="56" x="42" y="32" fill="#f6f5f4" rx="8"/>
-  <path fill="#deddda" d="M42 80h44a8 8 0 0 1-8 8H50a8 8 0 0 1-8-8Z"/>
-  <path fill="#613583" d="m58 48 20 12-20 12Z"/>
+  <title>Gisheh — Saved ticket</title>
+  <desc>A purple cinema ticket with an ivory bookmark, representing a personal film and television watchlist.</desc>
+  <!-- Four-unit front profile; the complete silhouette rests at y=112. -->
+  <path fill="#613583" d="M28 20h72a12 12 0 0 1 12 12v30a10 10 0 0 0 0 20v18a12 12 0 0 1-12 12H28a12 12 0 0 1-12-12V82a10 10 0 0 0 0-20V32a12 12 0 0 1 12-12Z"/>
+  <!-- Flat paper surface, using the GNOME purple palette. -->
+  <path fill="#9141ac" d="M28 16h72a12 12 0 0 1 12 12v30a10 10 0 0 0 0 20v18a12 12 0 0 1-12 12H28a12 12 0 0 1-12-12V78a10 10 0 0 0 0-20V28a12 12 0 0 1 12-12Z"/>
+  <!-- One large bookmark: the V-shaped end remains open at small sizes. -->
+  <path fill="#f6f5f4" d="M48 28h32a4 4 0 0 1 4 4v48L64 68 44 80V32a4 4 0 0 1 4-4Z"/>
+  <!-- Three broad perforations suggest the retained ticket stub. -->
+  <path fill="#dc8add" d="M36 92h8v4h-8Zm24 0h8v4h-8Zm24 0h8v4h-8Z"/>
 </svg>

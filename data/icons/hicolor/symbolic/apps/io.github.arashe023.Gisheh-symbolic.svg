@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
   <title>Gisheh</title>
-  <path fill="#2e3436" d="M3 1h10a1 1 0 0 1 1 1v2a2 2 0 0 0 0 4v2a2 2 0 0 0 0 4 1 1 0 0 1-1 1H3a1 1 0 0 1-1-1 2 2 0 0 0 0-4V8a2 2 0 0 0 0-4V2a1 1 0 0 1 1-1Zm2 2v10h6V3H5Zm2 2 3 3-3 3V5Z"/>
+  <desc>A ticket with a bookmark cut out of its centre.</desc>
+  <path fill="#2e3436" fill-rule="evenodd" d="M3 1h10a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V3a2 2 0 0 1 2-2Zm3 2h4v8l-2-1.5L6 11Z"/>
 </svg>
