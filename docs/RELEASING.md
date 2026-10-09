@@ -47,6 +47,26 @@ flatpak run io.github.arashe023.Gisheh//beta
 Bundles do not provide automatic application updates by themselves. Publishing
 an OSTree repository or a store release is a separate distribution decision.
 
+## Runtime-only fallback for standalone bundles
+
+When downloading the SDK is unavailable, this pure-Python application can also
+be assembled with the native build dependencies from README, `pip`, and an
+installed `org.gnome.Platform//50`:
+
+```sh
+python3 build-aux/package-flatpak.py --native
+```
+
+This uses host Meson/gettext/GResource tools, installs the application into an
+architecture-independent Python package directory, and installs only the pinned
+`none-any` dependency wheels after SHA256 verification. Host bytecode is removed.
+It uses the same permissions, runtime, icons and metadata as the manifest and
+exports a normal Flatpak beta bundle. `build-info.json` records
+`native-pure-python` instead of `flatpak-builder`. Always run an installed-package
+smoke test in the actual Platform runtime; the host's Python version may differ.
+This fallback is for standalone testing, not evidence that an SDK build or a
+Flathub submission has passed.
+
 ## Validate before a stable release
 
 Run the native checks in CONTRIBUTING.md and the installed smoke test. Then test

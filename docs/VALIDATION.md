@@ -13,7 +13,10 @@ The installed application includes scalable/symbolic icons and the MIT license.
 
 The earlier implementation record below is historical; its test counts and
 missing-tool observations describe that earlier run. Flatpak candidate results
-are recorded separately after packaging.
+are recorded separately after packaging. The SDK download was interrupted by
+repeated timeouts and an HTTP 403 from the upstream object server. A standalone
+candidate can be assembled with the documented native-pure-python fallback;
+that does not count as a successful Flatpak Builder/SDK build.
 
 ## Earlier implementation record
 
