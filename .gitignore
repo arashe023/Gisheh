@@ -12,3 +12,16 @@ __pycache__/
 **/settings
 **/workbench.vala
 /linux/
+
+# Local build and analysis output.
+_build*/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+validation-results/
+
+# Standalone release artifacts and local Flatpak repositories.
+/dist/
+/flatpak-repo/
+/flatpak-state/

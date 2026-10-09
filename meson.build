@@ -7,8 +7,11 @@ project(
 
 gnome = import('gnome')
 i18n = import('i18n')
-python = import('python').find_installation('python3')
+python = import('python').find_installation('python3', modules: ['gi', 'cairo', 'httpx'])
 fs = import('fs')
+if not python.language_version().version_compare('>= 3.11')
+  error('Gisheh requires Python 3.11 or newer')
+endif
 
 release_date = fs.read('RELEASE_DATE').strip()
 
@@ -22,3 +25,5 @@ subdir('po')
 if get_option('tests')
   subdir('tests')
 endif
+
+install_data('LICENSE', install_dir: get_option('datadir') / 'licenses' / 'gisheh')

@@ -4,18 +4,30 @@ release_configuration = configuration_data()
 release_configuration.set('PROJECT_VERSION', meson.project_version())
 release_configuration.set('RELEASE_DATE', release_date)
 
-desktop_file = configure_file(
+desktop_template = configure_file(
   input: app_id + '.desktop.in',
-  output: app_id + '.desktop',
+  output: app_id + '.desktop.in',
   configuration: {'EXECUTABLE': 'gisheh'},
+)
+
+metainfo_template = configure_file(
+  input: app_id + '.metainfo.xml.in',
+  output: app_id + '.metainfo.xml.in',
+  configuration: release_configuration,
+)
+
+desktop_file = i18n.merge_file(
+  input: desktop_template,
+  output: app_id + '.desktop',
+  type: 'desktop',
+  po_dir: '../po',
   install: true,
   install_dir: get_option('datadir') / 'applications',
 )
-
-metainfo_file = configure_file(
-  input: app_id + '.metainfo.xml.in',
+metainfo_file = i18n.merge_file(
+  input: metainfo_template,
   output: app_id + '.metainfo.xml',
-  configuration: release_configuration,
+  po_dir: '../po',
   install: true,
   install_dir: get_option('datadir') / 'metainfo',
 )

@@ -33,27 +33,27 @@ PERSIAN_LANGUAGE = "fa-IR"
 # All language decisions for TMDB content live here so the rest of the
 # project never computes system/selected/fallback languages on its own.
 CONTENT_LANGUAGE_SYSTEM = "system"
-SUPPORTED_CONTENT_LANGUAGES = (DEFAULT_LANGUAGE, PERSIAN_LANGUAGE)
-# Manual override values accepted from settings/tests. "system" means follow
-# the operating system language. Only fa/en are real TMDB locales here;
-# anything unsupported resolves to en-US.
 _CONTENT_LANGUAGE_OVERRIDE: str = CONTENT_LANGUAGE_SYSTEM
 
 
 def normalize_content_language(value: str | None) -> str:
     """Normalize a content-language setting to a TMDB locale or "system"."""
-    if value is None:
+    if not isinstance(value, str):
         return CONTENT_LANGUAGE_SYSTEM
-    normalized = value.strip().replace("_", "-").casefold()
-    if not normalized or normalized == "system":
+    if not value.strip() or value.strip().casefold() == "system":
         return CONTENT_LANGUAGE_SYSTEM
-    if normalized.startswith("fa"):
-        return PERSIAN_LANGUAGE
-    return DEFAULT_LANGUAGE
+    normalized = value.strip().split(".", 1)[0].split("@", 1)[0].replace("_", "-")
+    if not re.fullmatch(r"[a-zA-Z]{2}(?:-[a-zA-Z]{2})?", normalized):
+        return DEFAULT_LANGUAGE
+    parts = normalized.split("-")
+    code = parts[0].lower()
+    if len(parts) == 2:
+        return f"{code}-{parts[1].upper()}"
+    return {"en": DEFAULT_LANGUAGE, "fa": PERSIAN_LANGUAGE}.get(code, code)
 
 
 def set_content_language(value: str | None) -> str:
-    """Set the manual TMDB content-language override ("system"/en-US/fa-IR)."""
+    """Set the TMDB content-language override independently of the UI."""
     global _CONTENT_LANGUAGE_OVERRIDE
     _CONTENT_LANGUAGE_OVERRIDE = normalize_content_language(value)
     return _CONTENT_LANGUAGE_OVERRIDE
@@ -68,7 +68,7 @@ def get_content_language_setting() -> str:
 
 
 def system_language() -> str:
-    """Return the OS language as a TMDB locale (unsupported -> en-US)."""
+    """Return the OS language as a TMDB locale."""
     candidates = (
         os.environ.get("LANGUAGE", "").split(":", 1)[0],
         os.environ.get("LC_ALL", ""),
@@ -76,8 +76,8 @@ def system_language() -> str:
         os.environ.get("LANG", ""),
     )
     selected = next((value for value in candidates if value.strip()), "")
-    normalized = selected.split(".", 1)[0].replace("_", "-").casefold()
-    return PERSIAN_LANGUAGE if normalized.startswith("fa") else DEFAULT_LANGUAGE
+    normalized = normalize_content_language(selected)
+    return DEFAULT_LANGUAGE if normalized == CONTENT_LANGUAGE_SYSTEM else normalized
 
 
 class TmdbError(RuntimeError):
@@ -182,34 +182,14 @@ def clear_cache() -> None:
 
 
 def active_language() -> str:
-    """Return the effective TMDB content locale.
-
-    Priority: manual content-language setting > temporary application
-    language (GISHEH_LANGUAGE, kept for backward compatibility) > OS
-    language. Unsupported locales resolve to en-US.
-    """
+    """Return the selected content language, or the system locale."""
     manual = get_content_language_setting()
-    if manual != CONTENT_LANGUAGE_SYSTEM:
-        return manual
-    # Temporary UI language override behaves like a manual content choice
-    # when the content setting itself is "system".
-    configured = os.environ.get("GISHEH_LANGUAGE", "").strip()
-    if configured:
-        normalized = configured.split(".", 1)[0].replace("_", "-").casefold()
-        if normalized.startswith("fa"):
-            return PERSIAN_LANGUAGE
-        if normalized:
-            return DEFAULT_LANGUAGE
-    return system_language()
+    return system_language() if manual == CONTENT_LANGUAGE_SYSTEM else manual
 
 
 def _effective_language(language: str | None) -> str:
-    if language is None:
-        return active_language()
-    if isinstance(language, str) and language.strip().casefold() == "system":
-        return active_language()
-    normalized = language.strip().replace("_", "-").casefold()
-    return PERSIAN_LANGUAGE if normalized.startswith("fa") else DEFAULT_LANGUAGE
+    normalized = normalize_content_language(language)
+    return active_language() if normalized == CONTENT_LANGUAGE_SYSTEM else normalized
 
 
 def is_missing_translation(value: Any) -> bool:
@@ -324,12 +304,12 @@ def _payload_needs_fallback(payload: Any, _depth: int = 0) -> bool:
         return False
     if isinstance(payload, dict):
         for key, value in payload.items():
-            if key in _LOCALIZABLE_KEYS and is_missing_translation(value):
-                # Empty placeholders such as "" or [] mean TMDB has no
-                # translation for this field in the requested language.
-                # Whitespace-only strings count as missing as well.
-                if isinstance(value, (str, list, tuple)) or value is None:
-                    return True
+            if (
+                key in _LOCALIZABLE_KEYS
+                and is_missing_translation(value)
+                and (isinstance(value, (str, list, tuple)) or value is None)
+            ):
+                return True
             if isinstance(value, (dict, list, tuple)) and _payload_needs_fallback(
                 value, _depth + 1
             ):
@@ -387,11 +367,8 @@ def _localized_request(
 
 
 def _image_language_order(language: str) -> tuple[str | None, ...]:
-    return (
-        ("fa", "en", None)
-        if language == PERSIAN_LANGUAGE
-        else ("en", None)
-    )
+    code = language.split("-", 1)[0]
+    return ("en", None) if code == "en" else (code, "en", None)
 
 
 def _prioritize_posters(payload: dict[str, Any], language: str) -> dict[str, Any]:
@@ -490,7 +467,8 @@ def request_json(
     token: str,
     params: dict[str, str | int | bool] | None = None,
     timeout: float = 15,
-) -> dict[str, Any]:
+    expect_list: bool = False,
+) -> dict[str, Any] | list[Any]:
     try:
         response = image_http.get_client().get(
             f"{API_ROOT}{path}",
@@ -508,13 +486,61 @@ def request_json(
         if not 200 <= code < 300:
             raise TmdbError(f"TMDB request failed with HTTP {code}.") from None
         payload = response.json()
-        if not isinstance(payload, dict):
+        if not isinstance(payload, list if expect_list else dict):
             raise TmdbError("TMDB returned an invalid response.")
         return payload
     except (httpx.TimeoutException, httpx.TransportError) as error:
         raise TmdbError(f"Could not reach TMDB: {error}") from None
     except ValueError as error:
         raise TmdbError(f"TMDB returned invalid JSON: {error}") from None
+
+
+def _parse_languages(payload: Any) -> list[tuple[str, str]]:
+    """Validate configuration data and retain native and English names."""
+    if not isinstance(payload, list):
+        raise TmdbError("TMDB returned an invalid language list.")
+    languages = {}
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        code = item.get("iso_639_1")
+        if not isinstance(code, str) or not re.fullmatch(r"[a-z]{2}", code):
+            continue
+        english = item.get("english_name")
+        native = item.get("name")
+        english = english.strip() if isinstance(english, str) else ""
+        native = native.strip() if isinstance(native, str) else ""
+        label = (
+            f"{native} — {english}"
+            if native and english and native != english
+            else native or english or code
+        )
+        languages[normalize_content_language(code)] = label
+    if not languages:
+        raise TmdbError("TMDB returned an empty language list.")
+    return sorted(languages.items(), key=lambda item: item[1].casefold())
+
+
+def cached_languages() -> list[tuple[str, str]]:
+    """Keep the last successful TMDB language list available offline."""
+    try:
+        return _parse_languages(json.loads((cache_dir() / "languages.json").read_text(encoding="utf-8")))
+    except (OSError, ValueError, TmdbError):
+        return []
+
+
+def fetch_languages(token: str) -> list[tuple[str, str]]:
+    payload = request_json("/configuration/languages", token=token, expect_list=True)
+    languages = _parse_languages(payload)
+    destination = cache_dir() / "languages.json"
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        temporary = destination.with_suffix(".tmp")
+        temporary.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        temporary.replace(destination)
+    except OSError:
+        pass  # A read-only cache must not prevent choosing a language.
+    return languages
 
 
 def fetch_explore_page(

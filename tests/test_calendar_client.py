@@ -13,6 +13,54 @@ from urllib.parse import parse_qs, urlsplit
 from gisheh.services import simkl_client
 from gisheh.window import CALENDAR_TIMELINE_PAGE_SIZE, GishehWindow
 
+
+class CalendarHeaderSimplificationTests(unittest.TestCase):
+    """The calendar header keeps only month navigation and refresh."""
+
+    @staticmethod
+    def _source() -> str:
+        from pathlib import Path
+
+        import gisheh.window as window_module
+
+        return Path(window_module.__file__).read_text(encoding="utf-8")
+
+    def test_scope_switcher_and_filters_are_removed(self) -> None:
+        source = self._source()
+        for removed in (
+            "calendar_scope_switcher",
+            "calendar_media_dropdown",
+            "calendar_filter_button",
+            "calendar_watched_check",
+            "calendar_dropped_check",
+            "calendar_scope",
+            "calendar_media_filter",
+            "calendar_include_watched",
+            "calendar_include_dropped",
+            "_on_calendar_scope_changed",
+            "_on_calendar_media_changed",
+            "_on_calendar_filter_changed",
+            'label=_("My Calendar")',
+            "Browse / Simkl",
+            "Show watched",
+            "Show dropped",
+        ):
+            self.assertNotIn(removed, source)
+
+    def test_month_navigation_and_refresh_remain(self) -> None:
+        source = self._source()
+        for kept in (
+            "calendar_previous_button",
+            "calendar_today_button",
+            "calendar_next_button",
+            "calendar_refresh_button",
+            "_on_calendar_previous",
+            "_on_calendar_today",
+            "_on_calendar_next",
+            "_start_calendar_refresh",
+        ):
+            self.assertIn(kept, source)
+
 TV_PAYLOAD = {
     "calendar": [
         {
@@ -208,10 +256,6 @@ class CalendarIdentityAndFilterTests(unittest.TestCase):
             TV_PAYLOAD, "shows", display_timezone=timezone.utc
         )
         controller.calendar_month = date(2026, 7, 1)
-        controller.calendar_scope = "my"
-        controller.calendar_media_filter = "all"
-        controller.calendar_include_watched = False
-        controller.calendar_include_dropped = False
         return controller, library, explore
 
     def test_simkl_identity_wins_and_my_calendar_includes_watching(self) -> None:
@@ -236,16 +280,14 @@ class CalendarIdentityAndFilterTests(unittest.TestCase):
         event = replace(source, title=replace(source.title, tmdb_id=None))
         self.assertIs(controller._calendar_record(event), library)
 
-    def test_watched_and_dropped_are_hidden_until_enabled(self) -> None:
+    def test_watched_and_dropped_are_always_hidden(self) -> None:
         controller, library, _explore = self.controller()
         controller.status_overrides[library.id] = "Watched"
         self.assertEqual(controller._calendar_events(), ())
-        controller.calendar_include_watched = True
-        self.assertEqual(len(controller._calendar_events()), 1)
         controller.status_overrides[library.id] = "Dropped"
         self.assertEqual(controller._calendar_events(), ())
-        controller.calendar_include_dropped = True
-        self.assertEqual(len(controller._calendar_events()), 1)
+        self.assertFalse(hasattr(controller, "calendar_include_watched"))
+        self.assertFalse(hasattr(controller, "calendar_include_dropped"))
 
     def test_title_outside_library_is_hidden_from_my_calendar(self) -> None:
         controller, _library, explore = self.controller()
@@ -356,7 +398,7 @@ class CalendarIdentityAndFilterTests(unittest.TestCase):
         controller.simkl_settings = {}
         controller.calendar_refresh_button = mock.Mock()
 
-        with mock.patch("gisheh.window.threading.Thread") as thread:
+        with mock.patch.object(GishehWindow, "_start_worker") as thread:
             result = controller._start_calendar_refresh(False, supersede=True)
 
         self.assertFalse(result)
@@ -367,7 +409,7 @@ class CalendarIdentityAndFilterTests(unittest.TestCase):
             "process-working-symbolic"
         )
         thread.assert_called_once()
-        thread.return_value.start.assert_called_once_with()
+        self.assertEqual(thread.call_args.args[0], "simkl-calendar")
 
 
 class CalendarCacheTests(unittest.TestCase):

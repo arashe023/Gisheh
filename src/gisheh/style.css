@@ -45,10 +45,6 @@
   color: @accent_color;
 }
 
-.detail-title-link {
-  color: @accent_color;
-}
-
 .success {
   color: @success_color;
 }
@@ -248,6 +244,15 @@ button.header-data-status:active {
 .content-skeleton-media,
 .content-skeleton-surface,
 .content-skeleton-line,
+.content-skeleton-line:dir(rtl) {
+  margin-left: 22px;
+  margin-right: 2px;
+}
+
+.content-skeleton-line.short:dir(rtl) {
+  margin-left: 54px;
+}
+
 .content-skeleton-cast-line {
   border-radius: 8px;
   background-image: linear-gradient(115deg,
@@ -279,6 +284,15 @@ button.header-data-status:active {
 .content-skeleton-line.short {
   margin-right: 54px;
   background-color: alpha(@window_fg_color, 0.07);
+}
+
+.content-skeleton-line:dir(rtl) {
+  margin-left: 22px;
+  margin-right: 2px;
+}
+
+.content-skeleton-line.short:dir(rtl) {
+  margin-left: 54px;
 }
 
 .content-skeleton-cast-line {
@@ -386,12 +400,6 @@ button.episode-watch-button {
   box-shadow: none;
 }
 
-button.detail-title-link {
-  min-height: 0;
-  padding: 0;
-  font-weight: inherit;
-}
-
 button.episode-watch-button:hover {
   background-color: transparent;
   box-shadow: none;
@@ -460,12 +468,6 @@ progressbar progress {
   min-height: 8px;
 }
 
-.profile-card,
-.profile-metric-card {
-  border-radius: 16px;
-  background-color: @card_bg_color;
-  box-shadow: 0 1px 3px alpha(@shade_color, 0.24);
-}
 
 .watched-dialog-card {
   padding: 14px;
@@ -508,42 +510,12 @@ progressbar progress {
   background-color: alpha(@window_fg_color, 0.08);
 }
 
-.profile-card {
-  min-width: 300px;
-  padding: 18px;
-}
 
-.profile-metric-card {
-  min-width: 170px;
-  padding: 16px;
-}
 
-.profile-review-shell {
-  padding: 20px;
-}
 
-.profile-review-summary {
-  padding: 18px;
-  border-radius: 13px;
-  background-color: alpha(@accent_bg_color, 0.14);
-  box-shadow: inset 0 0 0 1px alpha(@accent_bg_color, 0.22);
-}
 
-.review-watch-time {
-  font-size: 28px;
-  font-weight: 800;
-  color: @accent_color;
-}
 
-.review-month-bar {
-  min-width: 12px;
-  border-radius: 7px 7px 3px 3px;
-  background-color: alpha(@accent_bg_color, 0.34);
-}
 
-.review-month-bar.current {
-  background-color: @accent_bg_color;
-}
 
 .simkl-pin-code {
   padding: 14px 22px;
@@ -555,33 +527,16 @@ progressbar progress {
   letter-spacing: 5px;
 }
 
-.profile-rating-bar {
-  min-width: 12px;
-  border-radius: 7px 7px 3px 3px;
-  background-color: @accent_bg_color;
-}
 
-.profile-poster-card {
-  min-width: 104px;
-  padding: 4px;
-  border-radius: 14px;
-}
 
-.profile-poster-card:hover {
-  background-color: alpha(@window_fg_color, 0.08);
-}
 
-.profile-card progressbar trough {
-  min-height: 7px;
-  border-radius: 999px;
-}
 
-.profile-card progressbar progress {
-  min-height: 7px;
-  border-radius: 999px;
-}
 
 .main-content-pane flowboxchild {
   padding: 0;
   background-color: transparent;
+}
+
+.profile-summary {
+  padding: 20px;
 }

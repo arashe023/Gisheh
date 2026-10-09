@@ -155,37 +155,16 @@ class LocalFirstLibraryTests(unittest.TestCase):
         self.assertEqual(arguments[:3], [gisheh.sys.executable, "-m", "gisheh.main"])
         self.assertIn("PYTHONPATH", environment)
 
-    def test_temporary_language_is_applied_only_to_restarted_process(self) -> None:
-        environment = {"LANGUAGE": "de", "PYTHONPATH": "existing"}
+    def test_restart_preserves_system_locale(self) -> None:
         with (
-            patch.dict(gisheh.os.environ, environment, clear=True),
+            patch.dict(gisheh.os.environ, {"LANGUAGE": "de"}, clear=True),
             patch.object(simkl_client, "close_image_http_client"),
             patch.object(gisheh.os, "execvpe") as exec_process,
         ):
-            gisheh.GishehWindow._restart_application(language="fa")
-
-        restarted_environment = exec_process.call_args.args[2]
-        self.assertEqual(restarted_environment["GISHEH_LANGUAGE"], "fa")
-        self.assertEqual(restarted_environment["LANGUAGE"], "fa")
-        self.assertEqual(restarted_environment["GISHEH_ORIGINAL_LANGUAGE"], "de")
-
-    def test_system_language_restores_environment_after_temporary_override(self) -> None:
-        environment = {
-            "LANGUAGE": "fa",
-            "GISHEH_LANGUAGE": "fa",
-            "GISHEH_ORIGINAL_LANGUAGE": "de",
-        }
-        with (
-            patch.dict(gisheh.os.environ, environment, clear=True),
-            patch.object(simkl_client, "close_image_http_client"),
-            patch.object(gisheh.os, "execvpe") as exec_process,
-        ):
-            gisheh.GishehWindow._restart_application(language="system")
-
-        restarted_environment = exec_process.call_args.args[2]
-        self.assertEqual(restarted_environment["LANGUAGE"], "de")
-        self.assertNotIn("GISHEH_LANGUAGE", restarted_environment)
-        self.assertNotIn("GISHEH_ORIGINAL_LANGUAGE", restarted_environment)
+            gisheh.GishehWindow._restart_application()
+        environment = exec_process.call_args.args[2]
+        self.assertEqual(environment["LANGUAGE"], "de")
+        self.assertNotIn("GISHEH_LANGUAGE", environment)
 
     @staticmethod
     def _controller() -> tuple[gisheh.GishehWindow, gisheh.TitleRecord]:
@@ -327,7 +306,7 @@ class LocalFirstLibraryTests(unittest.TestCase):
         controller.simkl_client_id = "client"
         controller.simkl_token = "token"
 
-        with patch.object(gisheh.threading, "Thread") as worker:
+        with patch.object(gisheh.GishehWindow, "_start_worker") as worker:
             controller._start_simkl_sync()
 
         worker.assert_not_called()

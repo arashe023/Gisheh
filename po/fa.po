@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: gisheh\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-16 23:14+0330\n"
+"POT-Creation-Date: 2026-10-09 01:58+0330\n"
 "PO-Revision-Date: 2026-09-17 14:50+0330\n"
 "Last-Translator: arashe22 <arashe22@proton.me>\n"
 "Language-Team: Persian\n"
@@ -31,7 +31,7 @@ msgstr "گیشه"
 msgid "Browse and track movies, shows and anime"
 msgstr "مرور و پیگیری فیلم‌ها، سریال‌ها و انیمه‌ها"
 
-#: data/io.github.arashe023.Gisheh.desktop.in:10
+#: data/io.github.arashe023.Gisheh.desktop.in:9
 msgid "Movies;Shows;Anime;Watchlist;"
 msgstr "فیلم‌ها;سریال‌ها;انیمه;فهرست تماشا"
 
@@ -39,7 +39,17 @@ msgstr "فیلم‌ها;سریال‌ها;انیمه;فهرست تماشا"
 msgid ""
 "Gisheh is a native GNOME application for exploring and tracking movies, "
 "television shows and anime with TMDB metadata and Simkl watch history."
-msgstr "گیشه برنامه‌ای بومی برای گنوم است که برای کاوش و پیگیری فیلم‌ها، مجموعه‌های تلویزیونی و انیمه‌ها با فرادادهٔ TMDB و تاریخچهٔ تماشای Simkl ساخته شده است."
+msgstr ""
+"گیشه برنامه‌ای بومی برای گنوم است که برای کاوش و پیگیری فیلم‌ها، مجموعه‌های "
+"تلویزیونی و انیمه‌ها با فرادادهٔ TMDB و تاریخچهٔ تماشای Simkl ساخته شده است."
+
+#: data/io.github.arashe023.Gisheh.metainfo.xml.in:29
+msgid "arashe023"
+msgstr "arashe023"
+
+#: data/io.github.arashe023.Gisheh.metainfo.xml.in:33
+msgid "Manage a private local library"
+msgstr "مدیریت کتابخانهٔ محلی خصوصی"
 
 #: data/io.github.arashe023.Gisheh.gschema.xml:7
 msgid "Window width"
@@ -57,64 +67,72 @@ msgstr "این که پنجره بیشینه باشد"
 msgid "Library presentation mode"
 msgstr "حالت نمایش کتابخانه"
 
-#: src/gisheh/application.py:29
+#: src/gisheh/application.py:30
 msgid ""
 "This product uses the TMDB API but is not endorsed or certified by TMDB."
-msgstr "این محصول از APIِ TMDB استفاده می‌کند، ولی مورد تأیید یا گواهی TMDB نیست."
+msgstr ""
+"این محصول از APIِ TMDB استفاده می‌کند، ولی مورد تأیید یا گواهی TMDB نیست."
 
-#: src/gisheh/application.py:95
+#: src/gisheh/application.py:74
+#, python-brace-format
+msgid "Could not save before quitting: {error}"
+msgstr "ذخیره‌سازی پیش از خروج انجام نشد: {error}"
+
+#: src/gisheh/application.py:121
 msgid "Unable to start Gisheh"
 msgstr "ناتوان در آغاز گیشه"
 
-#: src/gisheh/application.py:122
+#: src/gisheh/application.py:148
 msgid "Could not save your choice"
 msgstr "نتوانست گزینشتان را ذخیره کند"
 
-#: src/gisheh/application.py:125 src/gisheh/application.py:249
-#: src/gisheh/onboarding.py:490 src/gisheh/window.py:4957
-#: src/gisheh/window.py:4968 src/gisheh/window.py:5591
-#: src/gisheh/window.py:13365
+#: src/gisheh/application.py:151 src/gisheh/application.py:275
+#: src/gisheh/onboarding.py:490 src/gisheh/window.py:2866
+#: src/gisheh/window.py:2877 src/gisheh/window.py:3513
+#: src/gisheh/window.py:11351
 msgid "Close"
 msgstr "بستن"
 
-#: src/gisheh/application.py:180
+#: src/gisheh/application.py:206
 msgid "A native GTK4 and Libadwaita media tracker."
 msgstr "پی‌گیر رسانهٔ بومی با GTK4 و Libadwaita."
 
-#: src/gisheh/application.py:184
+#: src/gisheh/application.py:210
 msgid "Data providers"
 msgstr "فراهم‌کنندگان داده"
 
-#: src/gisheh/application.py:188 src/gisheh/application.py:219
+#: src/gisheh/application.py:214 src/gisheh/application.py:245
 msgid "The Movie Database (TMDB)"
 msgstr "پایگاه دادهٔ فیلم (TMDB)"
 
-#: src/gisheh/application.py:193
+#: src/gisheh/application.py:219
 msgid "The Movie Database"
 msgstr "پایگاه دادهٔ فیلم"
 
-#: src/gisheh/application.py:194 src/gisheh/window.py:4585
+#: src/gisheh/application.py:220 src/gisheh/window.py:2348
 msgid "Simkl"
 msgstr "Simkl"
 
-#: src/gisheh/application.py:207 src/gisheh/window.py:3267
+#: src/gisheh/application.py:233 src/gisheh/window.py:1277
 msgid "Credits & Data Sources"
 msgstr "دست‌اندرکاران و منابع داده"
 
-#: src/gisheh/application.py:208
+#: src/gisheh/application.py:234
 msgid "Gisheh uses the following independent data services."
 msgstr "گیشه از خدمات مستقل دادهٔ زیر استفاده می‌کند."
 
-#: src/gisheh/application.py:229
+#: src/gisheh/application.py:255
 msgid "Visit The Movie Database"
 msgstr "بازدید از پایگاه دادهٔ فیلم"
 
-#: src/gisheh/application.py:239
+#: src/gisheh/application.py:265
 #, python-brace-format
 msgid ""
 "Watch history, ratings and account synchronization are provided by <a "
 "href=\"{simkl_url}\">Simkl</a>."
-msgstr "تاریخچهٔ تماشا، امتیازها و همگام‌سازی حساب را <a href=\"{simkl_url}\">Simkl</a> فراهم می‌کند."
+msgstr ""
+"تاریخچهٔ تماشا، امتیازها و همگام‌سازی حساب را <a href=\"{simkl_url}\">Simkl</"
+"a> فراهم می‌کند."
 
 #: src/gisheh/onboarding.py:43 src/gisheh/onboarding.py:82
 msgid "Welcome to Gisheh"
@@ -137,7 +155,14 @@ msgid ""
 "Simkl. Local-first never requires an account, Simkl connects through a "
 "browser PIN instead of your password, and TMDB supplies catalog details and "
 "artwork. You can change this later."
-msgstr "فیلم‌ها، سریال‌ها و انیمه‌ها را در کتابخانه‌ای ساده و بومی برای میزکار گنوم نگه دارید. با فرادادهٔ TMDB مرور کنید، عنوان‌ها، فصل‌ها و قسمت‌ها را پی بگیرید و از رنگ تأکیدی گنومتان استفاده کنید. کتابخانه‌تان برای خودتان می‌ماند: گیشه می‌تواند کاملاً روی همین افزاره کار کند یا فعالیت تماشایتان را از طریق Simkl همگام نگه دارد. حالت محلی‌محور هرگز به حساب نیاز ندارد، Simkl به‌جای گذرواژه‌تان با یک پین در مرورگر وصل می‌شود و TMDB جزئیات فهرست و نگاره‌ها را فراهم می‌کند. بعداً هم می‌توانید این را تغییر دهید."
+msgstr ""
+"فیلم‌ها، سریال‌ها و انیمه‌ها را در کتابخانه‌ای ساده و بومی برای میزکار گنوم نگه "
+"دارید. با فرادادهٔ TMDB مرور کنید، عنوان‌ها، فصل‌ها و قسمت‌ها را پی بگیرید و از "
+"رنگ تأکیدی گنومتان استفاده کنید. کتابخانه‌تان برای خودتان می‌ماند: گیشه "
+"می‌تواند کاملاً روی همین افزاره کار کند یا فعالیت تماشایتان را از طریق Simkl "
+"همگام نگه دارد. حالت محلی‌محور هرگز به حساب نیاز ندارد، Simkl به‌جای "
+"گذرواژه‌تان با یک پین در مرورگر وصل می‌شود و TMDB جزئیات فهرست و نگاره‌ها را "
+"فراهم می‌کند. بعداً هم می‌توانید این را تغییر دهید."
 
 #: src/gisheh/onboarding.py:101
 msgid "Back"
@@ -155,7 +180,9 @@ msgstr "گیشه کتابخانهٔ شما را چگونه مدیریت کند؟
 msgid ""
 "Before you start, choose where Gisheh should save your watch history, lists "
 "and ratings."
-msgstr "پیش از آغاز، برگزینید گیشه تاریخچهٔ تماشا، فهرست‌ها و امتیازهایتان را کجا ذخیره کند."
+msgstr ""
+"پیش از آغاز، برگزینید گیشه تاریخچهٔ تماشا، فهرست‌ها و امتیازهایتان را کجا "
+"ذخیره کند."
 
 #: src/gisheh/onboarding.py:233
 msgid "Local-first"
@@ -172,11 +199,14 @@ msgstr "همگام‌سازی با Simkl"
 #: src/gisheh/onboarding.py:244
 msgid ""
 "Use a PIN to connect, then synchronize lists, ratings and watch history."
-msgstr "برای اتصال از یک پین استفاده کنید و سپس فهرست‌ها، امتیازها و تاریخچهٔ تماشا را همگام کنید."
+msgstr ""
+"برای اتصال از یک پین استفاده کنید و سپس فهرست‌ها، امتیازها و تاریخچهٔ تماشا را "
+"همگام کنید."
 
 #: src/gisheh/onboarding.py:257
 msgid "Simkl sync is unavailable in this build; Local-first will be used."
-msgstr "همگام‌سازی Simkl در این ساخت موجود نیست؛ از حالت محلی‌محور استفاده خواهد شد."
+msgstr ""
+"همگام‌سازی Simkl در این ساخت موجود نیست؛ از حالت محلی‌محور استفاده خواهد شد."
 
 #: src/gisheh/onboarding.py:291
 msgid "Waiting for Simkl…"
@@ -202,19 +232,22 @@ msgstr "ورود به Simkl"
 msgid ""
 "The Simkl page has been opened in your browser. Sign in and enter this code; "
 "Gisheh will continue automatically."
-msgstr "صفحهٔ Simkl در مرورگرتان گشوده شده است. وارد شوید و این رمز را وارد کنید؛ گیشه خودکار ادامه خواهد داد."
+msgstr ""
+"صفحهٔ Simkl در مرورگرتان گشوده شده است. وارد شوید و این رمز را وارد کنید؛ "
+"گیشه خودکار ادامه خواهد داد."
 
-#: src/gisheh/onboarding.py:385 src/gisheh/window.py:5649
+#: src/gisheh/onboarding.py:385 src/gisheh/window.py:3566
 msgid "Waiting for approval…"
 msgstr "در انتظار تأیید…"
 
-#: src/gisheh/onboarding.py:388 src/gisheh/window.py:4275
-#: src/gisheh/window.py:4782 src/gisheh/window.py:4864
-#: src/gisheh/window.py:4900 src/gisheh/window.py:4934
-#: src/gisheh/window.py:5652 src/gisheh/window.py:6274
-#: src/gisheh/window.py:9060 src/gisheh/window.py:9112
-#: src/gisheh/window.py:9913 src/gisheh/window.py:11857
-#: src/gisheh/window.py:12967
+#: src/gisheh/onboarding.py:388 src/gisheh/window.py:2018
+#: src/gisheh/window.py:2589 src/gisheh/window.py:2772
+#: src/gisheh/window.py:2809 src/gisheh/window.py:2843
+#: src/gisheh/window.py:3569 src/gisheh/window.py:4142
+#: src/gisheh/window.py:6958 src/gisheh/window.py:7010
+#: src/gisheh/window.py:7802 src/gisheh/window.py:9814
+#: src/gisheh/window.py:10943 src/gisheh/recovery.py:47
+#: src/gisheh/data_actions.py:122
 msgid "Cancel"
 msgstr "لغو"
 
@@ -226,1313 +259,1378 @@ msgstr "پین Simkl منقضی شد. رمزی جدید درخواست کنید.
 msgid "Could not sign in to Simkl"
 msgstr "نتوانست به Simkl وارد شود"
 
-#: src/gisheh/window.py:77
-msgid "Movies"
-msgstr "فیلم‌ها"
-
-#: src/gisheh/window.py:77
-msgid "Shows"
-msgstr "سریال‌ها"
-
-#: src/gisheh/window.py:77
-msgid "Anime"
-msgstr "انیمه"
-
-#: src/gisheh/window.py:79
-msgid "Watching"
-msgstr "در حال تماشا"
-
-#: src/gisheh/window.py:80 src/gisheh/window.py:6498 src/gisheh/window.py:10771
-#: src/gisheh/ui/window.ui:267 src/gisheh/ui/window.ui:420
-#: src/gisheh/ui/window.ui:488
-msgid "Watched"
-msgstr "تماشاشده"
-
-#: src/gisheh/window.py:81
-msgid "On Hold"
-msgstr "متوقف‌شده"
-
-#: src/gisheh/window.py:82
-msgid "Dropped"
-msgstr "رهاشده"
-
-#: src/gisheh/window.py:83
-msgid "Watchlist"
-msgstr "فهرست تماشا"
-
-#: src/gisheh/window.py:87
-msgid "Last watched"
-msgstr "آخرین تماشا"
-
-#: src/gisheh/window.py:88
-msgid "Title"
-msgstr "عنوان"
-
-#: src/gisheh/window.py:89
-msgid "Highest rated"
-msgstr "بالاترین امتیاز"
-
-#: src/gisheh/window.py:90
-msgid "Release year"
-msgstr "سال انتشار"
-
-#: src/gisheh/window.py:93
-msgid "Trending"
-msgstr "پرطرفدار"
-
-#: src/gisheh/window.py:94
-msgid "Popular"
-msgstr "محبوب"
-
-#: src/gisheh/window.py:95
-msgid "Top rated"
-msgstr "برترین امتیازها"
-
-#: src/gisheh/window.py:96
-msgid "Coming soon"
-msgstr "به‌زودی"
-
-#: src/gisheh/window.py:98
-msgid "This month"
-msgstr "این ماه"
-
-#: src/gisheh/window.py:98
-msgid "This year"
-msgstr "امسال"
-
-#: src/gisheh/window.py:98
-msgid "All releases"
-msgstr "همهٔ انتشارها"
-
-#: src/gisheh/window.py:108
-msgid "Follow system"
-msgstr "پیروی از سامانه"
-
-#: src/gisheh/window.py:108
-msgid "Light"
-msgstr "روشن"
-
-#: src/gisheh/window.py:108
-msgid "Dark"
-msgstr "تیره"
-
-#: src/gisheh/window.py:132
-msgid "Adventure"
-msgstr "ماجراجویی"
-
-#: src/gisheh/window.py:133
-msgid "Fantasy"
-msgstr "فانتزی"
-
-#: src/gisheh/window.py:134
-msgid "Animation"
-msgstr "پویانمایی"
-
-#: src/gisheh/window.py:135
-msgid "Drama"
-msgstr "درام"
-
-#: src/gisheh/window.py:136
-msgid "Horror"
-msgstr "ترسناک"
-
-#: src/gisheh/window.py:137
-msgid "Action"
-msgstr "اکشن"
-
-#: src/gisheh/window.py:138
-msgid "Comedy"
-msgstr "کمدی"
-
-#: src/gisheh/window.py:139
-msgid "History"
-msgstr "تاریخی"
-
-#: src/gisheh/window.py:140
-msgid "Western"
-msgstr "وسترن"
-
-#: src/gisheh/window.py:141
-msgid "Thriller"
-msgstr "هیجان‌انگیز"
-
-#: src/gisheh/window.py:142
-msgid "Crime"
-msgstr "جنایی"
-
-#: src/gisheh/window.py:143
-msgid "Documentary"
-msgstr "مستند"
-
-#: src/gisheh/window.py:144
-msgid "Science Fiction"
-msgstr "علمی‌تخیلی"
-
-#: src/gisheh/window.py:145
-msgid "Mystery"
-msgstr "معمایی"
-
-#: src/gisheh/window.py:146
-msgid "Music"
-msgstr "موسیقی"
-
-#: src/gisheh/window.py:147
-msgid "Romance"
-msgstr "عاشقانه"
-
-#: src/gisheh/window.py:148
-msgid "Family"
-msgstr "خانوادگی"
-
-#: src/gisheh/window.py:149
-msgid "War"
-msgstr "جنگی"
-
-#: src/gisheh/window.py:150
-msgid "Action & Adventure"
-msgstr "اکشن و ماجراجویی"
-
-#: src/gisheh/window.py:151
-msgid "Kids"
-msgstr "کودکان"
-
-#: src/gisheh/window.py:152
-msgid "News"
-msgstr "اخبار"
-
-#: src/gisheh/window.py:153
-msgid "Reality"
-msgstr "واقع‌نما"
-
-#: src/gisheh/window.py:154
-msgid "Sci-Fi & Fantasy"
-msgstr "علمی‌تخیلی و فانتزی"
-
-#: src/gisheh/window.py:155
-msgid "Soap"
-msgstr "سریال آبکی"
-
-#: src/gisheh/window.py:156
-msgid "Talk"
-msgstr "گفت‌وگو"
-
-#: src/gisheh/window.py:157
-msgid "War & Politics"
-msgstr "جنگ و سیاست"
-
-#: src/gisheh/window.py:1554
-msgid "Loading from TMDB…"
-msgstr "در حال بار کردن از TMDB…"
-
-#: src/gisheh/window.py:1569
-msgid "Catalog metadata is loading from TMDB."
-msgstr "فرادادهٔ فهرست از TMDB در حال بار شدن است."
-
-#: src/gisheh/window.py:1590
-msgid "Progress"
-msgstr "پیشرفت"
-
-#: src/gisheh/window.py:1983
-#, python-brace-format
-msgid "Loading artwork for {title}"
-msgstr "در حال بار کردن نگاره برای {title}"
-
-#: src/gisheh/window.py:2049
-msgid "Back to Gisheh"
-msgstr "بازگشت به گیشه"
-
-#: src/gisheh/window.py:2054
-msgid "Media Viewer"
-msgstr "نمایشگر رسانه"
-
-#: src/gisheh/window.py:2060
-msgid "Copy image"
-msgstr "رونوشت نگاره"
-
-#: src/gisheh/window.py:2067
-msgid "Toggle fullscreen"
-msgstr "تغییر وضعیت تمام‌صفحه"
-
-#: src/gisheh/window.py:2098
-msgid "Previous image (Left)"
-msgstr "نگارهٔ پیشین (چپ)"
-
-#: src/gisheh/window.py:2107
-msgid "Next image (Right)"
-msgstr "نگارهٔ بعدی (راست)"
-
-#: src/gisheh/window.py:2120
-msgid "Zoom out (Ctrl+-)"
-msgstr "کوچک‌نمایی (Ctrl+-)"
-
-#: src/gisheh/window.py:2124 src/gisheh/window.py:2235
-msgid "Fit"
-msgstr "جا دادن"
-
-#: src/gisheh/window.py:2130
-msgid "Zoom in (Ctrl++)"
-msgstr "بزرگ‌نمایی (Ctrl++)"
-
-#: src/gisheh/window.py:2770
+#: src/gisheh/window.py:770
 msgid "Close details (Escape)"
 msgstr "بستن جزئیات (Escape)"
 
-#: src/gisheh/window.py:2801
+#: src/gisheh/window.py:801
 msgid "Back to content"
 msgstr "بازگشت به محتوا"
 
-#: src/gisheh/window.py:2808
+#: src/gisheh/window.py:808
 msgid "Details"
 msgstr "جزئیات"
 
-#: src/gisheh/window.py:3204 src/gisheh/window.py:11231
+#: src/gisheh/window.py:853
+msgid "Poster"
+msgstr "پوستر"
+
+#: src/gisheh/window.py:856
+msgid "Backdrop"
+msgstr "پس‌زمینه"
+
+#: src/gisheh/window.py:876 src/gisheh/window.py:8859
+#, python-brace-format
+msgid "No {mode} available for {title}"
+msgstr "هیچ {mode} برای {title} موجود نیست."
+
+#: src/gisheh/window.py:878 src/gisheh/window.py:8861
+msgid "posters"
+msgstr "پوسترها"
+
+#: src/gisheh/window.py:880 src/gisheh/window.py:8863
+msgid "backdrops"
+msgstr "پس‌زمینه‌ها"
+
+#: src/gisheh/window.py:891
+msgid "Watch progress"
+msgstr "پیشرفت تماشا"
+
+#: src/gisheh/window.py:1214 src/gisheh/window.py:9180
 msgid "Hide Sidebar (Ctrl+B)"
 msgstr "نهفتن نوار کناری (Ctrl+B)"
 
-#: src/gisheh/window.py:3227
+#: src/gisheh/window.py:1237
 msgid "List View"
 msgstr "نمای فهرستی"
 
-#: src/gisheh/window.py:3234
+#: src/gisheh/window.py:1244
 msgid "Grid View"
 msgstr "نمای شبکه‌ای"
 
-#: src/gisheh/window.py:3243 src/gisheh/window.py:9898
+#: src/gisheh/window.py:1253 src/gisheh/window.py:7787
 #, python-brace-format
 msgid "{score} out of 10"
 msgstr "{score} از ۱۰"
 
-#: src/gisheh/window.py:3265 src/gisheh/window.py:4465
+#: src/gisheh/window.py:1275 src/gisheh/window.py:2193
 msgid "Preferences"
 msgstr "ترجیحات"
 
-#: src/gisheh/window.py:3266 src/gisheh/window.py:4651
-#: src/gisheh/window.py:13333
+#: src/gisheh/window.py:1276 src/gisheh/window.py:2414
+#: src/gisheh/window.py:11319
 msgid "Application Log"
 msgstr "گزارش برنامه"
 
-#: src/gisheh/window.py:3268
+#: src/gisheh/window.py:1278
 msgid "About Gisheh"
 msgstr "دربارهٔ گیشه"
 
-#: src/gisheh/window.py:3269
+#: src/gisheh/window.py:1279
 msgid "Quit"
 msgstr "خروج"
 
-#: src/gisheh/window.py:3275 src/gisheh/ui/window.ui:754
+#: src/gisheh/window.py:1285 src/gisheh/window.py:2463
+#: src/gisheh/ui/window.ui:738
 msgid "Explore"
 msgstr "کاوش"
 
-#: src/gisheh/window.py:3280 src/gisheh/window.py:3460
+#: src/gisheh/window.py:1290 src/gisheh/window.py:1466
+#: src/gisheh/window.py:2464
 msgid "Calendar"
 msgstr "تقویم"
 
-#: src/gisheh/window.py:3322 src/gisheh/window.py:9398
+#: src/gisheh/window.py:1332 src/gisheh/window.py:7296
 msgid "No titles found"
 msgstr "هیچ عنوانی پیدا نشد"
 
-#: src/gisheh/window.py:3323 src/gisheh/window.py:9400
+#: src/gisheh/window.py:1333 src/gisheh/window.py:7298
 msgid "Try a different search term or clear the genre filter."
 msgstr "عبارت جست‌وجوی دیگری را بیازمایید یا پالایهٔ ژانر را پاک کنید."
 
-#: src/gisheh/window.py:3326
+#: src/gisheh/window.py:1336
 msgid "Clear filters"
 msgstr "پاک کردن پالایه‌ها"
 
-#: src/gisheh/window.py:3332
+#: src/gisheh/window.py:1342
 msgid "Explore Titles"
 msgstr "کاوش عنوان‌ها"
 
-#: src/gisheh/window.py:3341 src/gisheh/window.py:9480
+#: src/gisheh/window.py:1351 src/gisheh/window.py:7376
 msgid "Nothing new here yet"
 msgstr "هنوز چیز تازه‌ای این‌جا نیست"
 
-#: src/gisheh/window.py:3342 src/gisheh/window.py:9482
+#: src/gisheh/window.py:1352 src/gisheh/window.py:7378
 msgid "Try another search, period, or genre."
 msgstr "جست‌وجو، بازه یا ژانر دیگری را بیازمایید."
 
-#: src/gisheh/window.py:3345
+#: src/gisheh/window.py:1355
 msgid "Reset Explore filters"
 msgstr "بازنشانی پالایه‌های کاوش"
 
-#: src/gisheh/window.py:3379
+#: src/gisheh/window.py:1389
 msgid "Loading more from TMDB…"
 msgstr "در حال بار کردن موارد بیش‌تر از TMDB…"
 
-#: src/gisheh/window.py:3398
+#: src/gisheh/window.py:1408
 msgid "Loading recommendations from TMDB"
 msgstr "در حال بار کردن پیشنهادها از TMDB"
 
-#: src/gisheh/window.py:3401
+#: src/gisheh/window.py:1411
 msgid "Loading recommendations"
 msgstr "در حال بار کردن پیشنهادها"
 
-#: src/gisheh/window.py:3404
+#: src/gisheh/window.py:1414
 msgid "Finding films and series you might enjoy…"
 msgstr "در حال یافتن فیلم‌ها و سریال‌هایی که شاید بپسندید…"
 
-#: src/gisheh/window.py:3456
-msgid "Browse / Simkl"
-msgstr "مرور / Simkl"
-
-#: src/gisheh/window.py:3467
-msgid "My Calendar"
-msgstr "تقویم من"
-
-#: src/gisheh/window.py:3475
-msgid "Filter releases by media type"
-msgstr "پالایش انتشارها بر پایهٔ گونهٔ رسانه"
-
-#: src/gisheh/window.py:3481
-msgid "Calendar status filters"
-msgstr "پالایه‌های وضعیت تقویم"
-
-#: src/gisheh/window.py:3489
-msgid "Show watched"
-msgstr "نمایش دیده‌شده‌ها"
-
-#: src/gisheh/window.py:3490
-msgid "Show dropped"
-msgstr "نمایش رهاشده‌ها"
-
-#: src/gisheh/window.py:3501
+#: src/gisheh/window.py:1476
 msgid "Previous month"
 msgstr "ماه پیش"
 
-#: src/gisheh/window.py:3504
+#: src/gisheh/window.py:1479
 msgid "Today"
 msgstr "امروز"
 
-#: src/gisheh/window.py:3504
+#: src/gisheh/window.py:1479
 msgid "Go to today"
 msgstr "رفتن به امروز"
 
-#: src/gisheh/window.py:3507
+#: src/gisheh/window.py:1482
 msgid "Next month"
 msgstr "ماه بعد"
 
-#: src/gisheh/window.py:3510
+#: src/gisheh/window.py:1485
 msgid "Refresh Calendar"
 msgstr "تازه‌سازی تقویم"
 
-#: src/gisheh/window.py:3663
+#: src/gisheh/window.py:1612
 msgid "Calendar refresh failed; showing cached schedule"
 msgstr "تازه‌سازی تقویم شکست خورد؛ زمان‌بندی انباره‌شده نمایش داده می‌شود"
 
-#: src/gisheh/window.py:4156
-msgid "Add to Watchlist"
-msgstr "افزودن به فهرست تماشا"
-
-#: src/gisheh/window.py:4252
+#: src/gisheh/window.py:2006
 msgid "Could not open this Simkl page"
 msgstr "نتوانست این صفحهٔ Simkl را بگشاید"
 
-#: src/gisheh/window.py:4276
+#: src/gisheh/window.py:2019
 msgid "Open in Browser"
 msgstr "گشودن در مرورگر"
 
-#: src/gisheh/window.py:4292
+#: src/gisheh/window.py:2035
 msgid "Could not open the link in your browser"
 msgstr "نتوانست پیوند را در مرورگرتان بگشاید"
 
-#: src/gisheh/window.py:4303
-msgid "No external page is available for this title"
-msgstr "هیچ صفحهٔ بیرونی برای این عنوان موجود نیست"
-
-#: src/gisheh/window.py:4307
-msgid "Open an external link?"
-msgstr "پیوند بیرونی گشوده شود؟"
-
-#: src/gisheh/window.py:4309
-#, python-brace-format
-msgid ""
-"Gisheh will open the TMDB page for “{title}” in your default web browser."
-msgstr "گیشه صفحهٔ TMDB برای «{title}» را در مرورگر وب پیش‌گزیده‌تان می‌گشاید."
-
-#: src/gisheh/window.py:4319
+#: src/gisheh/window.py:2044
 msgid "Connect Simkl to add this title"
 msgstr "برای افزودن این عنوان Simkl را وصل کنید"
 
-#: src/gisheh/window.py:4368
+#: src/gisheh/window.py:2093
 msgid "Local-first mode is active"
 msgstr "حالت محلی‌محور فعال است"
 
-#: src/gisheh/window.py:4370
+#: src/gisheh/window.py:2095
 msgid ""
 "Calendar downloads use Simkl. Your local library remains fully available "
 "without connecting an account."
-msgstr "بارگیری‌های تقویم از Simkl استفاده می‌کنند. کتابخانهٔ محلی‌تان بدون اتصال حساب نیز کاملاً در دسترس می‌ماند."
+msgstr ""
+"بارگیری‌های تقویم از Simkl استفاده می‌کنند. کتابخانهٔ محلی‌تان بدون اتصال حساب "
+"نیز کاملاً در دسترس می‌ماند."
 
-#: src/gisheh/window.py:4382
+#: src/gisheh/window.py:2107
 msgid "Simkl integration is unavailable"
 msgstr "یکپارچه‌سازی Simkl موجود نیست"
 
-#: src/gisheh/window.py:4384
+#: src/gisheh/window.py:2109
 msgid "This build does not include Gisheh's public Simkl application ID."
 msgstr "این ساخت شناسهٔ برنامهٔ عمومی Simkl گیشه را ندارد."
 
-#: src/gisheh/window.py:4396
+#: src/gisheh/window.py:2121
 msgid "Calendar is unavailable"
 msgstr "تقویم موجود نیست"
 
-#: src/gisheh/window.py:4399
+#: src/gisheh/window.py:2124
+msgid "No cached schedule is available. Check your connection and try again."
+msgstr ""
+"برنامهٔ ذخیره‌شده‌ای موجود نیست. اتصال خود را بررسی کنید و دوباره تلاش کنید."
+
+#: src/gisheh/window.py:2127 src/gisheh/recovery.py:36
 msgid "Retry"
 msgstr "تلاش دوباره"
 
-#: src/gisheh/window.py:4408
+#: src/gisheh/window.py:2136
 msgid "Schedule not published"
 msgstr "زمان‌بندی منتشر نشده"
 
-#: src/gisheh/window.py:4409
+#: src/gisheh/window.py:2137
 msgid "Simkl has not published this month yet."
 msgstr "Simkl هنوز برنامهٔ این ماه را منتشر نکرده است."
 
-#: src/gisheh/window.py:4419
+#: src/gisheh/window.py:2147
 msgid "Nothing scheduled in My Calendar"
 msgstr "چیزی در تقویم من زمان‌بندی نشده"
 
-#: src/gisheh/window.py:4426
+#: src/gisheh/window.py:2154
 msgid "Open Explore"
 msgstr "گشودن کاوش"
 
-#: src/gisheh/window.py:4469
+#: src/gisheh/window.py:2197
 msgid "General"
 msgstr "عمومی"
 
-#: src/gisheh/window.py:4473
+#: src/gisheh/window.py:2201
 msgid "Services"
 msgstr "خدمات"
 
-#: src/gisheh/window.py:4478
+#: src/gisheh/window.py:2206
 msgid "Data ownership"
 msgstr "مالکیت داده"
 
-#: src/gisheh/window.py:4479
+#: src/gisheh/window.py:2207
 msgid "Choose where Gisheh keeps your personal library state."
 msgstr "برگزینید گیشه وضعیت کتابخانهٔ شخصی‌تان را کجا نگه دارد."
 
-#: src/gisheh/window.py:4481
+#: src/gisheh/window.py:2209
 msgid "Library mode"
 msgstr "حالت کتابخانه"
 
-#: src/gisheh/window.py:4482
+#: src/gisheh/window.py:2210
 msgid "Change…"
 msgstr "تغییر…"
 
-#: src/gisheh/window.py:4492
+#: src/gisheh/window.py:2223
 msgid "Appearance"
 msgstr "ظاهر"
 
-#: src/gisheh/window.py:4493
+#: src/gisheh/window.py:2224
 msgid "Choose how Gisheh looks on this device."
 msgstr "چگونگی ظاهر گیشه روی این افزاره را برگزینید."
 
-#: src/gisheh/window.py:4496
+#: src/gisheh/window.py:2227
 msgid "Color scheme"
 msgstr "طرح رنگ"
 
-#: src/gisheh/window.py:4497
+#: src/gisheh/window.py:2228
 msgid "Use the system style or override it for Gisheh."
 msgstr "از سبک سامانه استفاده کنید یا برای گیشه آن را نادیده بگیرید."
 
-#: src/gisheh/window.py:4511
+#: src/gisheh/window.py:2242
 msgid "Application language"
 msgstr "زبان برنامه"
 
-#: src/gisheh/window.py:4513
+#: src/gisheh/window.py:2244
 msgid ""
 "Temporarily change the language and restart Gisheh. This choice is not saved."
 msgstr ""
 "زبان را موقتاً تغییر دهید و گیشه را دوباره راه‌اندازی کنید. این انتخاب ذخیره "
 "نمی‌شود."
 
-#: src/gisheh/window.py:4518
+#: src/gisheh/window.py:2249 src/gisheh/window.py:2276
 msgid "System Language"
 msgstr "زبان سیستم"
 
-#: src/gisheh/window.py:4531
+#: src/gisheh/window.py:2262
+msgid "Experimental"
+msgstr "آزمایشی"
+
+#: src/gisheh/window.py:2264
+msgid ""
+"Try upcoming features. Content language applies instantly without restarting "
+"Gisheh."
+msgstr "قابلیت‌های آزمایشی را امتحان کنید. زبان محتوا بلافاصله و بدون راه‌اندازی دوبارهٔ گیشه اعمال می‌شود."
+
+#: src/gisheh/window.py:2269
+msgid "Content language"
+msgstr "زبان محتوا"
+
+#: src/gisheh/window.py:2271
+msgid ""
+"Choose the TMDB content language. System follows the operating system "
+"language with English fallback."
+msgstr "زبان محتوای TMDB را انتخاب کنید. گزینهٔ سیستم از زبان سیستم‌عامل پیروی می‌کند و در نبود ترجمه، انگلیسی نمایش می‌دهد."
+
+#: src/gisheh/window.py:2292
 msgid "Library"
 msgstr "کتابخانه"
 
-#: src/gisheh/window.py:4532
+#: src/gisheh/window.py:2293
 msgid "Set the view Gisheh uses when it starts."
 msgstr "نمایی را تعیین کنید که گیشه هنگام آغاز استفاده می‌کند."
 
-#: src/gisheh/window.py:4535
+#: src/gisheh/window.py:2296
 msgid "Default media type"
 msgstr "گونهٔ رسانهٔ پیش‌گزیده"
 
-#: src/gisheh/window.py:4536
+#: src/gisheh/window.py:2297
 msgid "Open this catalog first on the next launch."
 msgstr "در اجرای بعدی نخست این فهرست را بگشایید."
 
-#: src/gisheh/window.py:4546
+#: src/gisheh/window.py:2309
 msgid "Library layout"
 msgstr "چیدمان کتابخانه"
 
-#: src/gisheh/window.py:4547
+#: src/gisheh/window.py:2310
 msgid "Choose between the compact list and poster grid."
 msgstr "بین سیاههٔ فشرده و شبکهٔ پوسترها برگزینید."
 
-#: src/gisheh/window.py:4560
+#: src/gisheh/window.py:2323
 msgid "Accounts &amp; Sync"
 msgstr "حساب‌ها و همگام‌سازی"
 
-#: src/gisheh/window.py:4561
+#: src/gisheh/window.py:2324
 msgid "Gisheh uses Simkl for your library and TMDB for metadata."
 msgstr "گیشه برای کتابخانه‌تان از Simkl و برای فراداده از TMDB استفاده می‌کند."
 
-#: src/gisheh/window.py:4564
+#: src/gisheh/window.py:2327
 msgid "Sync Simkl on startup"
 msgstr "همگام‌سازی Simkl هنگام آغاز"
 
-#: src/gisheh/window.py:4565
+#: src/gisheh/window.py:2328
 msgid "Refresh cloud library state whenever Gisheh starts."
 msgstr "هر بار که گیشه آغاز می‌شود وضعیت کتابخانهٔ ابری را تازه کنید."
 
-#: src/gisheh/window.py:4574
+#: src/gisheh/window.py:2337
 msgid "Refresh Calendar automatically"
 msgstr "تازه‌سازی خودکار تقویم"
 
-#: src/gisheh/window.py:4575
+#: src/gisheh/window.py:2338
 msgid "Use a fresh local schedule cache and update it when needed."
 msgstr "از انبارهٔ تازهٔ زمان‌بندی محلی استفاده کنید و هنگام نیاز به‌روزش کنید."
 
-#: src/gisheh/window.py:4593
+#: src/gisheh/window.py:2356
 msgid "Disconnect Simkl"
 msgstr "قطع اتصال Simkl"
 
-#: src/gisheh/window.py:4603
+#: src/gisheh/window.py:2366
 msgid "TMDB"
 msgstr "TMDB"
 
-#: src/gisheh/window.py:4611
+#: src/gisheh/window.py:2374
 msgid "Remove TMDB token"
 msgstr "برداشتن ژتون TMDB"
 
-#: src/gisheh/window.py:4623
+#: src/gisheh/window.py:2386
 msgid "Data &amp; Diagnostics"
 msgstr "داده‌ها و عیب‌یابی"
 
-#: src/gisheh/window.py:4625
+#: src/gisheh/window.py:2388
 msgid "Manage reproducible downloads and troubleshooting information."
 msgstr "بارگیری‌های بازتولیدپذیر و اطلاعات رفع اشکال را مدیریت کنید."
 
-#: src/gisheh/window.py:4629
+#: src/gisheh/window.py:2392
 msgid "Downloaded TMDB data"
 msgstr "داده‌های بارگرفتهٔ TMDB"
 
-#: src/gisheh/window.py:4630
+#: src/gisheh/window.py:2393
 msgid "Posters, backdrops, cast photos and metadata cache."
 msgstr "پوسترها، پس‌زمینه‌ها، عکس‌های بازیگران و انبارهٔ فراداده."
 
-#: src/gisheh/window.py:4632 src/gisheh/window.py:4643
-#: src/gisheh/window.py:4865 src/gisheh/window.py:4901
+#: src/gisheh/window.py:2395 src/gisheh/window.py:2406
+#: src/gisheh/window.py:2773 src/gisheh/window.py:2810
 msgid "Clear Cache"
 msgstr "پاک کردن انباره"
 
-#: src/gisheh/window.py:4640
+#: src/gisheh/window.py:2403
 msgid "Calendar cache"
 msgstr "انبارهٔ تقویم"
 
-#: src/gisheh/window.py:4652
+#: src/gisheh/window.py:2415
 msgid "Review sync, loading and recoverable error messages."
 msgstr "پیام‌های همگام‌سازی، بار شدن و خطاهای قابل‌بازیابی را بررسی کنید."
 
-#: src/gisheh/window.py:4654
+#: src/gisheh/window.py:2417
 msgid "Open Log"
 msgstr "گشودن گزارش"
 
-#: src/gisheh/window.py:4663
+#: src/gisheh/window.py:2426
 msgid "Reset"
 msgstr "بازنشانی"
 
-#: src/gisheh/window.py:4664
+#: src/gisheh/window.py:2427
 msgid "Erase local Gisheh data and return to first-run setup."
 msgstr "داده‌های محلی گیشه را پاک کرده و به راه‌اندازی نخستین اجرا بازگردید."
 
-#: src/gisheh/window.py:4667
+#: src/gisheh/window.py:2430
 msgid "Reset Gisheh"
 msgstr "بازنشانی گیشه"
 
-#: src/gisheh/window.py:4668
+#: src/gisheh/window.py:2431
 msgid "Delete your library, preferences, accounts, caches and logs."
 msgstr "کتابخانه، ترجیحات، حساب‌ها، انباره‌ها و گزارش‌هایتان را حذف کنید."
 
-#: src/gisheh/window.py:4670
+#: src/gisheh/window.py:2433
 msgid "Reset…"
 msgstr "بازنشانی…"
 
-#: src/gisheh/window.py:4773
+#: src/gisheh/window.py:2580
 msgid "Choose how your library is managed"
 msgstr "چگونگی مدیریت کتابخانه‌تان را برگزینید"
 
-#: src/gisheh/window.py:4776
+#: src/gisheh/window.py:2583
 msgid ""
 "Local-first keeps lists, ratings and watch history on this device. Simkl "
 "sync uses your Simkl account as the shared library source. Changing mode "
 "does not delete the saved local copy."
-msgstr "حالت محلی‌محور فهرست‌ها، امتیازها و تاریخچهٔ تماشا را روی این افزاره نگه می‌دارد. همگام‌سازی Simkl از حساب Simkl شما به‌عنوان منبع مشترک کتابخانه استفاده می‌کند. تغییر حالت، رونوشت محلی ذخیره‌شده را حذف نمی‌کند."
+msgstr ""
+"حالت محلی‌محور فهرست‌ها، امتیازها و تاریخچهٔ تماشا را روی این افزاره نگه "
+"می‌دارد. همگام‌سازی Simkl از حساب Simkl شما به‌عنوان منبع مشترک کتابخانه "
+"استفاده می‌کند. تغییر حالت، رونوشت محلی ذخیره‌شده را حذف نمی‌کند."
 
-#: src/gisheh/window.py:4783
+#: src/gisheh/window.py:2590
 msgid "Use Local-first"
 msgstr "استفاده از حالت محلی‌محور"
 
-#: src/gisheh/window.py:4785
+#: src/gisheh/window.py:2592
 msgid "Use Simkl"
 msgstr "استفاده از Simkl"
 
-#: src/gisheh/window.py:4820
+#: src/gisheh/window.py:2631
 #, python-brace-format
 msgid "Could not restart Gisheh with the selected language: {error}"
 msgstr "راه‌اندازی دوبارهٔ گیشه با زبان انتخاب‌شده ممکن نبود: {error}"
 
-#: src/gisheh/window.py:4856
+#: src/gisheh/window.py:2665
+msgid "Could not save the content language"
+msgstr "زبان محتوا ذخیره نشد"
+
+#: src/gisheh/window.py:2668
+msgid "Content language updated"
+msgstr "زبان محتوا به‌روز شد"
+
+#: src/gisheh/window.py:2764
 msgid "Clear Calendar cache?"
 msgstr "انبارهٔ تقویم پاک شود؟"
 
-#: src/gisheh/window.py:4859
+#: src/gisheh/window.py:2767
 msgid ""
 "Downloaded Simkl schedules will be removed. Gisheh can download them again "
 "when Calendar is opened."
-msgstr "زمان‌بندی‌های بارگرفتهٔ Simkl برداشته خواهند شد. گیشه می‌تواند با گشودن تقویم دوباره آن‌ها را بار بگیرد."
+msgstr ""
+"زمان‌بندی‌های بارگرفتهٔ Simkl برداشته خواهند شد. گیشه می‌تواند با گشودن تقویم "
+"دوباره آن‌ها را بار بگیرد."
 
-#: src/gisheh/window.py:4882
+#: src/gisheh/window.py:2791
 msgid "Could not clear the Calendar cache"
 msgstr "نتوانست انبارهٔ تقویم را پاک کند"
 
-#: src/gisheh/window.py:4888
+#: src/gisheh/window.py:2797
 msgid "Calendar cache cleared"
 msgstr "انبارهٔ تقویم پاک شد"
 
-#: src/gisheh/window.py:4892
+#: src/gisheh/window.py:2801
 msgid "Clear downloaded TMDB data?"
 msgstr "داده‌های بارگرفتهٔ TMDB پاک شوند؟"
 
-#: src/gisheh/window.py:4895
+#: src/gisheh/window.py:2804
 msgid ""
 "Downloaded posters, backdrops, cast photos and metadata will be removed. "
 "Gisheh can download them again when needed."
-msgstr "پوسترها، پس‌زمینه‌ها، عکس‌های بازیگران و فراداده‌های بارگرفته برداشته خواهند شد. گیشه می‌تواند هنگام نیاز دوباره آن‌ها را بار بگیرد."
+msgstr ""
+"پوسترها، پس‌زمینه‌ها، عکس‌های بازیگران و فراداده‌های بارگرفته برداشته خواهند شد. "
+"گیشه می‌تواند هنگام نیاز دوباره آن‌ها را بار بگیرد."
 
-#: src/gisheh/window.py:4914
+#: src/gisheh/window.py:2823
 msgid "Could not clear the TMDB cache"
 msgstr "نتوانست انبارهٔ TMDB را پاک کند"
 
-#: src/gisheh/window.py:4920
+#: src/gisheh/window.py:2829
 msgid "TMDB cache cleared"
 msgstr "انبارهٔ TMDB پاک شد"
 
-#: src/gisheh/window.py:4924
+#: src/gisheh/window.py:2833
 msgid "Reset Gisheh completely?"
 msgstr "گیشه کاملاً بازنشانی شود؟"
 
-#: src/gisheh/window.py:4927
+#: src/gisheh/window.py:2836
 msgid ""
 "Your local library, watch history, ratings, preferences, connected accounts, "
 "downloaded artwork, metadata, Calendar cache and application logs will be "
 "permanently deleted. Gisheh will restart at the Welcome screen."
-msgstr "کتابخانهٔ محلی، تاریخچهٔ تماشا، امتیازها، ترجیحات، حساب‌های متصل، نگاره‌های بارگرفته، فراداده، انبارهٔ تقویم و گزارش‌های برنامه‌تان برای همیشه حذف خواهند شد. گیشه از صفحهٔ خوش‌آمد دوباره آغاز می‌شود."
+msgstr ""
+"کتابخانهٔ محلی، تاریخچهٔ تماشا، امتیازها، ترجیحات، حساب‌های متصل، نگاره‌های "
+"بارگرفته، فراداده، انبارهٔ تقویم و گزارش‌های برنامه‌تان برای همیشه حذف خواهند "
+"شد. گیشه از صفحهٔ خوش‌آمد دوباره آغاز می‌شود."
 
-#: src/gisheh/window.py:4935
+#: src/gisheh/window.py:2844
 msgid "Delete Everything & Restart"
 msgstr "حذف همه‌چیز و آغاز دوباره"
 
-#: src/gisheh/window.py:4954
+#: src/gisheh/window.py:2863
 msgid "Gisheh could not be fully reset"
 msgstr "گیشه نتوانست کاملاً بازنشانی شود"
 
-#: src/gisheh/window.py:4965
+#: src/gisheh/window.py:2874
 msgid "Gisheh was reset but could not restart"
 msgstr "گیشه بازنشانی شد ولی نتوانست دوباره آغاز شود"
 
-#: src/gisheh/window.py:5241
+#: src/gisheh/window.py:3055 src/gisheh/window.py:4083
+#: src/gisheh/ui/window.ui:191 src/gisheh/localization.py:82
+msgid "Synced"
+msgstr "همگام شد"
+
+#: src/gisheh/window.py:3150
 msgid "Watch time"
 msgstr "زمان تماشا"
 
-#: src/gisheh/window.py:5279
+#: src/gisheh/window.py:3188
 msgid "Activity through the year"
 msgstr "فعالیت در طول سال"
 
-#: src/gisheh/window.py:5318
+#: src/gisheh/window.py:3227
 msgid "Review"
 msgstr "مرور"
 
-#: src/gisheh/window.py:5318
+#: src/gisheh/window.py:3227
 msgid "Your activity over time"
 msgstr "فعالیتتان در گذر زمان"
 
-#: src/gisheh/window.py:5321
+#: src/gisheh/window.py:3230
 msgid "Month"
 msgstr "ماه"
 
-#: src/gisheh/window.py:5322
+#: src/gisheh/window.py:3231
 msgid "Year"
 msgstr "سال"
 
-#: src/gisheh/window.py:5362
+#: src/gisheh/window.py:3271
 msgid "Watching habits"
 msgstr "عادت‌های تماشا"
 
-#: src/gisheh/window.py:5362
+#: src/gisheh/window.py:3271
 msgid "All-time library totals"
 msgstr "مجموع همیشگی کتابخانه"
 
-#: src/gisheh/window.py:5386
+#: src/gisheh/window.py:3274
+msgid "All time"
+msgstr "کل زمان"
+
+#: src/gisheh/window.py:3275
+msgid "Movie time"
+msgstr "زمان فیلم"
+
+#: src/gisheh/window.py:3277
+msgid "TV & anime time"
+msgstr "زمان سریال و انیمه"
+
+#: src/gisheh/window.py:3280 src/gisheh/constants.py:16
+msgid "Movies"
+msgstr "فیلم‌ها"
+
+#: src/gisheh/window.py:3281 src/gisheh/window.py:4310
+msgid "Episodes"
+msgstr "قسمت‌ها"
+
+#: src/gisheh/window.py:3298
 msgid "Ratings"
 msgstr "امتیازها"
 
-#: src/gisheh/window.py:5417
+#: src/gisheh/window.py:3299
+#, python-brace-format
+msgid "{count} ratings across your library"
+msgstr "{count} امتیاز در کتابخانهٔ شما"
+
+#: src/gisheh/window.py:3319
+#, python-brace-format
+msgid "{score}/10: {count} ratings"
+msgstr "{score}/10: {count} امتیاز"
+
+#: src/gisheh/window.py:3335
 msgid "Favorite genres"
 msgstr "ژانرهای محبوب"
 
-#: src/gisheh/window.py:5417
+#: src/gisheh/window.py:3335
 msgid "Based on watched titles"
 msgstr "بر پایهٔ عنوان‌های دیده‌شده"
 
-#: src/gisheh/window.py:5453
+#: src/gisheh/window.py:3371
 msgid "Total watch time"
 msgstr "کل زمان تماشا"
 
-#: src/gisheh/window.py:5458
+#: src/gisheh/window.py:3376
 msgid "Completed titles"
 msgstr "عنوان‌های کامل‌شده"
 
-#: src/gisheh/window.py:5463
+#: src/gisheh/window.py:3381
 msgid "Episodes watched"
 msgstr "قسمت‌های دیده‌شده"
 
-#: src/gisheh/window.py:5468
+#: src/gisheh/window.py:3386
 msgid "Ratings given"
 msgstr "امتیازهای داده‌شده"
 
-#: src/gisheh/window.py:5558
+#: src/gisheh/window.py:3480
 msgid "Local-first mode enabled"
 msgstr "حالت محلی‌محور فعال شد"
 
-#: src/gisheh/window.py:5582
+#: src/gisheh/window.py:3504
 msgid "Simkl is unavailable in this build"
 msgstr "Simkl در این ساخت موجود نیست"
 
-#: src/gisheh/window.py:5585
+#: src/gisheh/window.py:3507
 msgid ""
 "The distributor must register Gisheh with Simkl and include the public "
 "Client ID when building the application. You never need to create a "
 "developer app or enter a Client Secret."
-msgstr "توزیع‌کننده باید گیشه را در Simkl ثبت کند و هنگام ساخت برنامه شناسهٔ کارخواه عمومی را بگنجاند. شما هرگز نیازی به ساخت برنامهٔ توسعه‌دهنده یا وارد کردن راز کارخواه ندارید."
+msgstr ""
+"توزیع‌کننده باید گیشه را در Simkl ثبت کند و هنگام ساخت برنامه شناسهٔ کارخواه "
+"عمومی را بگنجاند. شما هرگز نیازی به ساخت برنامهٔ توسعه‌دهنده یا وارد کردن راز "
+"کارخواه ندارید."
 
-#: src/gisheh/window.py:5632
+#: src/gisheh/window.py:3549
 msgid "Enter this code on Simkl"
 msgstr "این رمز را در Simkl وارد کنید"
 
-#: src/gisheh/window.py:5635
+#: src/gisheh/window.py:3552
 msgid ""
 "The browser has been opened. Sign in to Simkl and enter the code below. "
 "Gisheh will finish automatically after approval."
-msgstr "مرورگر گشوده شده است. به Simkl وارد شوید و رمز زیر را وارد کنید. گیشه پس از تأیید به‌طور خودکار کار را تمام می‌کند."
+msgstr ""
+"مرورگر گشوده شده است. به Simkl وارد شوید و رمز زیر را وارد کنید. گیشه پس از "
+"تأیید به‌طور خودکار کار را تمام می‌کند."
 
-#: src/gisheh/window.py:5745
+#: src/gisheh/window.py:3657
 msgid "Simkl connected — syncing your library…"
 msgstr "Simkl وصل شد — در حال همگام‌سازی کتابخانه‌تان…"
 
-#: src/gisheh/window.py:6097
+#: src/gisheh/window.py:3964
 msgid "Simkl state synced — connect TMDB to load titles and artwork"
-msgstr "وضعیت Simkl همگام شد — برای بار کردن عنوان‌ها و نگاره‌ها TMDB را وصل کنید"
+msgstr ""
+"وضعیت Simkl همگام شد — برای بار کردن عنوان‌ها و نگاره‌ها TMDB را وصل کنید"
 
-#: src/gisheh/window.py:6204
+#: src/gisheh/window.py:4071
 msgid "Local"
 msgstr "محلی"
 
-#: src/gisheh/window.py:6205
+#: src/gisheh/window.py:4072
 msgid "Local-first · Personal library data stays on this device"
 msgstr "محلی‌محور · داده‌های کتابخانهٔ شخصی روی همین افزاره می‌ماند"
 
-#: src/gisheh/window.py:6207
+#: src/gisheh/window.py:4074
 msgid "Syncing…"
 msgstr "در حال همگام‌سازی…"
 
-#: src/gisheh/window.py:6208
+#: src/gisheh/window.py:4075
 msgid "Refreshing your Simkl library"
 msgstr "در حال تازه‌سازی کتابخانهٔ Simkl شما"
 
-#: src/gisheh/window.py:6211
+#: src/gisheh/window.py:4078
 msgid "Sync failed"
 msgstr "همگام‌سازی شکست خورد"
 
-#: src/gisheh/window.py:6212
+#: src/gisheh/window.py:4079
 msgid "Sync failed. Click to try again."
 msgstr "همگام‌سازی شکست خورد. برای تلاش دوباره کلیک کنید."
 
-#: src/gisheh/window.py:6216 src/gisheh/ui/window.ui:191
-msgid "Synced"
-msgstr "همگام شد"
-
-#: src/gisheh/window.py:6217
+#: src/gisheh/window.py:4084
 msgid "Synced with Simkl. Click to refresh now."
 msgstr "با Simkl همگام شد. برای تازه‌سازی اکنون کلیک کنید."
 
-#: src/gisheh/window.py:6220
+#: src/gisheh/window.py:4087
 msgid "Not synced"
 msgstr "همگام نشده"
 
-#: src/gisheh/window.py:6221
+#: src/gisheh/window.py:4088
 msgid "Simkl is not connected. Click to connect."
 msgstr "Simkl وصل نیست. برای اتصال کلیک کنید."
 
-#: src/gisheh/window.py:6266
+#: src/gisheh/window.py:4134
 msgid "Disconnect Simkl?"
 msgstr "اتصال Simkl قطع شود؟"
 
-#: src/gisheh/window.py:6269
+#: src/gisheh/window.py:4137
 msgid ""
 "The local access token will be removed. Your Simkl account and cloud library "
 "will not be changed."
-msgstr "ژتون دسترسی محلی برداشته خواهد شد. حساب Simkl و کتابخانهٔ ابری‌تان تغییر نمی‌کنند."
+msgstr ""
+"ژتون دسترسی محلی برداشته خواهد شد. حساب Simkl و کتابخانهٔ ابری‌تان تغییر "
+"نمی‌کنند."
 
-#: src/gisheh/window.py:6275
+#: src/gisheh/window.py:4143
 msgid "Disconnect"
 msgstr "قطع اتصال"
 
-#: src/gisheh/window.py:6348
+#: src/gisheh/window.py:4218
 msgid "Simkl disconnected"
 msgstr "اتصال Simkl قطع شد"
 
-#: src/gisheh/window.py:6356 src/gisheh/window.py:6576
+#: src/gisheh/window.py:4226 src/gisheh/window.py:4449
 msgid "Cast & Crew"
 msgstr "بازیگران و عوامل"
 
-#: src/gisheh/window.py:6371
+#: src/gisheh/window.py:4241
 msgid "Episodes & Seasons"
 msgstr "قسمت‌ها و فصل‌ها"
 
-#: src/gisheh/window.py:6377
+#: src/gisheh/window.py:4247
 msgid "Videos"
 msgstr "ویدیوها"
 
-#: src/gisheh/window.py:6383
+#: src/gisheh/window.py:4253
 msgid "Backdrops"
 msgstr "پس‌زمینه‌ها"
 
-#: src/gisheh/window.py:6384
+#: src/gisheh/window.py:4254
 msgid "Posters"
 msgstr "پوسترها"
 
-#: src/gisheh/window.py:6388
+#: src/gisheh/window.py:4258
 msgid "Images"
 msgstr "نگاره‌ها"
 
-#: src/gisheh/window.py:6402
+#: src/gisheh/window.py:4272
 msgid "More like this"
 msgstr "موارد مشابه"
 
-#: src/gisheh/window.py:6418
+#: src/gisheh/window.py:4288
 msgid "Season"
 msgstr "فصل"
 
-#: src/gisheh/window.py:6440
-msgid "Episodes"
-msgstr "قسمت‌ها"
-
-#: src/gisheh/window.py:6486
+#: src/gisheh/window.py:4356
 msgid "Episode"
 msgstr "قسمت"
 
-#: src/gisheh/window.py:6553 src/gisheh/ui/window.ui:592
-#: src/gisheh/ui/window.ui:601
+#: src/gisheh/window.py:4368 src/gisheh/window.py:8684
+#: src/gisheh/window.py:8694 src/gisheh/ui/window.ui:257
+#: src/gisheh/ui/window.ui:410 src/gisheh/ui/window.ui:480
+#: src/gisheh/constants.py:20 src/gisheh/localization.py:86
+#: src/gisheh/localization.py:89
+msgid "Watched"
+msgstr "تماشاشده"
+
+#: src/gisheh/window.py:4423 src/gisheh/ui/window.ui:584
 msgid "Overview"
 msgstr "نمای کلی"
 
-#: src/gisheh/window.py:6675
+#: src/gisheh/window.py:4548
 #, python-brace-format
 msgid "Previous {title}"
 msgstr "{title} پیشین"
 
-#: src/gisheh/window.py:6683
+#: src/gisheh/window.py:4556
 #, python-brace-format
 msgid "Next {title}"
 msgstr "{title} بعدی"
 
-#: src/gisheh/window.py:6824
-msgid "Open this title on TMDB"
-msgstr "گشودن این عنوان در TMDB"
+#: src/gisheh/window.py:4878 src/gisheh/window.py:4907
+msgid "All genres"
+msgstr "همهٔ ژانرها"
 
-#: src/gisheh/window.py:7360
+#: src/gisheh/window.py:5109
+#, python-brace-format
+msgid "TMDB catalog ready for {completed}/{total} titles"
+msgstr "کاتالوگ TMDB برای {completed}/{total} عنوان آماده شد"
+
+#: src/gisheh/window.py:5260
 msgid "Live TMDB data loaded"
 msgstr "دادهٔ زندهٔ TMDB بار شد"
 
-#: src/gisheh/window.py:7495
+#: src/gisheh/window.py:5390
 msgid "Could not load more titles from TMDB"
 msgstr "نتوانست عنوان‌های بیش‌تری از TMDB بار کند"
 
-#: src/gisheh/window.py:7523
+#: src/gisheh/window.py:5418
 msgid "Connect TMDB to search its catalog"
 msgstr "برای جست‌وجوی فهرست TMDB آن را وصل کنید"
 
-#: src/gisheh/window.py:7742
+#: src/gisheh/window.py:5621
 msgid "Could not search TMDB"
 msgstr "نتوانست TMDB را جست‌وجو کند"
 
-#: src/gisheh/window.py:7814
+#: src/gisheh/window.py:5693
 msgid "TMDB is unavailable — Explore could not be loaded"
 msgstr "TMDB موجود نیست — کاوش نتوانست بار شود"
 
-#: src/gisheh/window.py:8713
+#: src/gisheh/window.py:5776
+msgid "Cast"
+msgstr "بازیگر"
+
+#: src/gisheh/window.py:5857 src/gisheh/window.py:8237
+#, python-brace-format
+msgid "Season {number}"
+msgstr "فصل {number}"
+
+#: src/gisheh/window.py:6351 src/gisheh/window.py:6668 src/gisheh/models.py:343
+msgid "Unknown"
+msgstr "نامشخص"
+
+#: src/gisheh/window.py:6352 src/gisheh/window.py:6669 src/gisheh/models.py:344
+msgid "Guest star"
+msgstr "بازیگر مهمان"
+
+#: src/gisheh/window.py:6611
 msgid "Season details could not be loaded from TMDB"
 msgstr "جزئیات فصل نتوانست از TMDB بار شود"
 
-#: src/gisheh/window.py:8934
+#: src/gisheh/window.py:6688 src/gisheh/window.py:8262
+#: src/gisheh/window.py:8647 src/gisheh/models.py:511
+#, python-brace-format
+msgid "Episode {number}"
+msgstr "قسمت {number}"
+
+#: src/gisheh/window.py:6690 src/gisheh/localization.py:197
+msgid "Air date unavailable"
+msgstr "تاریخ پخش موجود نیست"
+
+#: src/gisheh/window.py:6693 src/gisheh/localization.py:198
+msgid "No episode overview is available."
+msgstr "نمای کلی این قسمت موجود نیست."
+
+#: src/gisheh/window.py:6826
 msgid "Episode details could not be loaded from TMDB"
 msgstr "جزئیات قسمت نتوانست از TMDB بار شود"
 
-#: src/gisheh/window.py:9050
+#: src/gisheh/window.py:6948
 msgid ""
 "Public releases should include Gisheh's approved TMDB credential. For local "
 "development only, you can enter your own API Read Access Token; it will be "
 "stored only for this user."
-msgstr "انتشارهای عمومی باید اعتبارنامهٔ تأییدشدهٔ TMDB گیشه را داشته باشند. فقط برای توسعهٔ محلی می‌توانید ژتون دسترسی خواندن API خودتان را وارد کنید؛ این ژتون فقط برای این کاربر ذخیره می‌شود."
+msgstr ""
+"انتشارهای عمومی باید اعتبارنامهٔ تأییدشدهٔ TMDB گیشه را داشته باشند. فقط برای "
+"توسعهٔ محلی می‌توانید ژتون دسترسی خواندن API خودتان را وارد کنید؛ این ژتون فقط "
+"برای این کاربر ذخیره می‌شود."
 
-#: src/gisheh/window.py:9058
+#: src/gisheh/window.py:6956
 msgid "TMDB API Read Access Token"
 msgstr "ژتون دسترسی خواندن APIِ TMDB"
 
-#: src/gisheh/window.py:9061
+#: src/gisheh/window.py:6959
 msgid "Save and connect"
 msgstr "ذخیره و اتصال"
 
-#: src/gisheh/window.py:9078
+#: src/gisheh/window.py:6976
 msgid "Enter a TMDB Read Access Token"
 msgstr "یک ژتون دسترسی خواندن TMDB وارد کنید"
 
-#: src/gisheh/window.py:9084
+#: src/gisheh/window.py:6982
 msgid "Could not save the TMDB token"
 msgstr "نتوانست ژتون TMDB را ذخیره کند"
 
-#: src/gisheh/window.py:9097
+#: src/gisheh/window.py:6995
 msgid "Connecting to TMDB…"
 msgstr "در حال اتصال به TMDB…"
 
-#: src/gisheh/window.py:9104
+#: src/gisheh/window.py:7002
 msgid "Remove the TMDB connection?"
 msgstr "اتصال TMDB برداشته شود؟"
 
-#: src/gisheh/window.py:9107
+#: src/gisheh/window.py:7005
 msgid ""
 "The locally stored read token will be removed. Downloaded artwork remains "
 "available until you clear the cache."
-msgstr "ژتون خواندن ذخیره‌شدهٔ محلی برداشته خواهد شد. نگاره‌های بارگرفته تا زمانی که انباره را پاک کنید در دسترس می‌مانند."
+msgstr ""
+"ژتون خواندن ذخیره‌شدهٔ محلی برداشته خواهد شد. نگاره‌های بارگرفته تا زمانی که "
+"انباره را پاک کنید در دسترس می‌مانند."
 
-#: src/gisheh/window.py:9113
+#: src/gisheh/window.py:7011
 msgid "Remove Token"
 msgstr "برداشتن ژتون"
 
-#: src/gisheh/window.py:9128
+#: src/gisheh/window.py:7026
 msgid "Could not remove the TMDB token"
 msgstr "نتوانست ژتون TMDB را بردارد"
 
-#: src/gisheh/window.py:9133
+#: src/gisheh/window.py:7031
 msgid "The TMDB token is provided by the environment"
 msgstr "ژتون TMDB را محیط فراهم کرده است"
 
-#: src/gisheh/window.py:9136
+#: src/gisheh/window.py:7034
 msgid "TMDB disconnected"
 msgstr "اتصال TMDB قطع شد"
 
-#: src/gisheh/window.py:9393
+#: src/gisheh/window.py:7291
 #, python-brace-format
 msgid "{count} matching title"
 msgid_plural "{count} matching titles"
 msgstr[0] "{count} عنوان مطابق"
 msgstr[1] "{count} عنوان مطابق"
 
-#: src/gisheh/window.py:9404
+#: src/gisheh/window.py:7302
 #, python-brace-format
 msgid "Showing {count} recent entry"
 msgid_plural "Showing {count} recent entries"
 msgstr[0] "نمایش {count} مورد اخیر"
 msgstr[1] "نمایش {count} مورد اخیر"
 
-#: src/gisheh/window.py:9409
+#: src/gisheh/window.py:7307
 msgid "Start watching a title to see it here."
 msgstr "تماشای عنوانی را آغاز کنید تا این‌جا دیده شود."
 
-#: src/gisheh/window.py:9410
+#: src/gisheh/window.py:7308
 msgid "Titles you finish will appear here."
 msgstr "عنوان‌هایی که تمام می‌کنید این‌جا ظاهر می‌شوند."
 
-#: src/gisheh/window.py:9411
+#: src/gisheh/window.py:7309
 msgid "Titles you pause will appear here."
 msgstr "عنوان‌هایی که متوقف می‌کنید این‌جا ظاهر می‌شوند."
 
-#: src/gisheh/window.py:9412
+#: src/gisheh/window.py:7310
 msgid "Titles you stop watching will appear here."
 msgstr "عنوان‌هایی که دیدنشان را رها می‌کنید این‌جا ظاهر می‌شوند."
 
-#: src/gisheh/window.py:9413
+#: src/gisheh/window.py:7311
 msgid "Bookmark a title to save it for later."
 msgstr "عنوانی را نشانک‌گذاری کنید تا برای بعد ذخیره شود."
 
-#: src/gisheh/window.py:9417
+#: src/gisheh/window.py:7315
 #, python-brace-format
 msgid "No {collection} titles"
 msgstr "عنوانی در {collection} نیست"
 
-#: src/gisheh/window.py:9427
-#, python-brace-format
-msgid "{media} / {collection}"
-msgstr "{media} / {collection}"
-
-#: src/gisheh/window.py:9432 src/gisheh/ui/window.ui:327
+#: src/gisheh/window.py:7325 src/gisheh/ui/window.ui:317
 msgid "All"
 msgstr "همه"
 
-#: src/gisheh/window.py:9435
+#: src/gisheh/window.py:7328
 #, python-brace-format
 msgid "Search {media}…"
 msgstr "جست‌وجوی {media}…"
 
-#: src/gisheh/window.py:9550
+#: src/gisheh/window.py:7361
+msgid "Searching TMDB…"
+msgstr "در حال جست‌وجو در TMDB…"
+
+#: src/gisheh/window.py:7363
+msgid "No TMDB matches"
+msgstr "موردی در TMDB پیدا نشد"
+
+#: src/gisheh/window.py:7366
+#, python-brace-format
+msgid "Searching the complete TMDB catalog for “{query}”."
+msgstr "در حال جست‌وجو در کل کاتالوگ TMDB برای «{query}»."
+
+#: src/gisheh/window.py:7371
+#, python-brace-format
+msgid "No {media} matched “{query}” on TMDB."
+msgstr "هیچ {media} با «{query}» در TMDB مطابقت نداشت."
+
+#: src/gisheh/window.py:7446
 msgid "Data & images provided by TMDB"
 msgstr "داده‌ها و نگاره‌ها را TMDB فراهم کرده است"
 
-#: src/gisheh/window.py:9661 src/gisheh/window.py:10981
+#: src/gisheh/window.py:7557 src/gisheh/window.py:8925
 #, python-brace-format
 msgid "Open {title}"
 msgstr "گشودن {title}"
 
-#: src/gisheh/window.py:9810
-#, python-brace-format
-msgid "More Options for {title}"
-msgstr "گزینه‌های بیش‌تر برای {title}"
+#: src/gisheh/window.py:7707 src/gisheh/window.py:10945
+msgid "Mark as unwatched"
+msgstr "نشانه‌گذاری به‌عنوان دیده‌نشده"
 
-#: src/gisheh/window.py:9889
+#: src/gisheh/window.py:7707
+msgid "Mark as watched"
+msgstr "نشانه‌گذاری به‌عنوان دیده‌شده"
+
+#: src/gisheh/window.py:7712
+msgid "Remove from Watchlist"
+msgstr "حذف از فهرست تماشا"
+
+#: src/gisheh/window.py:7714 src/gisheh/widgets.py:744
+msgid "Add to Watchlist"
+msgstr "افزودن به فهرست تماشا"
+
+#: src/gisheh/window.py:7720
+#, python-brace-format
+msgid "Rate…  ({rating}/10)"
+msgstr "امتیاز… ({rating}/10)"
+
+#: src/gisheh/window.py:7722
+msgid "Rate…"
+msgstr "امتیاز…"
+
+#: src/gisheh/window.py:7777
+#, python-brace-format
+msgid "Rate {title}"
+msgstr "امتیاز به {title}"
+
+#: src/gisheh/window.py:7778
 msgid "Choose a score from 1 to 10, then save your rating."
 msgstr "امتیازی از ۱ تا ۱۰ برگزینید و سپس امتیازتان را ذخیره کنید."
 
-#: src/gisheh/window.py:9914
+#: src/gisheh/window.py:7803
 msgid "Save rating"
 msgstr "ذخیرهٔ امتیاز"
 
-#: src/gisheh/window.py:10097
+#: src/gisheh/window.py:7986
 #, python-brace-format
 msgid "Open Images for {title}"
 msgstr "گشودن نگاره‌های {title}"
 
-#: src/gisheh/window.py:10111
+#: src/gisheh/window.py:8000
 msgid "Watch trailer"
 msgstr "تماشای پیش‌پرده"
 
-#: src/gisheh/window.py:10119
+#: src/gisheh/window.py:8008
 #, python-brace-format
 msgid "Play the Trailer for {title}"
 msgstr "پخش پیش‌پردهٔ {title}"
 
-#: src/gisheh/window.py:10128
+#: src/gisheh/window.py:8017
 msgid "Open the trailer?"
 msgstr "پیش‌پرده گشوده شود؟"
 
-#: src/gisheh/window.py:10241
+#: src/gisheh/window.py:8067
+msgid "Loading ratings…"
+msgstr "در حال بار کردن امتیازها…"
+
+#: src/gisheh/window.py:8069
+msgid "No rating information is available."
+msgstr "اطلاعات امتیازی موجود نیست."
+
+#: src/gisheh/window.py:8087 src/gisheh/ui/window.ui:505
+msgid "Your rating"
+msgstr "امتیاز شما"
+
+#: src/gisheh/window.py:8112
+msgid "Cast information is unavailable."
+msgstr "اطلاعات بازیگران موجود نیست."
+
+#: src/gisheh/window.py:8136
 #, python-brace-format
 msgid "{name}, {role}"
 msgstr "{name}، {role}"
 
-#: src/gisheh/window.py:10259
+#: src/gisheh/window.py:8154
 #, python-brace-format
 msgid "Loading photo for {name}"
 msgstr "در حال بار کردن عکس {name}"
 
-#: src/gisheh/window.py:10300
+#: src/gisheh/window.py:8195
 msgid "Loading cast member"
 msgstr "در حال بار کردن بازیگر"
 
-#: src/gisheh/window.py:10523
+#: src/gisheh/window.py:8220
+msgid "episodes"
+msgstr "قسمت‌ها"
+
+#: src/gisheh/window.py:8226
+msgid "Season 1"
+msgstr "فصل ۱"
+
+#: src/gisheh/window.py:8350
+msgid "Episode data unavailable"
+msgstr "اطلاعات قسمت موجود نیست"
+
+#: src/gisheh/window.py:8353 src/gisheh/window.py:8361
+#: src/gisheh/window.py:8365
+#, python-brace-format
+msgid "{watched} of {total} episodes watched"
+msgstr "{watched} از {total} قسمت تماشا شده"
+
+#: src/gisheh/window.py:8358
+#, python-brace-format
+msgid "All {total} episodes watched"
+msgstr "همهٔ {total} قسمت تماشا شده"
+
+#: src/gisheh/window.py:8426
 #, python-brace-format
 msgid "Episode {number}: {title}"
 msgstr "قسمت {number}: {title}"
 
-#: src/gisheh/window.py:10544
+#: src/gisheh/window.py:8447
 msgid "Mark Episode Unwatched"
 msgstr "نشانه‌گذاری قسمت به‌عنوان دیده‌نشده"
 
-#: src/gisheh/window.py:10544
+#: src/gisheh/window.py:8447
 msgid "Mark Episode Watched"
 msgstr "نشانه‌گذاری قسمت به‌عنوان دیده‌شده"
 
-#: src/gisheh/window.py:10620
+#: src/gisheh/window.py:8492
+msgid "Up to date"
+msgstr "به‌روز"
+
+#: src/gisheh/window.py:8500
+msgid "Not started"
+msgstr "شروع نشده"
+
+#: src/gisheh/window.py:8507
+msgid "Next episode"
+msgstr "قسمت بعدی"
+
+#: src/gisheh/window.py:8510
+msgid "Last episode"
+msgstr "قسمت قبلی"
+
+#: src/gisheh/window.py:8518
+#, python-brace-format
+msgid "{watched}/{total} episodes"
+msgstr "{watched}/{total} قسمت"
+
+#: src/gisheh/window.py:8525
 #, python-brace-format
 msgid "Open {season} of {title}"
 msgstr "گشودن {season} از {title}"
 
-#: src/gisheh/window.py:10704
+#: src/gisheh/window.py:8572
+#, python-brace-format
+msgid "{watched} of {total} episodes watched · {network}"
+msgstr "{watched} از {total} قسمت تماشا شده · {network}"
+
+#: src/gisheh/window.py:8611
 #, python-brace-format
 msgid "Open Episode {number}: {title}"
 msgstr "گشودن قسمت {number}: {title}"
 
-#: src/gisheh/window.py:10710 src/gisheh/window.py:11712
+#: src/gisheh/window.py:8617 src/gisheh/window.py:9668
 msgid "Wait for all episode details to finish loading"
 msgstr "تا پایان بار شدن همهٔ جزئیات قسمت صبر کنید"
 
-#: src/gisheh/window.py:10850
+#: src/gisheh/window.py:8661 src/gisheh/localization.py:190
+#: src/gisheh/models.py:860 src/gisheh/models.py:1004 src/gisheh/models.py:1186
+msgid "Runtime unavailable"
+msgstr "مدت‌زمان موجود نیست"
+
+#: src/gisheh/window.py:8669
+msgid "Guest cast information is unavailable for this episode."
+msgstr "اطلاعات بازیگران مهمان این قسمت موجود نیست."
+
+#: src/gisheh/window.py:8690
+#, python-brace-format
+msgid "Watched · {date}"
+msgstr "تماشاشده · {date}"
+
+#: src/gisheh/window.py:8696
+msgid "Not watched yet"
+msgstr "هنوز تماشا نشده"
+
+#: src/gisheh/window.py:8706
+msgid "season"
+msgstr "فصل"
+
+#: src/gisheh/window.py:8706
+msgid "episode"
+msgstr "قسمت"
+
+#. Translators: e.g. "Mark season unwatched". "{noun}" is the
+#. translated "season"/"episode" word above.
+#: src/gisheh/window.py:8711
+#, python-brace-format
+msgid "Mark {noun} unwatched"
+msgstr "حذف «{noun}» از تماشاشده‌ها"
+
+#: src/gisheh/window.py:8713
+#, python-brace-format
+msgid "Mark {noun} watched"
+msgstr "ثبت «{noun}» به‌عنوان تماشاشده"
+
+#: src/gisheh/window.py:8773
 #, python-brace-format
 msgid "Play {video} for {title}"
 msgstr "پخش {video} برای {title}"
 
-#: src/gisheh/window.py:10859
+#: src/gisheh/window.py:8782
 msgid "Open the video?"
 msgstr "ویدیو گشوده شود؟"
 
-#: src/gisheh/window.py:11233
+#: src/gisheh/window.py:8796
+msgid "Loading video"
+msgstr "در حال بار کردن ویدیو…"
+
+#: src/gisheh/window.py:8811 src/gisheh/window.py:8876
+msgid "Loading image"
+msgstr "در حال بار کردن تصویر…"
+
+#: src/gisheh/window.py:8839
+#, python-brace-format
+msgid "Open {kind} {index} for {title}"
+msgstr "باز کردن {kind} {index} برای {title}"
+
+#: src/gisheh/window.py:8841
+msgid "poster"
+msgstr "پوستر"
+
+#: src/gisheh/window.py:8843
+msgid "backdrop"
+msgstr "پس‌زمینه"
+
+#: src/gisheh/window.py:8973
+msgid "✓  Watched"
+msgstr "✓ تماشاشده"
+
+#: src/gisheh/window.py:8973
+msgid "＋  Mark watched"
+msgstr "＋ ثبت تماشا"
+
+#: src/gisheh/window.py:8981
+msgid "Director"
+msgstr "کارگردان"
+
+#: src/gisheh/window.py:8981
+msgid "Creator"
+msgstr "سازنده"
+
+#: src/gisheh/window.py:8995
+msgid "Not rated"
+msgstr "بدون امتیاز"
+
+#: src/gisheh/window.py:9001 src/gisheh/ui/window.ui:490
+msgid "Rate this title"
+msgstr "امتیازدهی به این عنوان"
+
+#: src/gisheh/window.py:9003
+#, python-brace-format
+msgid "Your rating: {score}/10"
+msgstr "امتیاز شما: {score}/10"
+
+#: src/gisheh/window.py:9182
 msgid "Show Sidebar (Ctrl+B)"
 msgstr "نمایش نوار کناری (Ctrl+B)"
 
-#: src/gisheh/window.py:11784
+#: src/gisheh/window.py:9741
 msgid "When did you watch this?"
 msgstr "چه زمانی این را تماشا کردید؟"
 
-#: src/gisheh/window.py:11791
+#: src/gisheh/window.py:9748
 msgid "Date"
 msgstr "تاریخ"
 
-#: src/gisheh/window.py:11802
+#: src/gisheh/window.py:9759
 msgid "Time"
 msgstr "زمان"
 
-#: src/gisheh/window.py:11820
+#: src/gisheh/window.py:9777
 msgid "Hour"
 msgstr "ساعت"
 
-#: src/gisheh/window.py:11828
+#: src/gisheh/window.py:9785
 msgid "Minute"
 msgstr "دقیقه"
 
-#: src/gisheh/window.py:11834
+#: src/gisheh/window.py:9791
 msgid "AM or PM"
 msgstr "قبل‌ازظهر یا بعدازظهر"
 
-#: src/gisheh/window.py:11842
+#: src/gisheh/window.py:9799
 msgid "Now"
 msgstr "اکنون"
 
-#: src/gisheh/window.py:11843
+#: src/gisheh/window.py:9800
 msgid "Reset to the current date and time"
 msgstr "بازنشانی به تاریخ و زمان کنونی"
 
-#: src/gisheh/window.py:11858
+#: src/gisheh/window.py:9815
 msgid "Mark as Watched"
 msgstr "نشانه‌گذاری به‌عنوان دیده‌شده"
 
-#: src/gisheh/window.py:12028
+#: src/gisheh/window.py:9989
 msgid "Season watched time saved locally (not synced)"
 msgstr "زمان تماشای فصل محلی ذخیره شد (همگام نشده)"
 
-#: src/gisheh/window.py:12030 src/gisheh/window.py:12109
-#: src/gisheh/window.py:12259 src/gisheh/window.py:12352
+#: src/gisheh/window.py:9991 src/gisheh/window.py:10072
+#: src/gisheh/window.py:10227 src/gisheh/window.py:10322
 msgid "Connect Simkl to change episode history"
 msgstr "برای تغییر تاریخچهٔ قسمت‌ها Simkl را وصل کنید"
 
-#: src/gisheh/window.py:12057
+#: src/gisheh/window.py:10018
 msgid "Simkl did not add any episodes to watched history."
 msgstr "Simkl هیچ قسمتی را به تاریخچهٔ تماشا نیفزود."
 
-#: src/gisheh/window.py:12061
+#: src/gisheh/window.py:10022
 msgid "Season marked as watched"
 msgstr "فصل به‌عنوان دیده‌شده نشانه‌گذاری شد"
 
-#: src/gisheh/window.py:12088
+#: src/gisheh/window.py:10050
 msgid "Season Marked as Unwatched"
 msgstr "فصل تماشانشده شد"
 
-#: src/gisheh/window.py:12089 src/gisheh/window.py:12312
-#: src/gisheh/window.py:12935 src/gisheh/window.py:12997
+#: src/gisheh/window.py:10051 src/gisheh/window.py:10281
+#: src/gisheh/window.py:10909 src/gisheh/window.py:10974
 msgid "Undo"
 msgstr "واگرد"
 
-#: src/gisheh/window.py:12160 src/gisheh/window.py:12175
+#: src/gisheh/window.py:10125 src/gisheh/window.py:10140
 msgid "Season Restored"
 msgstr "فصل بازگردانی شد"
 
-#: src/gisheh/window.py:12257
+#: src/gisheh/window.py:10225
 msgid "Episode watched time saved locally (not synced)"
 msgstr "زمان تماشای قسمت محلی ذخیره شد (همگام نشده)"
 
-#: src/gisheh/window.py:12285
+#: src/gisheh/window.py:10253
 msgid "Simkl did not add this episode to watched history."
 msgstr "Simkl این قسمت را به تاریخچهٔ تماشا نیفزود."
 
-#: src/gisheh/window.py:12289
+#: src/gisheh/window.py:10257
 msgid "Episode marked as watched"
 msgstr "قسمت به‌عنوان دیده‌شده نشانه‌گذاری شد"
 
-#: src/gisheh/window.py:12311
+#: src/gisheh/window.py:10280
 msgid "Episode Marked as Unwatched"
 msgstr "قسمت تماشانشده شد"
 
-#: src/gisheh/window.py:12808
+#: src/gisheh/window.py:10783
 msgid "Connect Simkl to change ratings or lists"
 msgstr "برای تغییر امتیازها یا فهرست‌ها Simkl را وصل کنید"
 
-#: src/gisheh/window.py:12888
+#: src/gisheh/window.py:10862
 msgid "Saved to your local watchlist"
 msgstr "در فهرست تماشای محلی ذخیره شد"
 
-#: src/gisheh/window.py:12929
+#: src/gisheh/window.py:10903
 msgid "Added to Simkl watchlist"
 msgstr "به فهرست تماشای Simkl افزوده شد"
 
-#: src/gisheh/window.py:12934
+#: src/gisheh/window.py:10908
 msgid "Removed from Watchlist"
 msgstr "از فهرست تماشا حذف شد"
 
-#: src/gisheh/window.py:12968
+#: src/gisheh/window.py:10944
 msgid "Change watched date"
 msgstr "تغییر تاریخ تماشا"
 
-#: src/gisheh/window.py:12969
-msgid "Mark as unwatched"
-msgstr "نشانه‌گذاری به‌عنوان دیده‌نشده"
-
-#: src/gisheh/window.py:12996
+#: src/gisheh/window.py:10973
 msgid "Marked as Unwatched"
 msgstr "تماشانشده شد"
 
-#: src/gisheh/window.py:13029 src/gisheh/window.py:13070
+#: src/gisheh/window.py:11007 src/gisheh/window.py:11049
 msgid "Connect Simkl to change watch history"
 msgstr "برای تغییر تاریخچهٔ تماشا Simkl را وصل کنید"
 
-#: src/gisheh/window.py:13068
+#: src/gisheh/window.py:11047
 msgid "Watched time saved locally (not synced)"
 msgstr "زمان تماشا محلی ذخیره شد (همگام نشده)"
 
-#: src/gisheh/window.py:13098
+#: src/gisheh/window.py:11077
 msgid ""
 "This title is already marked as watched on Simkl. Use Change watched date or "
 "unmark it first."
-msgstr "این عنوان در Simkl از پیش به‌عنوان دیده‌شده نشانه‌گذاری شده است. نخست «تغییر تاریخ تماشا» را به‌کار ببرید یا نشان آن را بردارید."
+msgstr ""
+"این عنوان در Simkl از پیش به‌عنوان دیده‌شده نشانه‌گذاری شده است. نخست «تغییر "
+"تاریخ تماشا» را به‌کار ببرید یا نشان آن را بردارید."
 
-#: src/gisheh/window.py:13105
+#: src/gisheh/window.py:11084
 msgid "Simkl did not confirm this watched update."
 msgstr "Simkl این به‌روزرسانی تماشا را تأیید نکرد."
 
-#: src/gisheh/window.py:13108
+#: src/gisheh/window.py:11087
 msgid "Marked as watched"
 msgstr "به‌عنوان دیده‌شده نشانه‌گذاری شد"
 
-#: src/gisheh/window.py:13132
+#: src/gisheh/window.py:11112
 msgid "Watch date changed locally"
 msgstr "تاریخ تماشا به‌صورت محلی تغییر کرد"
 
-#: src/gisheh/window.py:13153
+#: src/gisheh/window.py:11133
 msgid "Watched date changed"
 msgstr "تاریخ تماشا تغییر کرد"
 
-#: src/gisheh/window.py:13356
+#: src/gisheh/window.py:11253
+#, python-brace-format
+msgid "Your local rating is now {score}/10"
+msgstr "امتیاز محلی شما اکنون {score}/10 است"
+
+#: src/gisheh/window.py:11268
+#, python-brace-format
+msgid "Your Simkl rating is now {score}/10"
+msgstr "امتیاز Simkl شما اکنون {score}/10 است"
+
+#: src/gisheh/window.py:11342
 msgid "Refresh"
 msgstr "تازه‌سازی"
 
-#: src/gisheh/window.py:13359
+#: src/gisheh/window.py:11345
 msgid "Copy Log"
 msgstr "رونوشت گزارش"
 
-#: src/gisheh/window.py:13375
+#: src/gisheh/window.py:11361
 msgid "Application log copied"
 msgstr "گزارش برنامه رونوشت شد"
 
@@ -1568,122 +1666,1097 @@ msgstr "وضعیت دادهٔ کتابخانه"
 msgid "Media Type"
 msgstr "نوع رسانه"
 
-#: src/gisheh/ui/window.ui:254
-msgid "Movies / Watched"
-msgstr "فیلم‌ها / دیده‌شده"
-
-#: src/gisheh/ui/window.ui:287
+#: src/gisheh/ui/window.ui:277
 msgid "Search movies…"
 msgstr "جست‌وجوی فیلم‌ها…"
 
-#: src/gisheh/ui/window.ui:288
+#: src/gisheh/ui/window.ui:278
 msgid "Search Collection (Ctrl+K)"
 msgstr "جست‌وجوی مجموعه (Ctrl+K)"
 
-#: src/gisheh/ui/window.ui:294
+#: src/gisheh/ui/window.ui:284
 msgid "Sort by"
 msgstr "مرتب‌سازی بر پایه"
 
-#: src/gisheh/ui/window.ui:300
+#: src/gisheh/ui/window.ui:290
 msgid "Filter by genre"
 msgstr "پالایش بر پایهٔ ژانر"
 
-#: src/gisheh/ui/window.ui:306
+#: src/gisheh/ui/window.ui:296
 msgid "View mode"
 msgstr "حالت نما"
 
-#: src/gisheh/ui/window.ui:335
+#: src/gisheh/ui/window.ui:325
 msgid "Showing 6 recent entries"
 msgstr "نمایش ۶ مورد اخیر"
 
-#: src/gisheh/ui/window.ui:347
+#: src/gisheh/ui/window.ui:337
 msgid "Reverse sort direction"
 msgstr "وارونه کردن جهت مرتب‌سازی"
 
-#: src/gisheh/ui/window.ui:387
+#: src/gisheh/ui/window.ui:377
 msgid "Title details"
 msgstr "جزئیات عنوان"
 
-#: src/gisheh/ui/window.ui:435
-msgid "2013 · Iran"
-msgstr "۲۰۱۳ · ایران"
-
-#: src/gisheh/ui/window.ui:449
-msgid "Hush! Girls Don't Scream"
-msgstr "هیس! دخترها فریاد نمی‌زنند"
-
-#: src/gisheh/ui/window.ui:498
-msgid "Rate this title"
-msgstr "امتیازدهی به این عنوان"
-
-#: src/gisheh/ui/window.ui:513
-msgid "Your rating"
-msgstr "امتیاز شما"
-
-#: src/gisheh/ui/window.ui:521
-msgid "Not rated"
-msgstr "بدون امتیاز"
-
-#: src/gisheh/ui/window.ui:545
+#: src/gisheh/ui/window.ui:537
 msgid "Bookmark"
 msgstr "نشانک"
 
-#: src/gisheh/ui/window.ui:557
-msgid "1h 44m"
-msgstr "۱ س ۴۴ د"
-
-#: src/gisheh/ui/window.ui:573
-msgid "Drama · Crime"
-msgstr "درام · جنایی"
-
-#: src/gisheh/ui/window.ui:623
+#: src/gisheh/ui/window.ui:617
 msgid "Director / Creator"
 msgstr "کارگردان / سازنده"
 
-#: src/gisheh/ui/window.ui:628
+#: src/gisheh/ui/window.ui:622
 msgid "Release"
 msgstr "انتشار"
 
-#: src/gisheh/ui/window.ui:633
+#: src/gisheh/ui/window.ui:627
 msgid "Country"
 msgstr "کشور"
 
-#: src/gisheh/ui/window.ui:638
+#: src/gisheh/ui/window.ui:632
 msgid "Activity"
 msgstr "فعالیت"
 
-#: src/gisheh/ui/window.ui:660
+#: src/gisheh/ui/window.ui:654
 msgid "Your activity"
 msgstr "فعالیت شما"
 
-#: src/gisheh/ui/window.ui:670
+#: src/gisheh/ui/window.ui:664
 msgid "Completed"
 msgstr "کامل‌شده"
 
-#: src/gisheh/ui/window.ui:741
-msgid "Discover / Movies"
-msgstr "کشف / فیلم‌ها"
-
-#: src/gisheh/ui/window.ui:773
+#: src/gisheh/ui/window.ui:757
 msgid "Search TMDB…"
 msgstr "جست‌وجوی TMDB…"
 
-#: src/gisheh/ui/window.ui:774
+#: src/gisheh/ui/window.ui:758
 msgid "Search all matching titles on TMDB (Ctrl+K)"
 msgstr "جست‌وجوی همهٔ عنوان‌های مطابق در TMDB (Ctrl+K)"
 
-#: src/gisheh/ui/window.ui:785
+#: src/gisheh/ui/window.ui:769
 msgid "Explore order"
 msgstr "ترتیب کاوش"
 
-#: src/gisheh/ui/window.ui:791
+#: src/gisheh/ui/window.ui:775
 msgid "Release period"
 msgstr "بازهٔ انتشار"
 
-#: src/gisheh/ui/window.ui:797
+#: src/gisheh/ui/window.ui:781
 msgid "Explore genre"
 msgstr "ژانر کاوش"
 
-#: src/gisheh/ui/window.ui:803
+#: src/gisheh/ui/window.ui:787
 msgid "Release Calendar"
 msgstr "تقویم انتشار"
+
+#: src/gisheh/app_logging.py:83 src/gisheh/app_logging.py:89
+msgid "No log entries yet."
+msgstr "هنوز هیچ گزارشی ثبت نشده است."
+
+#: src/gisheh/app_logging.py:85
+#, python-brace-format
+msgid "Could not read the application log: {error}"
+msgstr "خواندن گزارش برنامه ممکن نبود: {error}"
+
+#: src/gisheh/constants.py:16
+msgid "Shows"
+msgstr "سریال‌ها"
+
+#: src/gisheh/constants.py:16
+msgid "Anime"
+msgstr "انیمه"
+
+#: src/gisheh/constants.py:19 src/gisheh/localization.py:85
+msgid "Watching"
+msgstr "در حال تماشا"
+
+#: src/gisheh/constants.py:21 src/gisheh/localization.py:87
+#: src/gisheh/localization.py:88
+msgid "On Hold"
+msgstr "متوقف‌شده"
+
+#: src/gisheh/constants.py:22 src/gisheh/localization.py:90
+msgid "Dropped"
+msgstr "رهاشده"
+
+#: src/gisheh/constants.py:23 src/gisheh/localization.py:84
+msgid "Watchlist"
+msgstr "فهرست تماشا"
+
+#: src/gisheh/constants.py:29
+msgid "Last watched"
+msgstr "آخرین تماشا"
+
+#: src/gisheh/constants.py:30
+msgid "Title"
+msgstr "عنوان"
+
+#: src/gisheh/constants.py:31
+msgid "Highest rated"
+msgstr "بالاترین امتیاز"
+
+#: src/gisheh/constants.py:32
+msgid "Release year"
+msgstr "سال انتشار"
+
+#: src/gisheh/constants.py:36
+msgid "Trending"
+msgstr "پرطرفدار"
+
+#: src/gisheh/constants.py:37
+msgid "Popular"
+msgstr "محبوب"
+
+#: src/gisheh/constants.py:38
+msgid "Top rated"
+msgstr "برترین امتیازها"
+
+#: src/gisheh/constants.py:39
+msgid "Coming soon"
+msgstr "به‌زودی"
+
+#: src/gisheh/constants.py:42
+msgid "This month"
+msgstr "این ماه"
+
+#: src/gisheh/constants.py:42
+msgid "This year"
+msgstr "امسال"
+
+#: src/gisheh/constants.py:42
+msgid "All releases"
+msgstr "همهٔ انتشارها"
+
+#: src/gisheh/constants.py:60
+msgid "Follow system"
+msgstr "پیروی از سامانه"
+
+#: src/gisheh/constants.py:60
+msgid "Light"
+msgstr "روشن"
+
+#: src/gisheh/constants.py:60
+msgid "Dark"
+msgstr "تیره"
+
+#: src/gisheh/localization.py:12
+msgid "Adventure"
+msgstr "ماجراجویی"
+
+#: src/gisheh/localization.py:13
+msgid "Fantasy"
+msgstr "فانتزی"
+
+#: src/gisheh/localization.py:14
+msgid "Animation"
+msgstr "پویانمایی"
+
+#: src/gisheh/localization.py:15
+msgid "Drama"
+msgstr "درام"
+
+#: src/gisheh/localization.py:16
+msgid "Horror"
+msgstr "ترسناک"
+
+#: src/gisheh/localization.py:17
+msgid "Action"
+msgstr "اکشن"
+
+#: src/gisheh/localization.py:18
+msgid "Comedy"
+msgstr "کمدی"
+
+#: src/gisheh/localization.py:19
+msgid "History"
+msgstr "تاریخی"
+
+#: src/gisheh/localization.py:20
+msgid "Western"
+msgstr "وسترن"
+
+#: src/gisheh/localization.py:21
+msgid "Thriller"
+msgstr "هیجان‌انگیز"
+
+#: src/gisheh/localization.py:22
+msgid "Crime"
+msgstr "جنایی"
+
+#: src/gisheh/localization.py:23
+msgid "Documentary"
+msgstr "مستند"
+
+#: src/gisheh/localization.py:24
+msgid "Science Fiction"
+msgstr "علمی‌تخیلی"
+
+#: src/gisheh/localization.py:25
+msgid "Mystery"
+msgstr "معمایی"
+
+#: src/gisheh/localization.py:26
+msgid "Music"
+msgstr "موسیقی"
+
+#: src/gisheh/localization.py:27
+msgid "Romance"
+msgstr "عاشقانه"
+
+#: src/gisheh/localization.py:28
+msgid "Family"
+msgstr "خانوادگی"
+
+#: src/gisheh/localization.py:29
+msgid "War"
+msgstr "جنگی"
+
+#: src/gisheh/localization.py:30
+msgid "Action & Adventure"
+msgstr "اکشن و ماجراجویی"
+
+#: src/gisheh/localization.py:31
+msgid "Kids"
+msgstr "کودکان"
+
+#: src/gisheh/localization.py:32
+msgid "News"
+msgstr "اخبار"
+
+#: src/gisheh/localization.py:33
+msgid "Reality"
+msgstr "واقع‌نما"
+
+#: src/gisheh/localization.py:34
+msgid "Sci-Fi & Fantasy"
+msgstr "علمی‌تخیلی و فانتزی"
+
+#: src/gisheh/localization.py:35
+msgid "Soap"
+msgstr "سریال آبکی"
+
+#: src/gisheh/localization.py:36
+msgid "Talk"
+msgstr "گفت‌وگو"
+
+#: src/gisheh/localization.py:37
+msgid "War & Politics"
+msgstr "جنگ و سیاست"
+
+#: src/gisheh/localization.py:72
+msgid "Released"
+msgstr "منتشرشده"
+
+#: src/gisheh/localization.py:73
+msgid "Returning Series"
+msgstr "سریال در حال پخش"
+
+#: src/gisheh/localization.py:74
+msgid "In Production"
+msgstr "در حال تولید"
+
+#: src/gisheh/localization.py:75
+msgid "Planned"
+msgstr "برنامه‌ریزی‌شده"
+
+#: src/gisheh/localization.py:76
+msgid "Ended"
+msgstr "به پایان رسیده"
+
+#: src/gisheh/localization.py:77 src/gisheh/localization.py:78
+msgid "Cancelled"
+msgstr "لغوشده"
+
+#: src/gisheh/localization.py:79
+msgid "Pilot"
+msgstr "پایلوت"
+
+#: src/gisheh/localization.py:80
+msgid "Upcoming"
+msgstr "به‌زودی"
+
+#: src/gisheh/localization.py:81
+msgid "Airing"
+msgstr "در حال پخش"
+
+#: src/gisheh/localization.py:83
+msgid "Plan to watch"
+msgstr "قصد تماشا"
+
+#: src/gisheh/localization.py:94 src/gisheh/localization.py:95
+#: src/gisheh/localization.py:96
+msgid "United States of America"
+msgstr "ایالات متحدهٔ آمریکا"
+
+#: src/gisheh/localization.py:97 src/gisheh/localization.py:98
+#: src/gisheh/localization.py:99
+msgid "United Kingdom"
+msgstr "بریتانیا"
+
+#: src/gisheh/localization.py:100 src/gisheh/localization.py:101
+msgid "Iran"
+msgstr "ایران"
+
+#: src/gisheh/localization.py:102 src/gisheh/localization.py:103
+msgid "France"
+msgstr "فرانسه"
+
+#: src/gisheh/localization.py:104 src/gisheh/localization.py:105
+msgid "Germany"
+msgstr "آلمان"
+
+#: src/gisheh/localization.py:106 src/gisheh/localization.py:107
+msgid "Japan"
+msgstr "ژاپن"
+
+#: src/gisheh/localization.py:108 src/gisheh/localization.py:109
+#: src/gisheh/localization.py:110
+msgid "South Korea"
+msgstr "کرهٔ جنوبی"
+
+#: src/gisheh/localization.py:111 src/gisheh/localization.py:112
+msgid "India"
+msgstr "هند"
+
+#: src/gisheh/localization.py:113 src/gisheh/localization.py:114
+msgid "Canada"
+msgstr "کانادا"
+
+#: src/gisheh/localization.py:115 src/gisheh/localization.py:116
+msgid "Australia"
+msgstr "استرالیا"
+
+#: src/gisheh/localization.py:117 src/gisheh/localization.py:118
+msgid "Italy"
+msgstr "ایتالیا"
+
+#: src/gisheh/localization.py:119 src/gisheh/localization.py:120
+msgid "Spain"
+msgstr "اسپانیا"
+
+#: src/gisheh/localization.py:121 src/gisheh/localization.py:122
+msgid "Russia"
+msgstr "روسیه"
+
+#: src/gisheh/localization.py:123 src/gisheh/localization.py:124
+msgid "China"
+msgstr "چین"
+
+#: src/gisheh/localization.py:125 src/gisheh/localization.py:126
+msgid "Turkey"
+msgstr "ترکیه"
+
+#: src/gisheh/localization.py:127 src/gisheh/localization.py:128
+msgid "Brazil"
+msgstr "برزیل"
+
+#: src/gisheh/localization.py:129 src/gisheh/localization.py:130
+msgid "Mexico"
+msgstr "مکزیک"
+
+#: src/gisheh/localization.py:131 src/gisheh/localization.py:132
+msgid "Netherlands"
+msgstr "هلند"
+
+#: src/gisheh/localization.py:133 src/gisheh/localization.py:134
+msgid "Sweden"
+msgstr "سوئد"
+
+#: src/gisheh/localization.py:135 src/gisheh/localization.py:136
+msgid "Norway"
+msgstr "نروژ"
+
+#: src/gisheh/localization.py:137 src/gisheh/localization.py:138
+msgid "Denmark"
+msgstr "دانمارک"
+
+#: src/gisheh/localization.py:191 src/gisheh/models.py:1003
+#: src/gisheh/models.py:1237
+msgid "Loading from TMDB…"
+msgstr "در حال بار کردن از TMDB…"
+
+#: src/gisheh/localization.py:192 src/gisheh/models.py:1249
+msgid "Loading from TMDB"
+msgstr "در حال بار کردن از TMDB"
+
+#: src/gisheh/localization.py:193 src/gisheh/models.py:848
+msgid "Uncategorized"
+msgstr "دسته‌بندی‌نشده"
+
+#: src/gisheh/localization.py:194 src/gisheh/models.py:858
+msgid "Release date unavailable"
+msgstr "تاریخ انتشار موجود نیست"
+
+#: src/gisheh/localization.py:195 src/gisheh/models.py:866
+msgid "No overview is available yet."
+msgstr "هنوز نمای کلی موجود نیست."
+
+#: src/gisheh/localization.py:196 src/gisheh/models.py:1240
+msgid "Synced from Simkl"
+msgstr "همگام‌سازی‌شده از Simkl"
+
+#: src/gisheh/localization.py:199 src/gisheh/models.py:850
+msgid "Unknown country"
+msgstr "کشور نامشخص"
+
+#: src/gisheh/localization.py:200 src/gisheh/models.py:837
+msgid "Untitled"
+msgstr "بدون عنوان"
+
+#: src/gisheh/models.py:91 src/gisheh/models.py:566
+msgid "Unrated"
+msgstr "بدون رده‌بندی"
+
+#: src/gisheh/models.py:199
+msgid "The selected date and time are not valid."
+msgstr "تاریخ و زمان انتخاب‌شده معتبر نیست."
+
+#: src/gisheh/models.py:204
+msgid "The watched time cannot be in the future."
+msgstr "زمان تماشا نمی‌تواند در آینده باشد."
+
+#. Translators: date part of a watched timestamp, e.g. "Sep 5, 2026".
+#. Keep the placeholders; reorder them to match your language, e.g.
+#. Persian: "{day} {month} {year}".
+#: src/gisheh/models.py:217
+#, python-brace-format
+msgid "{month} {day}, {year}"
+msgstr "{day} {month} {year}"
+
+#. Translators: time part of a watched timestamp, e.g. "3:04 PM".
+#. "{hour}" is 1-12 without leading zero, "{minute}" is 00-59 and
+#. "{ampm}" is AM/PM. Reorder or replace AM/PM to match your language.
+#: src/gisheh/models.py:225
+#, python-brace-format
+msgid "{hour}:{minute} {ampm}"
+msgstr "{hour}:{minute} {ampm}"
+
+#. Translators: full watched timestamp combining date and time.
+#: src/gisheh/models.py:231
+#, python-brace-format
+msgid "{date} at {time}"
+msgstr "{date}، ساعت {time}"
+
+#. Translators: "{count}" is a number of days, e.g. "2d".
+#. Replace the unit to match your language (Persian: "روز").
+#: src/gisheh/models.py:252
+#, python-brace-format
+msgid "{count}d"
+msgid_plural "{count}d"
+msgstr[0] "{count} روز"
+msgstr[1] "{count} روز"
+
+#. Translators: "{count}" is a number of hours, e.g. "3h".
+#. Replace the unit to match your language (Persian: "ساعت").
+#: src/gisheh/models.py:256
+#, python-brace-format
+msgid "{count}h"
+msgid_plural "{count}h"
+msgstr[0] "{count} ساعت"
+msgstr[1] "{count} ساعت"
+
+#. Translators: "{count}" is a number of minutes, e.g. "44m".
+#. Replace the unit to match your language (Persian: "دقیقه").
+#: src/gisheh/models.py:260
+#, python-brace-format
+msgid "{count}m"
+msgid_plural "{count}m"
+msgstr[0] "{count} دقیقه"
+msgstr[1] "{count} دقیقه"
+
+#. Translators: separator joining duration parts (e.g. "1h 44m").
+#. Languages such as Persian may use " و " (e.g. "۱ ساعت و ۴۴ دقیقه").
+#: src/gisheh/models.py:263
+msgid " "
+msgstr " و "
+
+#: src/gisheh/models.py:870 src/gisheh/models.py:1256
+msgid "Loading…"
+msgstr "در حال بار کردن…"
+
+#: src/gisheh/models.py:986
+msgid "Trailer"
+msgstr "پیش‌پرده"
+
+#: src/gisheh/models.py:1252
+msgid "Catalog metadata is loading from TMDB."
+msgstr "فرادادهٔ فهرست از TMDB در حال بار شدن است."
+
+#: src/gisheh/models.py:1275
+msgid "Progress"
+msgstr "پیشرفت"
+
+#: src/gisheh/widgets.py:282
+#, python-brace-format
+msgid "Loading artwork for {title}"
+msgstr "در حال بار کردن نگاره برای {title}"
+
+#: src/gisheh/widgets.py:348
+msgid "Back to Gisheh"
+msgstr "بازگشت به گیشه"
+
+#: src/gisheh/widgets.py:353
+msgid "Media Viewer"
+msgstr "نمایشگر رسانه"
+
+#: src/gisheh/widgets.py:359
+msgid "Copy image"
+msgstr "رونوشت نگاره"
+
+#: src/gisheh/widgets.py:366
+msgid "Toggle fullscreen"
+msgstr "تغییر وضعیت تمام‌صفحه"
+
+#: src/gisheh/widgets.py:397
+msgid "Previous image (Left)"
+msgstr "نگارهٔ پیشین (چپ)"
+
+#: src/gisheh/widgets.py:406
+msgid "Next image (Right)"
+msgstr "نگارهٔ بعدی (راست)"
+
+#: src/gisheh/widgets.py:419
+msgid "Zoom out (Ctrl+-)"
+msgstr "کوچک‌نمایی (Ctrl+-)"
+
+#: src/gisheh/widgets.py:423 src/gisheh/widgets.py:534
+msgid "Fit"
+msgstr "جا دادن"
+
+#: src/gisheh/widgets.py:429
+msgid "Zoom in (Ctrl++)"
+msgstr "بزرگ‌نمایی (Ctrl++)"
+
+#: src/gisheh/widgets.py:767
+#, python-brace-format
+msgid "More Options for {title}"
+msgstr "گزینه‌های بیش‌تر برای {title}"
+
+#: src/gisheh/recovery.py:18
+msgid "Your library needs attention"
+msgstr "کتابخانهٔ شما نیاز به بررسی دارد"
+
+#: src/gisheh/recovery.py:20
+msgid ""
+"Your saved data has not been changed. You can retry, restore a backup, or "
+"start again."
+msgstr "داده‌های ذخیره‌شدهٔ شما تغییر نکرده‌اند. می‌توانید دوباره تلاش کنید، پشتیبان را بازیابی کنید یا از نو شروع کنید."
+
+#: src/gisheh/recovery.py:42
+msgid "Restore backup?"
+msgstr "پشتیبان بازیابی شود؟"
+
+#: src/gisheh/recovery.py:42
+msgid "Start a new library?"
+msgstr "کتابخانهٔ تازه‌ای ایجاد شود؟"
+
+#: src/gisheh/recovery.py:44
+msgid "A separate copy of the current file will be kept before replacing it."
+msgstr "پیش از جایگزینی، یک کپی جداگانه از فایل فعلی نگهداری می‌شود."
+
+#: src/gisheh/recovery.py:48
+msgid "Continue"
+msgstr "ادامه"
+
+#: src/gisheh/recovery.py:66
+msgid "Restore backup"
+msgstr "بازیابی پشتیبان"
+
+#: src/gisheh/recovery.py:72
+msgid "Start again"
+msgstr "شروع دوباره"
+
+#: src/gisheh/data_actions.py:19
+msgid "Local library backup"
+msgstr "پشتیبان کتابخانهٔ محلی"
+
+#: src/gisheh/data_actions.py:21
+msgid ""
+"Export or replace your local library. Your Simkl account is not changed."
+msgstr "از کتابخانهٔ محلی خروجی بگیرید یا آن را جایگزین کنید. حساب Simkl شما تغییر نمی‌کند."
+
+#: src/gisheh/data_actions.py:25 src/gisheh/data_actions.py:63
+msgid "Export local library"
+msgstr "خروجی کتابخانهٔ محلی"
+
+#: src/gisheh/data_actions.py:26 src/gisheh/data_actions.py:91
+msgid "Restore local library"
+msgstr "بازیابی کتابخانهٔ محلی"
+
+#: src/gisheh/data_actions.py:44
+msgid "Switch to Local-first mode to export or restore your local library."
+msgstr "برای خروجی یا بازیابی کتابخانهٔ محلی، به حالت محلی بروید."
+
+#: src/gisheh/data_actions.py:50
+#, python-brace-format
+msgid "Library operation failed: {error}"
+msgstr "عملیات کتابخانه انجام نشد: {error}"
+
+#: src/gisheh/data_actions.py:82
+msgid "Local library exported"
+msgstr "خروجی کتابخانهٔ محلی ذخیره شد"
+
+#: src/gisheh/data_actions.py:117
+msgid "Replace local library?"
+msgstr "کتابخانهٔ محلی جایگزین شود؟"
+
+#: src/gisheh/data_actions.py:119
+#, python-brace-format
+msgid ""
+"This backup contains {count} titles. It will replace your local library. A "
+"backup of your current data will be kept."
+msgstr "این پشتیبان شامل {count} عنوان است و جایگزین کتابخانهٔ محلی شما می‌شود. پشتیبانی از داده‌های فعلی نگهداری خواهد شد."
+
+#: src/gisheh/data_actions.py:123
+msgid "Restore"
+msgstr "بازیابی"
+
+#: src/gisheh/transactions.py:61
+msgid ""
+"The data was saved, but its durability could not be confirmed. Check the "
+"device storage."
+msgstr "داده‌ها ذخیره شدند، اما ماندگاری آن‌ها روی دستگاه تأیید نشد. فضای ذخیره‌سازی دستگاه را بررسی کنید."
+
+#: src/gisheh/transactions.py:65
+msgid ""
+"Simkl was updated, but saving on this device failed. Do not repeat the "
+"operation; sync again after fixing storage."
+msgstr "Simkl به‌روز شد، اما ذخیره روی این دستگاه انجام نشد. عملیات را تکرار نکنید؛ پس از رفع مشکل ذخیره‌سازی، دوباره همگام کنید."
+
+#: src/gisheh/transactions.py:69
+msgid ""
+"Your change could not be saved. The previous local state has been restored."
+msgstr "تغییر شما ذخیره نشد. وضعیت محلی قبلی بازگردانده شد."
+
+#~ msgid "Browse / Simkl"
+#~ msgstr "مرور / Simkl"
+
+#~ msgid "My Calendar"
+#~ msgstr "تقویم من"
+
+#~ msgid "Filter releases by media type"
+#~ msgstr "پالایش انتشارها بر پایهٔ گونهٔ رسانه"
+
+#~ msgid "Calendar status filters"
+#~ msgstr "پالایه‌های وضعیت تقویم"
+
+#~ msgid "Show watched"
+#~ msgstr "نمایش دیده‌شده‌ها"
+
+#~ msgid "Show dropped"
+#~ msgstr "نمایش رهاشده‌ها"
+
+#, python-brace-format
+#~ msgid "{media} / {collection}"
+#~ msgstr "{media} / {collection}"
+
+#, python-brace-format
+#~ msgid "{mode} / {media}"
+#~ msgstr "{mode} / {media}"
+
+#~ msgid "TMDB Search"
+#~ msgstr "جست‌وجوی TMDB"
+
+#~ msgid "Discover"
+#~ msgstr "کاوش"
+
+#~ msgid "Movies / Watched"
+#~ msgstr "فیلم‌ها / دیده‌شده"
+
+#~ msgid "Discover / Movies"
+#~ msgstr "کشف / فیلم‌ها"
+
+#~ msgid "No external page is available for this title"
+#~ msgstr "هیچ صفحهٔ بیرونی برای این عنوان موجود نیست"
+
+#~ msgid "Open an external link?"
+#~ msgstr "پیوند بیرونی گشوده شود؟"
+
+#, python-brace-format
+#~ msgid ""
+#~ "Gisheh will open the TMDB page for “{title}” in your default web browser."
+#~ msgstr "گیشه صفحهٔ TMDB برای «{title}» را در مرورگر وب پیش‌گزیده‌تان می‌گشاید."
+
+#~ msgid "Open this title on TMDB"
+#~ msgstr "گشودن این عنوان در TMDB"
+
+#~ msgid "2013 · Iran"
+#~ msgstr "۲۰۱۳ · ایران"
+
+#~ msgid "Hush! Girls Don't Scream"
+#~ msgstr "هیس! دخترها فریاد نمی‌زنند"
+
+#~ msgid "1h 44m"
+#~ msgstr "۱ س ۴۴ د"
+
+#~ msgid "Drama · Crime"
+#~ msgstr "درام · جنایی"
+
+#: src/gisheh/window.py
+msgid "TMDB content"
+msgstr "محتوای TMDB"
+
+#: src/gisheh/window.py
+msgid "Choose the language of titles and descriptions. The interface follows your system language."
+msgstr "زبان عنوان‌ها و توضیحات را انتخاب کنید. زبان رابط برنامه از زبان سیستم پیروی می‌کند."
+
+#: src/gisheh/window.py
+msgid "Missing translations fall back to English. Changes apply immediately."
+msgstr "اگر ترجمه موجود نباشد، متن انگلیسی نمایش داده می‌شود. تغییرات بلافاصله اعمال می‌شوند."
+
+#: src/gisheh/window.py
+msgid "TMDB languages"
+msgstr "زبان‌های TMDB"
+
+#: src/gisheh/window.py
+msgid "Connect TMDB to load its language list."
+msgstr "برای دریافت فهرست زبان‌ها به TMDB متصل شوید."
+
+#: src/gisheh/window.py
+msgid "Loading languages…"
+msgstr "در حال دریافت زبان‌ها…"
+
+#: src/gisheh/window.py
+msgid "Could not load languages. Check your connection and try again."
+msgstr "دریافت زبان‌ها ناموفق بود. اتصال اینترنت را بررسی کنید و دوباره تلاش کنید."
+
+#: src/gisheh/window.py
+msgid "Language list updated from TMDB."
+msgstr "فهرست زبان‌ها از TMDB به‌روز شد."
+
+#: src/gisheh/window.py
+msgid "Application _Log"
+msgstr "_گزارش برنامه"
+
+#: src/gisheh/window.py
+msgid "_Credits & Data Sources"
+msgstr "_سازندگان و منابع داده"
+
+#: src/gisheh/window.py
+msgid "_Preferences"
+msgstr "_تنظیمات"
+
+#: src/gisheh/window.py
+msgid "_Keyboard Shortcuts"
+msgstr "_میان‌برهای صفحه‌کلید"
+
+#: src/gisheh/window.py
+msgid "_About Gisheh"
+msgstr "_دربارهٔ گیشه"
+
+#: src/gisheh/window.py
+msgid "Keyboard Shortcuts"
+msgstr "میان‌برهای صفحه‌کلید"
+
+#: src/gisheh/window.py
+msgid "Close Window"
+msgstr "بستن پنجره"
+
+#: src/gisheh/window.py
+msgid "Navigation"
+msgstr "ناوبری"
+
+#: src/gisheh/window.py
+msgid "Search"
+msgstr "جست‌وجو"
+
+#: src/gisheh/window.py
+msgid "Search Explore"
+msgstr "جست‌وجو در کاوش"
+
+#: src/gisheh/window.py
+msgid "Show or Hide Sidebar"
+msgstr "نمایش یا پنهان‌کردن نوار کناری"
+
+#: src/gisheh/window.py
+msgid "Go Back"
+msgstr "بازگشت"
+
+#: src/gisheh/window.py
+msgid "Dismiss or Go Back"
+msgstr "بستن یا بازگشت"
+
+#: src/gisheh/window.py
+msgid "Load more releases ({remaining} remaining)"
+msgstr "نمایش انتشارهای بیشتر ({remaining} باقی‌مانده)"
+
+#: src/gisheh/window.py
+msgid "Updated {date}"
+msgstr "به‌روز‌شده در {date}"
+
+#: src/gisheh/window.py
+msgid "Showing cached schedule · {updated}"
+msgstr "نمایش برنامهٔ ذخیره‌شده · {updated}"
+
+#: src/gisheh/window.py
+msgid "No schedule has been cached yet."
+msgstr "هنوز برنامهٔ انتشاری ذخیره نشده است."
+
+#: src/gisheh/window.py
+msgid "Last refreshed {date}"
+msgstr "آخرین به‌روزرسانی: {date}"
+
+#: src/gisheh/window.py
+msgid "Change TMDB developer override"
+msgstr "تغییر تنظیم توسعه‌دهندهٔ TMDB"
+
+#: src/gisheh/window.py
+msgid "Configure this development build"
+msgstr "پیکربندی این نسخهٔ توسعه"
+
+#: src/gisheh/widgets.py
+msgid "Poster artwork for {title}"
+msgstr "پوستر {title}"
+
+#: src/gisheh/widgets.py
+msgid "Movie"
+msgstr "فیلم"
+
+#: src/gisheh/widgets.py
+msgid "Show"
+msgstr "سریال"
+
+#: src/gisheh/widgets.py
+msgid "Home release {date}"
+msgstr "انتشار خانگی در {date}"
+
+#: src/gisheh/widgets.py
+msgid "Premiere"
+msgstr "نخستین نمایش"
+
+#: src/gisheh/window.py
+msgid "Local-first · Personal data stays on this device"
+msgstr "محلی · داده‌های شخصی روی این دستگاه نگهداری می‌شوند"
+
+#: src/gisheh/window.py
+msgid "Simkl sync · Simkl manages lists, ratings and watch history"
+msgstr "همگام‌سازی Simkl · مدیریت فهرست‌ها، امتیازها و تاریخچهٔ تماشا با Simkl"
+
+#: src/gisheh/window.py
+msgid "Not active · Local-first mode is managing this library"
+msgstr "غیرفعال · این کتابخانه در حالت محلی مدیریت می‌شود"
+
+#: src/gisheh/window.py
+msgid "Connected · Library and watch state sync enabled"
+msgstr "متصل · همگام‌سازی کتابخانه و وضعیت تماشا فعال است"
+
+#: src/gisheh/window.py
+msgid "Ready to connect · Sign in with a Simkl PIN"
+msgstr "آمادهٔ اتصال · با کد Simkl وارد شوید"
+
+#: src/gisheh/window.py
+msgid "Unavailable · This build has no Simkl application ID"
+msgstr "در دسترس نیست · این نسخه شناسهٔ برنامهٔ Simkl ندارد"
+
+#: src/gisheh/window.py
+msgid "Unavailable"
+msgstr "در دسترس نیست"
+
+#: src/gisheh/window.py
+msgid "Sync Now"
+msgstr "همگام‌سازی اکنون"
+
+#: src/gisheh/window.py
+msgid "Connect"
+msgstr "اتصال"
+
+#: src/gisheh/window.py
+msgid "Connected · Credential provided by this build"
+msgstr "متصل · اطلاعات اتصال در این نسخه فراهم شده است"
+
+#: src/gisheh/window.py
+msgid "Connected · Developer environment override"
+msgstr "متصل · استفاده از تنظیم محیط توسعه‌دهنده"
+
+#: src/gisheh/window.py
+msgid "Connected · Developer token stored for this user"
+msgstr "متصل · کلید توسعه‌دهنده برای این کاربر ذخیره شده است"
+
+#: src/gisheh/window.py
+msgid "Unavailable · This build has no TMDB credential"
+msgstr "در دسترس نیست · این نسخه اطلاعات اتصال TMDB ندارد"
+
+#: src/gisheh/window.py
+msgid "Data Source"
+msgstr "منبع داده"
+
+#: src/gisheh/window.py
+msgid "Change Token"
+msgstr "تغییر کلید"
+
+#: src/gisheh/window.py
+msgid "Developer Setup"
+msgstr "تنظیمات توسعه‌دهنده"
+
+#: src/gisheh/window.py
+msgid "Yesterday"
+msgstr "دیروز"
+
+#: src/gisheh/window.py
+msgid "Tomorrow"
+msgstr "فردا"
+
+#: src/gisheh/window.py
+msgid "Week {week}"
+msgstr "هفتهٔ {week}"
+
+#: src/gisheh/window.py
+msgid "{hours}h {minutes:02d}m"
+msgstr "{hours} ساعت و {minutes:02d} دقیقه"
+
+#: src/gisheh/window.py
+msgid "{hours}h"
+msgstr "{hours} ساعت"
+
+#: src/gisheh/window.py
+msgid "{minutes}m"
+msgstr "{minutes} دقیقه"
+
+#: src/gisheh/window.py
+msgid "No events are published this month for the matching titles in your library ({count}). Watching, Watchlist, and On Hold titles appear as soon as Simkl schedules them."
+msgstr "برای عنوان‌های مرتبط در کتابخانهٔ شما ({count}) در این ماه رویدادی منتشر نشده است. عنوان‌های در حال تماشا، فهرست تماشا و متوقف‌شده به‌محض اعلام برنامه از سوی Simkl نمایش داده می‌شوند."
+
+#: src/gisheh/window.py
+msgid "Close and open Gisheh again.\n\n{error}"
+msgstr "گیشه را ببندید و دوباره باز کنید.\n\n{error}"
+
+#: src/gisheh/window.py
+msgid "Synced {count} Simkl states — loading catalog from TMDB"
+msgstr "وضعیت {count} عنوان از Simkl همگام شد — در حال دریافت کاتالوگ از TMDB"
+
+#: src/gisheh/window.py
+msgid "Gisheh will open “{title}” on YouTube in your default web browser."
+msgstr "گیشه «{title}» را در YouTube و با مرورگر پیش‌فرض شما باز می‌کند."
+
+#: src/gisheh/window.py
+msgid "Change watched date — {title}"
+msgstr "تغییر تاریخ تماشا — {title}"
+
+#: src/gisheh/window.py
+msgid "This replaces the existing watch date; it is not a rewatch."
+msgstr "این تغییر جایگزین تاریخ تماشای قبلی می‌شود و تماشای دوباره محسوب نمی‌شود."
+
+#: src/gisheh/window.py
+msgid "{count} release"
+msgid_plural "{count} releases"
+msgstr[0] "{count} انتشار"
+msgstr[1] "{count} انتشار"
+
+#: src/gisheh/profile.py
+msgid "Profile Settings"
+msgstr "تنظیمات پروفایل"
+
+#: src/gisheh/profile.py
+msgid "Your viewing story starts here"
+msgstr "داستان تماشای شما از اینجا شروع می‌شود"
+
+#: src/gisheh/profile.py
+msgid "Mark a movie or episode as watched to see your activity here."
+msgstr "یک فیلم یا قسمت را تماشاشده علامت بزنید تا فعالیت شما اینجا نمایش داده شود."
+
+#: src/gisheh/profile.py
+msgid "Viewing Activity"
+msgstr "فعالیت تماشا"
+
+#: src/gisheh/profile.py
+msgid "This Month"
+msgstr "این ماه"
+
+#: src/gisheh/profile.py
+msgid "This Year"
+msgstr "امسال"
+
+#: src/gisheh/profile.py
+msgid "Activity period"
+msgstr "بازهٔ فعالیت"
+
+#: src/gisheh/profile.py
+msgid "Monthly Breakdown"
+msgstr "جزئیات ماهانه"
+
+#: src/gisheh/profile.py
+msgid "Movies and episodes watched this year"
+msgstr "فیلم‌ها و قسمت‌های تماشاشده در سال جاری"
+
+#: src/gisheh/profile.py
+msgid "Your Library"
+msgstr "کتابخانهٔ شما"
+
+#: src/gisheh/profile.py
+msgid "All-time viewing totals"
+msgstr "مجموع سابقهٔ تماشا"
+
+#: src/gisheh/profile.py
+msgid "Viewing Breakdown"
+msgstr "جزئیات تماشا"
+
+#: src/gisheh/profile.py
+msgid "Movies, television and anime"
+msgstr "فیلم‌ها، سریال‌ها و انیمه"
+
+#: src/gisheh/profile.py
+msgid "Favorite Genres"
+msgstr "ژانرهای محبوب"
+
+#: src/gisheh/profile.py
+msgid "Most watched genres in your library"
+msgstr "پرتماشاترین ژانرهای کتابخانهٔ شما"
+
+#: src/gisheh/profile.py
+msgid "No genres yet"
+msgstr "هنوز ژانری ثبت نشده است"
+
+#: src/gisheh/profile.py
+msgid "Genres appear when watched titles have catalog information."
+msgstr "ژانرها پس از دریافت اطلاعات عنوان‌های تماشاشده نمایش داده می‌شوند."
+
+#: src/gisheh/profile.py
+msgid "Your Ratings"
+msgstr "امتیازهای شما"
+
+#: src/gisheh/profile.py
+msgid "Average rating"
+msgstr "میانگین امتیاز"
+
+#: src/gisheh/profile.py
+msgid "Rating Distribution"
+msgstr "توزیع امتیازها"
+
+#: src/gisheh/profile.py
+msgid "No ratings yet"
+msgstr "هنوز امتیازی ثبت نشده است"
+
+#: src/gisheh/profile.py
+msgid "Rate a title to start building your rating history."
+msgstr "به یک عنوان امتیاز بدهید تا سابقهٔ امتیازهای شما شکل بگیرد."
+
+#: src/gisheh/profile.py
+msgid "Based on saved watch dates"
+msgstr "بر پایهٔ تاریخ‌های ذخیره‌شدهٔ تماشا"
+
+#: src/gisheh/profile.py
+msgid "No viewing history in this period"
+msgstr "در این بازه سابقهٔ تماشایی ثبت نشده است"
+
+#: src/gisheh/profile.py
+msgid "Local profile · Stored on this device"
+msgstr "پروفایل محلی · ذخیره‌شده روی این دستگاه"
+
+#: src/gisheh/profile.py
+msgid "Connected to Simkl"
+msgstr "متصل به Simkl"
+
+#: src/gisheh/profile.py
+msgid "Simkl profile · Not connected"
+msgstr "پروفایل Simkl · متصل نیست"
+
+#: src/gisheh/profile.py
+msgid "{count} rated title"
+msgid_plural "{count} rated titles"
+msgstr[0] "{count} عنوان امتیازدار"
+msgstr[1] "{count} عنوان امتیازدار"
+
+#: src/gisheh/profile.py
+msgid "Active days"
+msgstr "روزهای فعال"

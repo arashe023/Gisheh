@@ -6,7 +6,7 @@ import unittest
 import xml.etree.ElementTree as ET
 from dataclasses import replace
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 SOURCE_DIR = Path(__file__).resolve().parents[1] / "src"
 SAMPLE_DATA = Path(__file__).resolve().parent / "fixtures/library.json"
@@ -438,10 +438,60 @@ class SettingsDialogTests(unittest.TestCase):
         controller.tmdb_token = None
         controller.auto_sync = True
         controller.color_scheme = "dark"
-        controller.temporary_language = "system"
+        controller.content_language = "system"
         controller.default_media = "Movies"
         controller.preferred_view_mode = "list"
         return controller
+
+    def test_language_list_refresh_preserves_selection_and_changes_only_content(self):
+        controller = self._controller()
+        controller.content_language = "ja"
+        controller._save_user_state = Mock()
+        controller._refresh_tmdb_content_language = Mock()
+        controller._apply_text_direction = Mock()
+        controller._toast = Mock()
+        controller._build_settings_dialog()
+        controller._set_content_language_options([("de", "Deutsch"), ("ja", "日本語")])
+        row = controller.settings_content_language_row
+        self.assertEqual(controller._content_language_options[row.get_selected()], "ja")
+        controller._save_user_state.assert_not_called()
+        with patch.object(gisheh.tmdb_client, "set_content_language") as select:
+            row.set_selected(controller._content_language_options.index("de"))
+        self.assertEqual(controller.content_language, "de")
+        select.assert_called_once_with("de")
+        controller._save_user_state.assert_called_once()
+        controller._refresh_tmdb_content_language.assert_called_once()
+        controller._apply_text_direction.assert_not_called()
+
+    def test_language_save_failure_restores_selection(self):
+        controller = self._controller()
+        controller._save_user_state = Mock(side_effect=OSError("disk full"))
+        controller._refresh_tmdb_content_language = Mock()
+        controller._toast = Mock()
+        controller._build_settings_dialog()
+        controller._set_content_language_options([("ja", "日本語")])
+        with patch.object(gisheh.tmdb_client, "set_content_language"):
+            controller.settings_content_language_row.set_selected(1)
+        self.assertEqual(controller.content_language, "system")
+        self.assertEqual(controller.settings_content_language_row.get_selected(), 0)
+        controller._refresh_tmdb_content_language.assert_not_called()
+
+    def test_language_list_failure_keeps_selection_and_can_retry(self):
+        controller = self._controller()
+        controller.content_language = "de"
+        controller._build_settings_dialog()
+        controller.tmdb_token = "token"
+        controller._start_worker = lambda _name, worker: worker()
+        controller._post_ui = lambda callback, *args: callback(*args)
+        with patch.object(gisheh.tmdb_client, "fetch_languages", side_effect=gisheh.tmdb_client.TmdbError("offline")):
+            controller._load_content_languages()
+        self.assertFalse(controller._content_languages_loading)
+        self.assertIn("de", controller._content_language_options)
+        self.assertIn("try again", controller.settings_languages_status_row.get_subtitle())
+        with patch.object(gisheh.tmdb_client, "fetch_languages", return_value=[("de", "Deutsch"), ("ja", "日本語")]):
+            controller._load_content_languages()
+        self.assertIn("ja", controller._content_language_options)
+        self.assertEqual(controller.content_language, "de")
 
     def test_native_preferences_dialog_contains_functional_controls(self) -> None:
         from gi.repository import Adw
@@ -458,10 +508,9 @@ class SettingsDialogTests(unittest.TestCase):
             "General",
         )
         self.assertEqual(controller.settings_color_scheme_row.get_selected(), 2)
-        self.assertEqual(controller.settings_language_row.get_selected(), 0)
-        self.assertIn(
-            "not saved", controller.settings_language_row.get_subtitle().lower()
-        )
+        self.assertFalse(hasattr(controller, "settings_language_row"))
+        self.assertEqual(controller.settings_content_language_row.get_selected(), 0)
+        self.assertTrue(controller.settings_content_language_row.get_enable_search())
         self.assertFalse(hasattr(controller, "settings_accent_row"))
         self.assertEqual(controller.settings_media_row.get_selected(), 0)
         self.assertEqual(controller.settings_view_row.get_selected(), 0)
@@ -901,7 +950,7 @@ class SimklMappingTests(unittest.TestCase):
         self.assertEqual(show.seasons[0].watched, 4)
         self.assertEqual(anime.media_type, "Anime")
         self.assertEqual(anime.status, "Watchlist")
-        self.assertEqual(anime.availability, "Plan To Watch")
+        self.assertEqual(anime.availability, "Plan to watch")
         self.assertEqual(paused.status, "On Hold")
 
     def test_watchlist_contains_only_plan_to_watch_items(self) -> None:

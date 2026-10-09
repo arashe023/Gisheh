@@ -35,6 +35,9 @@
                             <child>
                               <object class="GtkButton" id="profile_button">
                                 <property name="tooltip-text" translatable="yes">Profile</property>
+                                <accessibility>
+                                  <property name="label" translatable="yes">Profile</property>
+                                </accessibility>
                                 <property name="child">
                                   <object class="AdwAvatar" id="sidebar_profile_avatar">
                                     <property name="size">28</property>
@@ -52,6 +55,9 @@
                               <object class="GtkButton" id="search_button">
                                 <property name="icon-name">system-search-symbolic</property>
                                 <property name="tooltip-text" translatable="yes">Search Explore (Ctrl+K)</property>
+                                <accessibility>
+                                  <property name="label" translatable="yes">Search Explore (Ctrl+K)</property>
+                                </accessibility>
                                 <style>
                                   <class name="flat"/>
                                 </style>
@@ -63,6 +69,9 @@
                           <object class="GtkMenuButton" id="main_menu_button">
                             <property name="icon-name">open-menu-symbolic</property>
                             <property name="tooltip-text" translatable="yes">Main Menu</property>
+                            <accessibility>
+                              <property name="label" translatable="yes">Main Menu</property>
+                            </accessibility>
                             <style>
                               <class name="flat"/>
                             </style>
@@ -164,12 +173,18 @@
                           <object class="AdwToggleGroup" id="media_switcher">
                             <property name="homogeneous">true</property>
                             <property name="tooltip-text" translatable="yes">Media type</property>
+                            <accessibility>
+                              <property name="label" translatable="yes">Media type</property>
+                            </accessibility>
                           </object>
                         </property>
                         <child type="end">
                           <object class="GtkButton" id="header_data_status_button">
                             <property name="valign">center</property>
                             <property name="tooltip-text" translatable="yes">Library data status</property>
+                            <accessibility>
+                              <property name="label" translatable="yes">Library data status</property>
+                            </accessibility>
                             <property name="child">
                               <object class="GtkBox">
                                 <property name="spacing">6</property>
@@ -219,6 +234,9 @@
                             <property name="margin-start">12</property>
                             <property name="margin-end">12</property>
                             <property name="tooltip-text" translatable="yes">Media Type</property>
+                            <accessibility>
+                              <property name="label" translatable="yes">Media Type</property>
+                            </accessibility>
                           </object>
                         </child>
                       </object>
@@ -246,19 +264,9 @@
                                 <child>
                                   <object class="GtkCenterBox">
                                     <property name="start-widget">
-                                      <object class="GtkBox">
+                                       <object class="GtkBox">
                                         <property name="orientation">vertical</property>
                                         <property name="spacing">2</property>
-                                        <child>
-                                          <object class="GtkLabel" id="eyebrow_label">
-                                            <property name="label" translatable="yes">Movies / Watched</property>
-                                            <property name="halign">start</property>
-                                            <style>
-                                              <class name="dim-label"/>
-                                              <class name="caption"/>
-                                            </style>
-                                          </object>
-                                        </child>
                                         <child>
                                           <object class="GtkBox">
                                             <property name="spacing">8</property>
@@ -286,24 +294,36 @@
                                         <property name="hexpand">true</property>
                                         <property name="placeholder-text" translatable="yes">Search movies…</property>
                                         <property name="tooltip-text" translatable="yes">Search Collection (Ctrl+K)</property>
+                                        <accessibility>
+                                          <property name="label" translatable="yes">Search Collection (Ctrl+K)</property>
+                                        </accessibility>
                                       </object>
                                     </child>
                                     <child>
                                       <object class="GtkDropDown" id="sort_dropdown">
                                         <property name="width-request">145</property>
                                         <property name="tooltip-text" translatable="yes">Sort by</property>
+                                        <accessibility>
+                                          <property name="label" translatable="yes">Sort by</property>
+                                        </accessibility>
                                       </object>
                                     </child>
                                     <child>
                                       <object class="GtkDropDown" id="genre_dropdown">
                                         <property name="width-request">135</property>
                                         <property name="tooltip-text" translatable="yes">Filter by genre</property>
+                                        <accessibility>
+                                          <property name="label" translatable="yes">Filter by genre</property>
+                                        </accessibility>
                                       </object>
                                     </child>
                                     <child>
                                       <object class="AdwToggleGroup" id="view_switcher">
                                         <property name="homogeneous">true</property>
                                         <property name="tooltip-text" translatable="yes">View mode</property>
+                                        <accessibility>
+                                          <property name="label" translatable="yes">View mode</property>
+                                        </accessibility>
                                       </object>
                                     </child>
                                   </object>
@@ -345,6 +365,9 @@
                                   <object class="GtkButton" id="sort_direction_button">
                                     <property name="icon-name">view-sort-descending-symbolic</property>
                                     <property name="tooltip-text" translatable="yes">Reverse sort direction</property>
+                                    <accessibility>
+                                      <property name="label" translatable="yes">Reverse sort direction</property>
+                                    </accessibility>
                                     <style>
                                       <class name="flat"/>
                                       <class name="circular"/>
@@ -432,10 +455,11 @@
                                         <property name="spacing">3</property>
                                         <child>
                                               <object class="GtkLabel" id="detail_overline">
-                                                <property name="label" translatable="yes">2013 · Iran</property>
-                                                <property name="halign">start</property>
+                                                <property name="label">2013 · Iran</property>
+                                                <property name="halign">fill</property>
+                                                <property name="hexpand">true</property>
                                                 <property name="wrap">true</property>
-                                                <property name="max-width-chars">40</property>
+                                                <property name="wrap-mode">word</property>
                                             <style>
                                               <class name="dim-label"/>
                                               <class name="caption"/>
@@ -445,14 +469,15 @@
                                         <child>
                                           <object class="GtkCenterBox">
                                             <property name="start-widget">
-                                              <object class="GtkLinkButton" id="detail_title">
-                                                <property name="label" translatable="yes">Hush! Girls Don't Scream</property>
+                                              <object class="GtkLabel" id="detail_title">
+                                                <property name="label">Hush! Girls Don't Scream</property>
                                                 <property name="halign">start</property>
                                                 <property name="hexpand">true</property>
-                                                <property name="uri">https://www.themoviedb.org</property>
+                                                <property name="wrap">true</property>
+                                                <property name="wrap-mode">word</property>
+                                                <property name="xalign">0</property>
                                                 <style>
                                                   <class name="title-2"/>
-                                                  <class name="flat"/>
                                                 </style>
                                               </object>
                                             </property>
@@ -496,6 +521,9 @@
                                           <object class="GtkMenuButton" id="rating_button">
                                             <property name="icon-name">non-starred-symbolic</property>
                                             <property name="tooltip-text" translatable="yes">Rate this title</property>
+                                            <accessibility>
+                                              <property name="label" translatable="yes">Rate this title</property>
+                                            </accessibility>
                                             <property name="popover">
                                               <object class="GtkPopover" id="rating_popover">
                                                 <property name="child">
@@ -518,7 +546,7 @@
                                                         </property>
                                                         <property name="end-widget">
                                                           <object class="GtkLabel" id="rating_value">
-                                                            <property name="label" translatable="yes">Not rated</property>
+                                                            <property name="label">Not rated</property>
                                                             <style>
                                                               <class name="numeric"/>
                                                             </style>
@@ -543,6 +571,9 @@
                                           <object class="GtkToggleButton" id="bookmark_button">
                                             <property name="icon-name">bookmark-new-symbolic</property>
                                             <property name="tooltip-text" translatable="yes">Bookmark</property>
+                                            <accessibility>
+                                              <property name="label" translatable="yes">Bookmark</property>
+                                            </accessibility>
                                           </object>
                                         </child>
                                       </object>
@@ -554,7 +585,7 @@
                                         <property name="hexpand">true</property>
                                         <child>
                                           <object class="GtkLabel" id="runtime_label">
-                                            <property name="label" translatable="yes">1h 44m</property>
+                                            <property name="label">1h 44m</property>
                                             <style>
                                               <class name="dim-label"/>
                                             </style>
@@ -570,7 +601,7 @@
                                         </child>
                                         <child>
                                           <object class="GtkLabel" id="genres_label">
-                                            <property name="label" translatable="yes">Drama · Crime</property>
+                                            <property name="label">Drama · Crime</property>
                                             <property name="hexpand">true</property>
                                             <property name="xalign">0</property>
                                             <property name="wrap">true</property>
@@ -598,10 +629,12 @@
                                         </child>
                                         <child>
                                           <object class="GtkLabel" id="overview_label">
-                                            <property name="label" translatable="yes">Overview</property>
-                                            <property name="halign">start</property>
+                                            <property name="label">Overview</property>
+                                            <property name="halign">fill</property>
+                                            <property name="hexpand">true</property>
                                             <property name="wrap">true</property>
-                                            <property name="max-width-chars">42</property>
+                                            <property name="wrap-mode">word</property>
+                                            <property name="justify">fill</property>
                                             <property name="xalign">0</property>
                                             <style>
                                               <class name="dim-label"/>
@@ -737,16 +770,6 @@
         <property name="margin-start">24</property>
         <property name="margin-end">24</property>
         <child>
-          <object class="GtkLabel" id="explore_eyebrow_label">
-            <property name="label" translatable="yes">Discover / Movies</property>
-            <property name="halign">start</property>
-            <style>
-              <class name="dim-label"/>
-              <class name="caption"/>
-            </style>
-          </object>
-        </child>
-        <child>
           <object class="GtkBox">
             <property name="spacing">8</property>
             <child>
@@ -772,6 +795,9 @@
                 <property name="width-request">220</property>
                 <property name="placeholder-text" translatable="yes">Search TMDB…</property>
                 <property name="tooltip-text" translatable="yes">Search all matching titles on TMDB (Ctrl+K)</property>
+                <accessibility>
+                  <property name="label" translatable="yes">Search all matching titles on TMDB (Ctrl+K)</property>
+                </accessibility>
               </object>
             </child>
             <child>
@@ -783,24 +809,36 @@
                   <object class="GtkDropDown" id="explore_sort_dropdown">
                     <property name="width-request">142</property>
                     <property name="tooltip-text" translatable="yes">Explore order</property>
+                    <accessibility>
+                      <property name="label" translatable="yes">Explore order</property>
+                    </accessibility>
                   </object>
                 </child>
                 <child>
                   <object class="GtkDropDown" id="explore_period_dropdown">
                     <property name="width-request">132</property>
                     <property name="tooltip-text" translatable="yes">Release period</property>
+                    <accessibility>
+                      <property name="label" translatable="yes">Release period</property>
+                    </accessibility>
                   </object>
                 </child>
                 <child>
                   <object class="GtkDropDown" id="explore_genre_dropdown">
                     <property name="width-request">142</property>
                     <property name="tooltip-text" translatable="yes">Explore genre</property>
+                    <accessibility>
+                      <property name="label" translatable="yes">Explore genre</property>
+                    </accessibility>
                   </object>
                 </child>
                 <child>
                   <object class="GtkButton" id="explore_calendar_button">
                     <property name="icon-name">x-office-calendar-symbolic</property>
                     <property name="tooltip-text" translatable="yes">Release Calendar</property>
+                    <accessibility>
+                      <property name="label" translatable="yes">Release Calendar</property>
+                    </accessibility>
                     <style>
                       <class name="flat"/>
                       <class name="circular"/>

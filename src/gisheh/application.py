@@ -15,6 +15,7 @@ from gi.repository import Adw, Gio, GLib, Gtk
 from .onboarding import WelcomeTour
 from .services import simkl_client
 from .state_store import (
+    StateError,
     LIBRARY_MODE_LOCAL,
     LIBRARY_MODE_SIMKL,
     save_library_mode,
@@ -41,10 +42,11 @@ class GishehApplication(Adw.Application):
 
     def do_startup(self) -> None:
         Adw.Application.do_startup(self)
+        Gtk.Window.set_default_icon_name(APP_ID)
         Adw.StyleManager.get_default().set_color_scheme(Adw.ColorScheme.DEFAULT)
 
         quit_action = Gio.SimpleAction.new("quit", None)
-        quit_action.connect("activate", lambda *_args: self.quit())
+        quit_action.connect("activate", self._quit_application)
         self.add_action(quit_action)
         self.set_accels_for_action("app.quit", ["<primary>q"])
 
@@ -64,9 +66,25 @@ class GishehApplication(Adw.Application):
         logs_action.connect("activate", self._show_logs)
         self.add_action(logs_action)
 
+    def _quit_application(self, *_args) -> None:
+        if self.controller is not None:
+            try:
+                self.controller._save_user_state()
+                self.controller._save_window_state()
+            except OSError as error:
+                self.controller._toast(_("Could not save before quitting: {error}").format(error=error))
+                return
+            self.controller.close_background_jobs()
+        self.quit()
+
     def do_activate(self) -> None:
         if self.props.active_window is None:
-            mode = selected_library_mode()
+            try:
+                mode = selected_library_mode()
+            except StateError as error:
+                from .recovery import present_recovery
+                present_recovery(self, error)
+                return
             if mode is None:
                 self._present_welcome_tour()
                 return
@@ -85,6 +103,10 @@ class GishehApplication(Adw.Application):
             self.controller = GishehWindow(self, library_mode=library_mode)
         # This is the application startup boundary: unexpected constructor
         # failures must become a visible error window instead of aborting GTK.
+        except StateError as error:
+            from .recovery import present_recovery
+            present_recovery(self, error)
+            return
         except Exception as error:  # noqa: BLE001
             print(f"Gisheh failed to start: {error}", file=sys.stderr)
             window = Adw.ApplicationWindow(application=self, title=APP_NAME)
@@ -161,6 +183,8 @@ class GishehApplication(Adw.Application):
         self._present_welcome_tour(revisit=self.controller is not None)
 
     def do_shutdown(self) -> None:
+        if self.controller is not None:
+            self.controller.close_background_jobs()
         simkl_client.close_image_http_client()
         Adw.Application.do_shutdown(self)
 

@@ -95,18 +95,6 @@ class RecommendationNormalizationTests(unittest.TestCase):
             "https://www.youtube.com/watch?v=trailer_123",
         )
 
-    def test_title_external_url_uses_tmdb_media_namespace(self) -> None:
-        movie = _parent("Movies")
-        show = _parent("Shows")
-        self.assertEqual(
-            gisheh.GishehWindow._title_external_url(movie),
-            "https://www.themoviedb.org/movie/10",
-        )
-        self.assertEqual(
-            gisheh.GishehWindow._title_external_url(show),
-            "https://www.themoviedb.org/tv/10",
-        )
-
     def test_movie_item_under_show_parent_uses_movie_namespace(self) -> None:
         parent = _parent("Shows")
         with patch.object(tmdb_client, "cached_image", return_value=None):

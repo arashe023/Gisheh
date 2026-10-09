@@ -1,0 +1,45 @@
+name: Build and test
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    timeout-minutes: 20
+    steps:
+      - name: Install build and graphical test dependencies
+        run: >-
+          pacman -Syu --noconfirm --needed git python python-gobject python-cairo
+          python-httpx gtk4 libadwaita libsecret meson ninja gettext
+          desktop-file-utils appstream xorg-server-xvfb xorg-xauth dbus ruff
+      - uses: actions/checkout@v4
+      - name: Lint
+        run: ruff check src tests
+      - name: Configure and compile
+        run: |
+          meson setup build --prefix=/tmp/gisheh-install
+          meson compile -C build
+      - name: Test
+        run: meson test -C build --print-errorlogs
+      - name: Repeat graphical regressions
+        run: meson test -C build gtk-tests --repeat=2 --print-errorlogs
+      - name: Validate translations
+        run: msgfmt --check --statistics -o /tmp/gisheh-fa.mo po/fa.po
+      - name: Install and smoke test outside checkout
+        run: |
+          meson install -C build
+          GSK_RENDERER=cairo GDK_BACKEND=x11 xvfb-run -a dbus-run-session -- python tests/installed_smoke.py /tmp/gisheh-install
+      - name: Collect environment-free test results
+        if: always()
+        run: python build-aux/collect-test-results.py build/meson-logs validation-results
+      - name: Retain validation results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-validation
+          path: |
+            validation-results/
+          if-no-files-found: warn

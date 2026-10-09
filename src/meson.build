@@ -26,6 +26,20 @@ python.install_sources(
     'gisheh/state_store.py',
     'gisheh/version.py',
     'gisheh/window.py',
+    'gisheh/controllers.py',
+    'gisheh/jobs.py',
+    'gisheh/transactions.py',
+    'gisheh/recovery.py',
+    'gisheh/library_backup.py',
+    'gisheh/data_actions.py',
+    'gisheh/app_logging.py',
+    'gisheh/constants.py',
+    'gisheh/layout.py',
+    'gisheh/localization.py',
+    'gisheh/models.py',
+    'gisheh/widgets.py',
+    'gisheh/profile.py',
+
   ),
   subdir: 'gisheh',
 )
@@ -65,22 +79,11 @@ gisheh_launcher = custom_target(
   install_mode: 'rwxr-xr-x',
 )
 
-glib_compile_resources = find_program('glib-compile-resources')
-gisheh_resources = custom_target(
-  'gisheh-resources',
-  input: 'gisheh/io.github.arashe023.Gisheh.gresource.xml',
-  depend_files: files(
-    'gisheh/ui/window.ui',
-    'gisheh/style.css',
-    'gisheh/assets/tmdb-logo.svg',
-  ),
-  output: 'gisheh.gresource',
-  command: [
-    glib_compile_resources,
-    '--sourcedir', meson.current_source_dir() / 'gisheh',
-    '--target', '@OUTPUT@',
-    '@INPUT@',
-  ],
+gisheh_resources = gnome.compile_resources(
+  'gisheh',
+  'gisheh/io.github.arashe023.Gisheh.gresource.xml',
+  source_dir: 'gisheh',
+  gresource_bundle: true,
   install: true,
   install_dir: python_package_dir,
 )

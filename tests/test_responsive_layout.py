@@ -623,15 +623,18 @@ class ResponsiveStructureTests(unittest.TestCase):
         source = (root / "window.py").read_text(encoding="utf-8")
         self.assertIn('id="compact_media_bar"', ui)
         self.assertIn('id="compact_media_switcher"', ui)
-        self.assertIn("COMPACT_MEDIA_SWITCHER_WIDTH = 560", source)
+        self.assertEqual(gisheh.COMPACT_MEDIA_SWITCHER_WIDTH, 640)
         self.assertIn("self.compact_media_switcher.add", source)
 
-    def test_detail_title_is_keyboard_activatable_link(self) -> None:
+    def test_detail_title_is_a_plain_label_without_external_link(self) -> None:
         source = self._source()
         ui = (
             Path(gisheh.__file__).resolve().parent / "ui/window.ui"
         ).read_text(encoding="utf-8")
-        self.assertIn('class="GtkLinkButton" id="detail_title"', ui)
+        self.assertIn('class="GtkLabel" id="detail_title"', ui)
+        self.assertNotIn("GtkLinkButton", ui)
+        self.assertNotIn("_title_external_url", source)
+        self.assertNotIn("activate-link", source)
         self.assertNotIn("title_click = Gtk.GestureClick()", ui)
         self.assertNotIn("Use compact sidebar", source)
 
@@ -1092,6 +1095,66 @@ class NarrowSizingTests(unittest.TestCase):
             hero.index("record.backdrop_file"),
             hero.index("trailer_info.thumbnail_file"),
         )
+
+
+class DetailOverviewWrappingTests(unittest.TestCase):
+    """The details overview must wrap at the panel width, not a char cap."""
+
+    @staticmethod
+    def _ui_root() -> ET.Element:
+        ui = (
+            Path(gisheh.__file__).resolve().parent / "ui/window.ui"
+        ).read_text(encoding="utf-8")
+        return ET.fromstring(ui)
+
+    @staticmethod
+    def _object_properties(root: ET.Element, object_id: str) -> dict[str, str]:
+        for node in root.iter("object"):
+            if node.get("id") == object_id:
+                return {
+                    item.get("name"): (item.text or "").strip()
+                    for item in node.findall("property")
+                }
+        raise AssertionError(f"missing ui object {object_id!r}")
+
+    def test_overview_label_fills_the_details_width(self) -> None:
+        properties = self._object_properties(self._ui_root(), "overview_label")
+        self.assertEqual(properties.get("wrap"), "true")
+        self.assertEqual(properties.get("wrap-mode"), "word")
+        self.assertEqual(properties.get("justify"), "fill")
+        self.assertEqual(properties.get("hexpand"), "true")
+        self.assertNotIn("max-width-chars", properties)
+
+    def test_episode_overview_label_fills_the_details_width(self) -> None:
+        source = Path(gisheh.__file__).read_text(encoding="utf-8")
+        self.assertIn(
+            "self.episode_overview_label.set_wrap_mode(Pango.WrapMode.WORD)",
+            source,
+        )
+        self.assertIn(
+            "self.episode_overview_label.set_justify(Gtk.Justification.FILL)",
+            source,
+        )
+        self.assertIn("self.episode_overview_label.set_hexpand(True)", source)
+        self.assertNotIn(
+            "self.episode_overview_label.set_max_width_chars(42)",
+            source,
+        )
+
+
+class SectionEyebrowRemovalTests(unittest.TestCase):
+    """Section eyebrow captions are removed from every section header."""
+
+    def test_no_eyebrow_objects_remain_in_ui(self) -> None:
+        ui = (
+            Path(gisheh.__file__).resolve().parent / "ui/window.ui"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("eyebrow", ui)
+
+    def test_no_eyebrow_references_remain_in_source(self) -> None:
+        source = Path(gisheh.__file__).read_text(encoding="utf-8")
+        self.assertNotIn("eyebrow_label", source)
+        self.assertNotIn("explore_eyebrow_label", source)
 
 
 if __name__ == "__main__":

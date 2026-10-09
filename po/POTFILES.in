@@ -5,3 +5,13 @@ src/gisheh/application.py
 src/gisheh/onboarding.py
 src/gisheh/window.py
 src/gisheh/ui/window.ui
+src/gisheh/app_logging.py
+src/gisheh/constants.py
+src/gisheh/layout.py
+src/gisheh/localization.py
+src/gisheh/models.py
+src/gisheh/widgets.py
+src/gisheh/recovery.py
+src/gisheh/data_actions.py
+src/gisheh/transactions.py
+src/gisheh/profile.py

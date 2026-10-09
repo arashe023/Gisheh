@@ -13,20 +13,20 @@ from gisheh.services import tmdb_client
 
 
 class TmdbClientTests(unittest.TestCase):
-    def test_application_language_selects_persian_tmdb_locale(self) -> None:
+    def test_system_language_is_independent_of_removed_ui_override(self) -> None:
         with patch.dict(
             os.environ,
             {"GISHEH_LANGUAGE": "fa", "LANGUAGE": "en"},
             clear=False,
         ):
-            self.assertEqual(tmdb_client.active_language(), "fa-IR")
+            self.assertEqual(tmdb_client.active_language(), "en-US")
 
         with patch.dict(
             os.environ,
             {"GISHEH_LANGUAGE": "en", "LANGUAGE": "fa"},
             clear=False,
         ):
-            self.assertEqual(tmdb_client.active_language(), "en-US")
+            self.assertEqual(tmdb_client.active_language(), "fa-IR")
 
     def test_localized_merge_keeps_persian_and_fills_missing_english(self) -> None:
         merged = tmdb_client.merge_localized_payloads(
@@ -62,6 +62,16 @@ class TmdbClientTests(unittest.TestCase):
         headers = client.get.call_args.kwargs["headers"]
         self.assertEqual(headers["Authorization"], "Bearer test-token")
         self.assertTrue(payload["success"])
+
+    def test_configuration_accepts_array_but_metadata_requires_object(self):
+        response = Mock(status_code=200)
+        response.json.return_value = [{"iso_639_1": "de"}]
+        client = Mock()
+        client.get.return_value = response
+        with patch.object(tmdb_client.image_http, "get_client", return_value=client):
+            self.assertEqual(tmdb_client.request_json("/configuration/languages", token="t", expect_list=True), response.json.return_value)
+            with self.assertRaises(tmdb_client.TmdbError):
+                tmdb_client.request_json("/movie/1", token="t")
 
     def test_environment_token_has_priority(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -317,7 +327,7 @@ class TmdbClientTests(unittest.TestCase):
             )
 
         with (
-            patch.dict(os.environ, {"GISHEH_LANGUAGE": "fa"}, clear=False),
+            patch.dict(os.environ, {"LANGUAGE": "fa"}, clear=False),
             patch.object(tmdb_client, "request_json", side_effect=response) as requester,
         ):
             payload = tmdb_client.fetch_episode_details("token", 20, 3, 6)

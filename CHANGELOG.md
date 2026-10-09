@@ -1,6 +1,23 @@
 # تغییرات Gisheh
 
-## منتشرنشده
+## 1.5.0-rc1 — 2026-10-09
+
+- Redesign Profile with native Adwaita identity, activity summaries and expandable statistics.
+- Follow the system interface language and mirror navigation in RTL locales.
+- Fetch the searchable TMDB content language list independently from the interface.
+- Add native keyboard shortcuts, accessible action labels and adaptive dialogs.
+- Prepare a standalone Flatpak release candidate and streamlined bilingual documentation.
+- Isolate GTK tests and initialize GTK/libadwaita before constructing widgets.
+- Track all GResource inputs and localize installed desktop/store metadata.
+- Validate and version state, keep private atomic backups, and provide explicit recovery.
+- Export and restore local libraries without credentials, cached artwork or cloud writes.
+- Preserve a timestamped pre-import recovery point across subsequent saves.
+- Extract models, localization, layout, service controllers, logging and reusable widgets.
+- Bound worker pools and discard callbacks from closed windows or old ownership sessions.
+- Restore in-memory local changes after failed saves and distinguish already committed Simkl writes.
+- Move the media selector earlier in narrow windows to avoid a minimum-width trap.
+- Add CI, installed-app smoke checks, English documentation and release handoff instructions.
+
 
 ## 1.4.0 — 2026-09-12
 

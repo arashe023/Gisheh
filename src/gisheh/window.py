@@ -2,34 +2,29 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import math
 import os
 import random
-import re
 import sys
-import threading
 import time
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, replace
+from concurrent.futures import as_completed
+from dataclasses import replace
 from datetime import date, datetime
 from getpass import getuser
 from gettext import gettext as _
 from gettext import ngettext
-from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
-import cairo
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 gi.require_version("PangoCairo", "1.0")
 
-from gi.repository import Adw, Gdk, Gio, GLib, Gtk, Pango, PangoCairo
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk, Pango
 
 from .services import simkl_client, tmdb_client
 from .state_store import (
@@ -38,7 +33,6 @@ from .state_store import (
     LIBRARY_MODES,
     clear_state,
     read_state,
-    save_library_mode,
     write_state,
 )
 from .state_store import (
@@ -46,87 +40,147 @@ from .state_store import (
 )
 from .version import APP_VERSION
 
-APP_ID = "io.github.arashe023.Gisheh"
-APP_NAME = "Gisheh"
+
+# Explicit compatibility exports for existing callers.
+from .app_logging import (
+    PrivateRotatingFileHandler as PrivateRotatingFileHandler,
+    _APP_LOGGER as _APP_LOGGER,
+    application_log_file as application_log_file,
+    application_logger as application_logger,
+    clear_application_logs as clear_application_logs,
+    read_application_log as read_application_log,
+)
+from .constants import (
+    APP_ID as APP_ID,
+    APP_NAME as APP_NAME,
+    CALENDAR_TIMELINE_PAGE_SIZE as CALENDAR_TIMELINE_PAGE_SIZE,
+    COLLECTIONS as COLLECTIONS,
+    COLLECTION_NAMES as COLLECTION_NAMES,
+    COLOR_SCHEMES as COLOR_SCHEMES,
+    COLOR_SCHEME_LABELS as COLOR_SCHEME_LABELS,
+    EXPLORE_PERIODS as EXPLORE_PERIODS,
+    EXPLORE_SORT_OPTIONS as EXPLORE_SORT_OPTIONS,
+    GRID_CARD_HEIGHT as GRID_CARD_HEIGHT,
+    GRID_CARD_WIDTH as GRID_CARD_WIDTH,
+    GRID_COLUMN_GAP as GRID_COLUMN_GAP,
+    GRID_HORIZONTAL_PADDING as GRID_HORIZONTAL_PADDING,
+    GRID_MAX_COLUMNS as GRID_MAX_COLUMNS,
+    GRID_ROW_HEIGHT as GRID_ROW_HEIGHT,
+    MEDIA_TYPES as MEDIA_TYPES,
+    N_ as N_,
+    SORT_OPTIONS as SORT_OPTIONS,
+)
+from .layout import (
+    COMPACT_MEDIA_SWITCHER_WIDTH as COMPACT_MEDIA_SWITCHER_WIDTH,
+    DETAILS_INLINE as DETAILS_INLINE,
+    DETAILS_INLINE_WIDTH as DETAILS_INLINE_WIDTH,
+    DETAILS_NARROW_SAFE_MARGIN as DETAILS_NARROW_SAFE_MARGIN,
+    DETAILS_NAVIGATION as DETAILS_NAVIGATION,
+    DETAILS_OVERLAY as DETAILS_OVERLAY,
+    DETAILS_OVERLAY_MAX_WIDTH as DETAILS_OVERLAY_MAX_WIDTH,
+    DETAILS_OVERLAY_MIN_WIDTH as DETAILS_OVERLAY_MIN_WIDTH,
+    EXPLORE_COLUMN_HYSTERESIS as EXPLORE_COLUMN_HYSTERESIS,
+    EXPLORE_SAFE_CONTENT_WIDTH as EXPLORE_SAFE_CONTENT_WIDTH,
+    RESPONSIVE_INLINE_ENTER_WIDTH as RESPONSIVE_INLINE_ENTER_WIDTH,
+    RESPONSIVE_INLINE_EXIT_WIDTH as RESPONSIVE_INLINE_EXIT_WIDTH,
+    RESPONSIVE_LAYOUT_GAPS as RESPONSIVE_LAYOUT_GAPS,
+    RESPONSIVE_MEDIUM_WIDTH as RESPONSIVE_MEDIUM_WIDTH,
+    RESPONSIVE_NARROW_ENTER_WIDTH as RESPONSIVE_NARROW_ENTER_WIDTH,
+    RESPONSIVE_NARROW_EXIT_WIDTH as RESPONSIVE_NARROW_EXIT_WIDTH,
+    RESPONSIVE_NARROW_WIDTH as RESPONSIVE_NARROW_WIDTH,
+    RESPONSIVE_SIDEBAR_ENTER_WIDTH as RESPONSIVE_SIDEBAR_ENTER_WIDTH,
+    RESPONSIVE_SIDEBAR_EXIT_WIDTH as RESPONSIVE_SIDEBAR_EXIT_WIDTH,
+    RESPONSIVE_WIDE_ENTER_WIDTH as RESPONSIVE_WIDE_ENTER_WIDTH,
+    RESPONSIVE_WIDE_EXIT_WIDTH as RESPONSIVE_WIDE_EXIT_WIDTH,
+    RESPONSIVE_WIDE_WIDTH as RESPONSIVE_WIDE_WIDTH,
+    ResponsiveLayout as ResponsiveLayout,
+    SIDEBAR_EXPANDED as SIDEBAR_EXPANDED,
+    SIDEBAR_EXPANDED_MAX_WIDTH as SIDEBAR_EXPANDED_MAX_WIDTH,
+    SIDEBAR_EXPANDED_MIN_WIDTH as SIDEBAR_EXPANDED_MIN_WIDTH,
+    SIDEBAR_HIDDEN as SIDEBAR_HIDDEN,
+    build_explore_layout_plan as build_explore_layout_plan,
+    details_back_action as details_back_action,
+    grid_columns_for_width as grid_columns_for_width,
+    preserve_explore_page_prefix as preserve_explore_page_prefix,
+    responsive_layout_for_width as responsive_layout_for_width,
+    should_refresh_simkl_stats as should_refresh_simkl_stats,
+)
+from .localization import (
+    STORED_FALLBACK_LABELS as STORED_FALLBACK_LABELS,
+    TMDB_COUNTRY_LABELS as TMDB_COUNTRY_LABELS,
+    TMDB_GENRES as TMDB_GENRES,
+    TMDB_GENRE_EN_NAME_TO_ID as TMDB_GENRE_EN_NAME_TO_ID,
+    TMDB_STATUS_LABELS as TMDB_STATUS_LABELS,
+    _normalize_stored_country as _normalize_stored_country,
+    _normalize_stored_fallback as _normalize_stored_fallback,
+    _normalize_stored_genres as _normalize_stored_genres,
+    localize_collection_status as localize_collection_status,
+    localize_countries as localize_countries,
+    localize_country_name as localize_country_name,
+    localize_genre_name as localize_genre_name,
+    localize_genre_names as localize_genre_names,
+    localize_tmdb_status as localize_tmdb_status,
+)
+from .models import (
+    CastMember as CastMember,
+    EpisodeInfo as EpisodeInfo,
+    EpisodeWatch as EpisodeWatch,
+    SeasonInfo as SeasonInfo,
+    TitleRecord as TitleRecord,
+    VideoInfo as VideoInfo,
+    _tmdb_palette as _tmdb_palette,
+    certification_from_tmdb as certification_from_tmdb,
+    enrich_record_from_tmdb as enrich_record_from_tmdb,
+    enrich_records_from_tmdb_cache as enrich_records_from_tmdb_cache,
+    format_watch_time as format_watch_time,
+    format_watched_iso as format_watched_iso,
+    is_episode_group_complete as is_episode_group_complete,
+    load_catalog as load_catalog,
+    main_progress_season_indexes as main_progress_season_indexes,
+    merge_tmdb_season_episodes as merge_tmdb_season_episodes,
+    parse_watched_date as parse_watched_date,
+    parse_watched_datetime as parse_watched_datetime,
+    recommendation_records_from_tmdb as recommendation_records_from_tmdb,
+    runtime_from_tmdb as runtime_from_tmdb,
+    runtime_minutes as runtime_minutes,
+    should_show_completion_progress as should_show_completion_progress,
+    simkl_history_changed as simkl_history_changed,
+    title_record_from_tmdb as title_record_from_tmdb,
+    title_record_to_mapping as title_record_to_mapping,
+    title_records_from_simkl as title_records_from_simkl,
+    tmdb_rating_from_payload as tmdb_rating_from_payload,
+    validate_watched_iso as validate_watched_iso,
+    video_infos_from_tmdb as video_infos_from_tmdb,
+    watched_datetime_from_parts as watched_datetime_from_parts,
+    watched_now_iso as watched_now_iso,
+)
+from .widgets import (
+    build_calendar_row,
+    build_library_row,
+    GeneratedPosterWidget as GeneratedPosterWidget,
+    MediaViewer as MediaViewer,
+    PosterWidget as PosterWidget,
+    SidebarRow as SidebarRow,
+    _hex_to_rgb as _hex_to_rgb,
+    _rounded_rectangle as _rounded_rectangle,
+)
+
 RESOURCE_DIR = Path(__file__).resolve().parent
 RESOURCE_PREFIX = "/io/github/arashe023/Gisheh"
 UI_RESOURCE = f"{RESOURCE_PREFIX}/ui/window.ui"
 CSS_RESOURCE = f"{RESOURCE_PREFIX}/style.css"
 UI_FILE = RESOURCE_DIR / "ui" / "window.ui"
 CSS_FILE = RESOURCE_DIR / "style.css"
-_APP_LOGGER: logging.Logger | None = None
 
 
-def N_(message: str) -> str:
-    """Mark a deferred user-facing string for gettext extraction."""
-    return message
+def is_rtl_language_selection() -> bool:
+    """Only the system-derived GTK direction controls application layout."""
+    return Gtk.Widget.get_default_direction() == Gtk.TextDirection.RTL
 
 
-class PrivateRotatingFileHandler(RotatingFileHandler):
-    """Rotating log whose active file always remains private to the user."""
-
-    def _open(self) -> Any:
-        stream = super()._open()
-        try:
-            os.chmod(self.baseFilename, 0o600)
-        except OSError:
-            pass
-        return stream
-
-
-MEDIA_TYPES = (N_("Movies"), N_("Shows"), N_("Anime"))
-COLLECTIONS = (
-    (N_("Watching"), "media-playback-start-symbolic"),
-    (N_("Watched"), "object-select-symbolic"),
-    (N_("On Hold"), "media-playback-pause-symbolic"),
-    (N_("Dropped"), "user-trash-symbolic"),
-    (N_("Watchlist"), "bookmark-new-symbolic"),
-)
-COLLECTION_NAMES = tuple(name for name, _icon_name in COLLECTIONS)
-SORT_OPTIONS = (
-    ("recent", N_("Last watched")),
-    ("title", N_("Title")),
-    ("rating", N_("Highest rated")),
-    ("year", N_("Release year")),
-)
-EXPLORE_SORT_OPTIONS = (
-    ("trending", N_("Trending")),
-    ("popular", N_("Popular")),
-    ("rating", N_("Top rated")),
-    ("upcoming", N_("Coming soon")),
-)
-EXPLORE_PERIODS = (N_("This month"), N_("This year"), N_("All releases"))
-GRID_CARD_WIDTH = 140
-GRID_CARD_HEIGHT = 210
-GRID_COLUMN_GAP = 10
-GRID_HORIZONTAL_PADDING = 24
-GRID_MAX_COLUMNS = 6
-GRID_ROW_HEIGHT = 226
-CALENDAR_TIMELINE_PAGE_SIZE = 120
-
-COLOR_SCHEMES = ("system", "light", "dark")
-COLOR_SCHEME_LABELS = (N_("Follow system"), N_("Light"), N_("Dark"))
-TEMPORARY_LANGUAGES = ("system", "en", "fa")
-# Experimental TMDB content-language options. "system" follows the OS
-# language; the rest are explicit TMDB locales (see tmdb_client).
-CONTENT_LANGUAGES = ("system", "en-US", "fa-IR")
-
-
-def is_rtl_language_selection(
-    temporary_language: str = "system",
-    content_language: str = "system",
-) -> bool:
-    """Return True when the effective UI language needs right-to-left layout."""
-    if temporary_language == "fa":
-        return True
-    if content_language == "fa-IR":
-        return True
-    if temporary_language == "system" and content_language == "system":
-        try:
-            return tmdb_client.active_language() == tmdb_client.PERSIAN_LANGUAGE
-        except AttributeError:
-            return False
-    return False
+def sidebar_position_for_direction(rtl: bool) -> Gtk.PackType:
+    """Use the leading edge: GTK mirrors START to the right in RTL locales."""
+    return Gtk.PackType.START
 
 
 def set_calendar_date(calendar: Gtk.Calendar, selected: GLib.DateTime) -> None:
@@ -138,176 +192,18 @@ def set_calendar_date(calendar: Gtk.Calendar, selected: GLib.DateTime) -> None:
     calendar.select_day(selected)
 
 
-def should_show_completion_progress(media_type: str) -> bool:
-    """Return whether episodic completion progress belongs in title details."""
-    return media_type != "Movies"
+# English TMDB/Simkl status values mapped to translatable labels. Keys are
+# normalized (casefolded/stripped) English strings as received from the APIs;
+# values are marked with N_() so every status can enter the translation
+# catalog and be rendered per language at display time.
+
+# Common production-country names/codes mapped to translatable labels.
+# Unknown values fall through untranslated (proper nouns stay as-is).
 
 
-def is_episode_group_complete(watched: int, total: int) -> bool:
-    """Treat a season as complete only when it has episodes and all are watched."""
-    return total > 0 and watched >= total
-
-
-TMDB_GENRES = {
-    12: N_("Adventure"),
-    14: N_("Fantasy"),
-    16: N_("Animation"),
-    18: N_("Drama"),
-    27: N_("Horror"),
-    28: N_("Action"),
-    35: N_("Comedy"),
-    36: N_("History"),
-    37: N_("Western"),
-    53: N_("Thriller"),
-    80: N_("Crime"),
-    99: N_("Documentary"),
-    878: N_("Science Fiction"),
-    9648: N_("Mystery"),
-    10402: N_("Music"),
-    10749: N_("Romance"),
-    10751: N_("Family"),
-    10752: N_("War"),
-    10759: N_("Action & Adventure"),
-    10762: N_("Kids"),
-    10763: N_("News"),
-    10764: N_("Reality"),
-    10765: N_("Sci-Fi & Fantasy"),
-    10766: N_("Soap"),
-    10767: N_("Talk"),
-    10768: N_("War & Politics"),
-}
-
-
-def certification_from_tmdb(payload: dict[str, Any], media_type: str) -> str:
-    """Return the best available regional certification from TMDB details."""
-    namespace = "movie" if media_type == "movie" else "tv"
-    resource = "release_dates" if namespace == "movie" else "content_ratings"
-    result_items = payload.get(resource, {}).get("results", ())
-    results = [item for item in result_items if isinstance(item, dict)]
-
-    origin_codes = [
-        str(code).upper() for code in payload.get("origin_country", ()) if code
-    ]
-    origin_codes.extend(
-        str(item.get("iso_3166_1") or "").upper()
-        for item in payload.get("production_countries", ())
-        if isinstance(item, dict) and item.get("iso_3166_1")
-    )
-    preferred_regions = tuple(dict.fromkeys(("US", *origin_codes, "GB", "CA", "AU")))
-
-    def value_for(item: dict[str, Any]) -> str:
-        if namespace == "tv":
-            return str(item.get("rating") or "").strip()
-        release_items = [
-            release
-            for release in item.get("release_dates", ())
-            if isinstance(release, dict)
-            and str(release.get("certification") or "").strip()
-        ]
-        release_priority = {3: 0, 2: 1, 4: 2, 5: 3, 6: 4, 1: 5}
-        release_items.sort(
-            key=lambda release: release_priority.get(
-                int(release.get("type") or 0),
-                9,
-            )
-        )
-        return (
-            str(release_items[0].get("certification") or "").strip()
-            if release_items
-            else ""
-        )
-
-    by_region = {
-        str(item.get("iso_3166_1") or "").upper(): item
-        for item in results
-        if item.get("iso_3166_1")
-    }
-    for region in preferred_regions:
-        certification = value_for(by_region.get(region, {}))
-        if certification:
-            return certification
-    for item in results:
-        certification = value_for(item)
-        if certification:
-            return certification
-    return "Unrated"
-
-
-def application_log_file() -> Path:
-    configured = os.environ.get("XDG_STATE_HOME")
-    base = (
-        Path(configured).expanduser()
-        if configured
-        else Path.home() / ".local" / "state"
-    )
-    return base / APP_ID / "gisheh.log"
-
-
-def application_logger() -> logging.Logger:
-    global _APP_LOGGER
-    if _APP_LOGGER is not None:
-        return _APP_LOGGER
-
-    logger = logging.getLogger(APP_ID)
-    logger.setLevel(logging.INFO)
-    logger.propagate = False
-    formatter = logging.Formatter(
-        "%(asctime)s  %(levelname)s  %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-    stream = logging.StreamHandler(sys.stderr)
-    stream.setFormatter(formatter)
-    logger.addHandler(stream)
-    try:
-        destination = application_log_file()
-        destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        os.chmod(destination.parent, 0o700)
-        file_handler = PrivateRotatingFileHandler(
-            destination,
-            maxBytes=1_000_000,
-            backupCount=2,
-            encoding="utf-8",
-        )
-        file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
-    except OSError as error:
-        logger.warning("File logging is unavailable: %s", error)
-    _APP_LOGGER = logger
-    return logger
-
-
-def read_application_log(max_bytes: int = 250_000) -> str:
-    path = application_log_file()
-    try:
-        with path.open("rb") as source:
-            source.seek(0, os.SEEK_END)
-            size = source.tell()
-            source.seek(max(0, size - max_bytes))
-            content = source.read()
-    except FileNotFoundError:
-        return "No log entries yet."
-    except OSError as error:
-        return f"Could not read the application log: {error}"
-    text = content.decode("utf-8", errors="replace")
-    if size > max_bytes:
-        text = text.split("\n", 1)[-1]
-    return text or "No log entries yet."
-
-
-def clear_application_logs() -> None:
-    """Close active file handlers and remove the log plus rotated copies."""
-    global _APP_LOGGER
-    if _APP_LOGGER is not None:
-        for handler in tuple(_APP_LOGGER.handlers):
-            _APP_LOGGER.removeHandler(handler)
-            handler.close()
-        _APP_LOGGER = None
-    destination = application_log_file()
-    for path in destination.parent.glob(f"{destination.name}*"):
-        try:
-            path.unlink()
-        except FileNotFoundError:
-            pass
+# English fallback sentences stored in older state files, mapped to their
+# translatable equivalents so previously saved records also display per
+# language. Keys are the exact English strings; values are marked with N_().
 
 
 def clear_desktop_preferences() -> None:
@@ -355,2011 +251,84 @@ def user_state_file() -> Path:
     return persistent_user_state_file()
 
 
-def runtime_minutes(value: str) -> int:
-    """Convert the catalog's compact duration strings to minutes."""
-    hours = re.search(r"(\d+)\s*h", value)
-    minutes = re.search(r"(\d+)\s*m", value)
-    if hours or minutes:
-        return (int(hours.group(1)) * 60 if hours else 0) + (
-            int(minutes.group(1)) if minutes else 0
-        )
-    return 0
-
-
-def parse_watched_datetime(value: str) -> datetime | None:
-    """Parse canonical ISO 8601 or legacy watched timestamps."""
-    text = value.strip()
-    if not text:
-        return None
-    try:
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        parsed = None
-    if parsed is None:
-        try:
-            parsed = datetime.strptime(text, "%b %d, %Y at %I:%M %p").replace(
-                tzinfo=datetime.now().astimezone().tzinfo
-            )
-        except ValueError:
-            return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=datetime.now().astimezone().tzinfo)
-    return parsed
-
-
-def parse_watched_date(value: str) -> date | None:
-    parsed = parse_watched_datetime(value)
-    return parsed.date() if parsed is not None else None
-
-
-def watched_now_iso() -> str:
-    """Return the current local time as a canonical ISO 8601 timestamp."""
-    return datetime.now().astimezone().replace(microsecond=0).isoformat()
-
-
-def watched_datetime_from_parts(
-    year: int,
-    month: int,
-    day: int,
-    hour: int,
-    minute: int,
-    *,
-    hour_is_12h: bool = False,
-    is_pm: bool = False,
-) -> datetime | None:
-    """Build a timezone-aware local datetime from dialog controls."""
-    try:
-        year, month, day, hour, minute = (
-            int(year),
-            int(month),
-            int(day),
-            int(hour),
-            int(minute),
-        )
-    except (TypeError, ValueError):
-        return None
-    if hour_is_12h:
-        if not 1 <= hour <= 12:
-            return None
-        hour = (hour % 12) + (12 if is_pm else 0)
-    elif not 0 <= hour <= 23:
-        return None
-    if not 0 <= minute <= 59:
-        return None
-    try:
-        moment = datetime(
-            year,
-            month,
-            day,
-            hour,
-            minute,
-            tzinfo=datetime.now().astimezone().tzinfo,
-        )
-    except ValueError:
-        return None
-    return moment
-
-
-def validate_watched_iso(
-    value: str,
-    *,
-    now: datetime | None = None,
-) -> str | None:
-    """Return an error message for an invalid watched timestamp, else None."""
-    parsed = parse_watched_datetime(value)
-    if parsed is None:
-        return "The selected date and time are not valid."
-    reference = now if now is not None else datetime.now().astimezone()
-    if reference.tzinfo is None:
-        reference = reference.replace(tzinfo=datetime.now().astimezone().tzinfo)
-    if parsed > reference:
-        return "The watched time cannot be in the future."
-    return None
-
-
-def format_watched_iso(value: str) -> str:
-    """Format a canonical or legacy watched timestamp for display."""
-    parsed = parse_watched_datetime(value)
-    if parsed is None:
-        return value
-    hour = parsed.strftime("%I").lstrip("0") or "12"
-    return (
-        f"{parsed.strftime('%b')} {parsed.day}, {parsed.year} at "
-        f"{hour}:{parsed.strftime('%M %p')}"
-    )
-
-
-def simkl_history_changed(result: object) -> bool:
-    """Return whether a /sync/history response recorded anything new.
-
-    Simkl ignores a history write for an already-completed item (all
-    ``added`` counts stay zero). Callers use this to tell "saved" apart
-    from "already had it, nothing changed".
-    """
-    return simkl_client.history_sync_result(result).changed
-
-
-def format_watch_time(minutes: int) -> str:
-    days, remainder = divmod(max(0, minutes), 24 * 60)
-    hours, minutes = divmod(remainder, 60)
-    parts = []
-    if days:
-        parts.append(f"{days}d")
-    if hours:
-        parts.append(f"{hours}h")
-    if minutes or not parts:
-        parts.append(f"{minutes}m")
-    return " ".join(parts)
-
-
-def merge_tmdb_season_episodes(
-    episodes: tuple[EpisodeInfo, ...],
-    tmdb_episodes: Any,
-    *,
-    cached_image_lookup: Any = None,
-) -> tuple[EpisodeInfo, ...]:
-    """Merge one TMDB season response into existing episodes by episode number.
-
-    Matching uses ``episode_number`` (not list position) so specials and
-    unusual orders stay correct. Empty TMDB values never replace useful
-    existing values. Malformed items are skipped without affecting valid ones.
-    """
-    if not isinstance(tmdb_episodes, (list, tuple)):
-        return episodes
-    by_number: dict[int, dict[str, Any]] = {}
-    for item in tmdb_episodes:
-        if not isinstance(item, dict):
-            continue
-        try:
-            number = int(item.get("episode_number"))
-        except (TypeError, ValueError):
-            continue
-        if number not in by_number:
-            by_number[number] = item
-
-    def resolve_artwork(still_path: str) -> str | None:
-        if cached_image_lookup is not None:
-            try:
-                return cached_image_lookup(still_path)
-            except (OSError, RuntimeError):
-                return None
-        try:
-            return tmdb_client.cached_image(still_path, size="w780")
-        except OSError:
-            return None
-
-    merged: list[EpisodeInfo] = []
-    for episode in episodes:
-        payload = by_number.get(episode.number)
-        if payload is None:
-            merged.append(episode)
-            continue
-        try:
-            title_value = str(payload.get("name") or "").strip()
-            title = title_value if title_value else episode.title
-            date_value = str(payload.get("air_date") or "").strip()
-            date = date_value if date_value else episode.date
-            description_value = str(payload.get("overview") or "").strip()
-            description = (
-                description_value if description_value else episode.description
-            )
-            try:
-                runtime_value = int(payload.get("runtime") or 0)
-            except (TypeError, ValueError):
-                runtime_value = 0
-            runtime = (
-                format_watch_time(runtime_value)
-                if runtime_value > 0
-                else episode.runtime
-            )
-            guest_stars = payload.get("guest_stars")
-            if isinstance(guest_stars, list) and guest_stars:
-                cast_items: list[CastMember] = []
-                for member in guest_stars[:12]:
-                    if not isinstance(member, dict):
-                        continue
-                    profile_path = str(member.get("profile_path") or "")
-                    try:
-                        profile_file = (
-                            tmdb_client.cached_image(profile_path, size="w185")
-                            if profile_path
-                            else None
-                        )
-                    except OSError:
-                        profile_file = None
-                    cast_items.append(
-                        CastMember(
-                            name=str(member.get("name") or "Unknown"),
-                            role=str(member.get("character") or "Guest star"),
-                            profile_file=profile_file,
-                        )
-                    )
-                cast: tuple[CastMember, ...] = (
-                    tuple(cast_items) if cast_items else episode.cast
-                )
-            else:
-                cast = episode.cast
-            still_path = str(payload.get("still_path") or "").strip()
-            if still_path:
-                artwork_file = resolve_artwork(still_path) or episode.artwork_file
-            else:
-                artwork_file = episode.artwork_file
-            merged.append(
-                replace(
-                    episode,
-                    title=title,
-                    date=date,
-                    description=description,
-                    runtime=runtime,
-                    cast=cast,
-                    artwork_file=artwork_file,
-                )
-            )
-        except (AttributeError, KeyError, OSError, TypeError, ValueError):
-            merged.append(episode)
-    return tuple(merged)
-
-
-def grid_columns_for_width(width: int) -> int:
-    """Return the FlowBox column count implied by the card's real minimum width."""
-    content_width = max(1, width - GRID_HORIZONTAL_PADDING)
-    columns = (content_width + GRID_COLUMN_GAP) // (GRID_CARD_WIDTH + GRID_COLUMN_GAP)
-    return max(1, min(GRID_MAX_COLUMNS, columns))
-
-
-SIDEBAR_EXPANDED = "expanded"
-SIDEBAR_HIDDEN = "hidden"
-
-DETAILS_INLINE = "inline"
-DETAILS_OVERLAY = "overlay"
-DETAILS_NAVIGATION = "navigation"
-
 # Explore must keep enough room for a useful card grid.  This is deliberately
 # part of the responsive contract rather than an accidental consequence of a
 # card's natural size request.
-EXPLORE_SAFE_CONTENT_WIDTH = 480
-RESPONSIVE_LAYOUT_GAPS = 24
 
 # The enter/exit pairs provide a small stable band around each transition.
 # They are intentionally named separately: a layout entered at the upper
 # threshold is not immediately abandoned when allocation changes by a few
 # pixels during a revealer animation.
-RESPONSIVE_WIDE_ENTER_WIDTH = 1200
-RESPONSIVE_WIDE_EXIT_WIDTH = 1160
-RESPONSIVE_SIDEBAR_ENTER_WIDTH = 1040
-RESPONSIVE_SIDEBAR_EXIT_WIDTH = 1000
-RESPONSIVE_INLINE_ENTER_WIDTH = 980
-RESPONSIVE_INLINE_EXIT_WIDTH = 940
-RESPONSIVE_NARROW_ENTER_WIDTH = 720
-RESPONSIVE_NARROW_EXIT_WIDTH = 760
 
 # Compatibility names used by callers and older tests.  New decisions use the
 # explicit enter/exit values above.
-RESPONSIVE_WIDE_WIDTH = RESPONSIVE_WIDE_ENTER_WIDTH
-RESPONSIVE_MEDIUM_WIDTH = RESPONSIVE_INLINE_ENTER_WIDTH
-RESPONSIVE_NARROW_WIDTH = RESPONSIVE_NARROW_ENTER_WIDTH
 
-SIDEBAR_EXPANDED_MIN_WIDTH = 248
-SIDEBAR_EXPANDED_MAX_WIDTH = 300
 
-DETAILS_INLINE_WIDTH = 384
-DETAILS_OVERLAY_MAX_WIDTH = 388
-DETAILS_OVERLAY_MIN_WIDTH = 280
-DETAILS_NARROW_SAFE_MARGIN = 48
-EXPLORE_COLUMN_HYSTERESIS = 20
-COMPACT_MEDIA_SWITCHER_WIDTH = 560
-
-
-@dataclass(frozen=True, slots=True)
-class ResponsiveLayout:
-    sidebar_mode: str
-    details_mode: str
-
-
-def responsive_layout_for_width(
-    width: int,
-    *,
-    details_open: bool = False,
-    current_layout: ResponsiveLayout | None = None,
-) -> ResponsiveLayout:
-    """Map allocated window width to an explicit responsive layout decision.
-
-    The result depends only on its inputs so layout states stay deterministic
-    and unit-testable without GTK widgets.
-    """
-    normalized = max(0, int(width))
-    previous_sidebar = (
-        current_layout.sidebar_mode if current_layout is not None else None
-    )
-    previous_details = (
-        current_layout.details_mode if current_layout is not None else None
-    )
-
-    # A docked sidebar is allowed only when its own minimum, the fixed details
-    # panel, gaps and a useful Explore allocation can coexist.  When details
-    # are closed, the panel has no allocation and the normal wide breakpoint
-    # may keep the sidebar docked.
-    required_inline_with_sidebar = (
-        SIDEBAR_EXPANDED_MIN_WIDTH
-        + DETAILS_INLINE_WIDTH
-        + EXPLORE_SAFE_CONTENT_WIDTH
-        + RESPONSIVE_LAYOUT_GAPS
-    )
-    if details_open:
-        wide_enter = max(RESPONSIVE_WIDE_ENTER_WIDTH, required_inline_with_sidebar)
-        wide_exit = max(RESPONSIVE_WIDE_EXIT_WIDTH, required_inline_with_sidebar)
-    else:
-        wide_enter = RESPONSIVE_SIDEBAR_ENTER_WIDTH
-        wide_exit = RESPONSIVE_SIDEBAR_EXIT_WIDTH
-    keep_wide = previous_sidebar == SIDEBAR_EXPANDED and normalized >= wide_exit
-    can_dock = normalized >= wide_enter or keep_wide
-    if details_open and normalized < required_inline_with_sidebar:
-        can_dock = False
-    sidebar_mode = SIDEBAR_EXPANDED if can_dock else SIDEBAR_HIDDEN
-
-    if not details_open:
-        # The inactive surface stays in its desktop home.  This prevents an
-        # unnecessary mobile reparent before a title has been selected.
-        return ResponsiveLayout(sidebar_mode, DETAILS_INLINE)
-
-    keep_navigation = (
-        previous_details == DETAILS_NAVIGATION
-        and normalized < RESPONSIVE_NARROW_EXIT_WIDTH
-    )
-    if normalized < RESPONSIVE_NARROW_ENTER_WIDTH or keep_navigation:
-        return ResponsiveLayout(SIDEBAR_HIDDEN, DETAILS_NAVIGATION)
-
-    required_inline = (
-        (SIDEBAR_EXPANDED_MIN_WIDTH if sidebar_mode == SIDEBAR_EXPANDED else 0)
-        + DETAILS_INLINE_WIDTH
-        + EXPLORE_SAFE_CONTENT_WIDTH
-        + RESPONSIVE_LAYOUT_GAPS
-    )
-    inline_enter = max(RESPONSIVE_INLINE_ENTER_WIDTH, required_inline)
-    inline_exit = max(RESPONSIVE_INLINE_EXIT_WIDTH, required_inline)
-    keep_inline = previous_details == DETAILS_INLINE and normalized >= inline_exit
-    if normalized >= inline_enter or keep_inline:
-        return ResponsiveLayout(sidebar_mode, DETAILS_INLINE)
-    return ResponsiveLayout(SIDEBAR_HIDDEN, DETAILS_OVERLAY)
-
-
-def details_back_action(inner_tag: str) -> str:
-    """Map the visible inner details page to its Back behavior.
-
-    Returns ``"pop-season"`` (episode → season), ``"pop-title"``
-    (season → title), or ``"close"`` (title → content).
-    """
-    if inner_tag == "episode":
-        return "pop-season"
-    if inner_tag == "season":
-        return "pop-title"
-    return "close"
-
-
-@dataclass(frozen=True, slots=True)
-class CastMember:
-    name: str
-    role: str
-    profile_file: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class EpisodeInfo:
-    id: str
-    number: int
-    title: str
-    date: str
-    description: str
-    watched: bool | None
-    image_variant: int
-    artwork_file: str | None = None
-    runtime: str = ""
-    cast: tuple[CastMember, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
-class EpisodeWatch:
-    season: int
-    episode: int
-    watched_at: str = ""
-
-
-@dataclass(frozen=True, slots=True)
-class SeasonInfo:
-    id: str
-    number: int
-    title: str
-    watched: int
-    episodes: int
-    episode_items: tuple[EpisodeInfo, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
-class VideoInfo:
-    title: str
-    key: str
-    site: str = "YouTube"
-    thumbnail_file: str | None = None
-
-    @property
-    def url(self) -> str | None:
-        if self.site.casefold() == "youtube" and self.key:
-            return f"https://www.youtube.com/watch?v={self.key}"
-        return None
-
-
-def main_progress_season_indexes(seasons: tuple[SeasonInfo, ...]) -> tuple[int, ...]:
-    """Use regular seasons for progress, falling back to Specials-only catalogs."""
-    regular_indexes = tuple(
-        index for index, season in enumerate(seasons) if season.number > 0
-    )
-    return regular_indexes or tuple(range(len(seasons)))
-
-
-@dataclass(frozen=True, slots=True)
-class TitleRecord:
-    id: str
-    title: str
-    media_type: str
-    status: str
-    date: str
-    year: int
-    runtime: str
-    rating: float
-    user_rating: int | None
-    genres: tuple[str, ...]
-    country: str
-    creator: str
-    description: str
-    poster_palette: tuple[str, str, str]
-    poster_variant: int
-    order: int
-    certification: str
-    language: str
-    availability: str
-    network: str
-    external_ratings: tuple[tuple[str, str], ...]
-    cast: tuple[CastMember, ...]
-    seasons: tuple[SeasonInfo, ...]
-    recommendations: tuple[str, ...]
-    discover_period: str
-    featured: bool
-    popularity: int
-    release_rank: int
-    discover_layout: str
-    tmdb_id: int | None = None
-    tmdb_media_type: str | None = None
-    simkl_id: int | None = None
-    imdb_id: str | None = None
-    tvdb_id: int | None = None
-    mal_id: int | None = None
-    artwork_file: str | None = None
-    poster_file: str | None = None
-    backdrop_file: str | None = None
-    gallery_backdrops: tuple[str, ...] = ()
-    gallery_posters: tuple[str, ...] = ()
-    video_titles: tuple[str, ...] = ()
-    videos: tuple[VideoInfo, ...] = ()
-    episode_history: tuple[EpisodeWatch, ...] = ()
-    episode_history_loaded: bool = False
-
-    @classmethod
-    def from_mapping(cls, raw: dict[str, Any]) -> TitleRecord:
-        media_type = str(raw["type"])
-        country = str(raw["country"])
-        discover_period = str(raw.get("discoverPeriod", "All releases"))
-        period_rank = {
-            "This month": 0,
-            "This year": 1,
-            "All releases": 2,
-        }.get(discover_period, 3)
-        order = int(raw["order"])
-
-        def parse_season(item: dict[str, Any], position: int) -> SeasonInfo:
-            title = str(item["title"])
-            default_number = 0 if title.casefold() == "specials" else position
-            number = int(item.get("number", default_number))
-            season_id = str(item.get("id", "specials" if number == 0 else f"s{number}"))
-            return SeasonInfo(
-                id=season_id,
-                number=number,
-                title=title,
-                watched=int(item.get("watched", 0)),
-                episodes=int(item["episodes"]),
-                episode_items=tuple(
-                    EpisodeInfo(
-                        id=str(episode.get("id", f"e{episode_position}")),
-                        number=int(episode.get("number", episode_position)),
-                        title=str(episode.get("title", f"Episode {episode_position}")),
-                        date=str(episode.get("date", str(raw["year"]))),
-                        description=str(episode.get("description", raw["description"])),
-                        watched=(
-                            bool(episode["watched"]) if "watched" in episode else None
-                        ),
-                        image_variant=int(
-                            episode.get("imageVariant", episode_position)
-                        ),
-                        artwork_file=(
-                            str(episode["artworkFile"])
-                            if episode.get("artworkFile") is not None
-                            else None
-                        ),
-                        runtime=str(episode.get("runtime", "")),
-                        cast=tuple(
-                            CastMember(
-                                str(member["name"]),
-                                str(member["role"]),
-                                str(member.get("profileFile") or "") or None,
-                            )
-                            for member in episode.get("cast", ())
-                            if isinstance(member, dict)
-                        ),
-                    )
-                    for episode_position, episode in enumerate(
-                        item.get("episodeItems", ()), start=1
-                    )
-                ),
-            )
-
-        return cls(
-            id=str(raw["id"]),
-            title=str(raw["title"]),
-            media_type=media_type,
-            status=str(raw["status"]),
-            date=str(raw["date"]),
-            year=int(raw["year"]),
-            runtime=str(raw["runtime"]),
-            rating=float(raw["rating"]),
-            user_rating=(
-                int(raw["userRating"]) if raw.get("userRating") is not None else None
-            ),
-            genres=tuple(str(value) for value in raw["genres"]),
-            country=country,
-            creator=str(raw["creator"]),
-            description=str(raw["description"]),
-            poster_palette=tuple(str(value) for value in raw["posterPalette"]),
-            poster_variant=int(raw["posterVariant"]),
-            order=order,
-            certification=str(raw.get("certification", "Unrated")),
-            language=str(raw.get("language", "—")),
-            availability=str(
-                raw.get(
-                    "availability",
-                    "Upcoming"
-                    if "discoverPeriod" in raw
-                    else "Airing"
-                    if media_type != "Movies"
-                    else "Released",
-                )
-            ),
-            network=str(raw.get("network", "Gisheh")),
-            external_ratings=tuple(
-                (str(item["source"]), str(item["value"]))
-                for item in raw.get("externalRatings", ())
-            ),
-            cast=tuple(
-                CastMember(
-                    str(item["name"]),
-                    str(item["role"]),
-                    str(item.get("profileFile") or "") or None,
-                )
-                for item in raw.get("cast", ())
-            ),
-            seasons=tuple(
-                parse_season(item, position)
-                for position, item in enumerate(raw.get("seasons", ()), start=1)
-            ),
-            recommendations=tuple(
-                str(value) for value in raw.get("recommendations", ())
-            ),
-            discover_period=discover_period,
-            featured=bool(raw.get("featured", False)),
-            popularity=int(raw.get("popularity", order)),
-            release_rank=int(raw.get("releaseRank", period_rank * 1000 - order)),
-            discover_layout=str(raw.get("layout", "poster")),
-            tmdb_id=(int(raw["tmdbId"]) if raw.get("tmdbId") is not None else None),
-            tmdb_media_type=(
-                str(raw["tmdbMediaType"])
-                if raw.get("tmdbMediaType") is not None
-                else None
-            ),
-            simkl_id=(int(raw["simklId"]) if raw.get("simklId") is not None else None),
-            imdb_id=str(raw.get("imdbId") or "").strip() or None,
-            tvdb_id=(int(raw["tvdbId"]) if raw.get("tvdbId") is not None else None),
-            mal_id=(int(raw["malId"]) if raw.get("malId") is not None else None),
-            artwork_file=(
-                str(raw["artworkFile"]) if raw.get("artworkFile") is not None else None
-            ),
-            poster_file=(
-                str(raw["posterFile"]) if raw.get("posterFile") is not None else None
-            ),
-            backdrop_file=(
-                str(raw["backdropFile"])
-                if raw.get("backdropFile") is not None
-                else None
-            ),
-            gallery_backdrops=tuple(
-                str(value) for value in raw.get("galleryBackdrops", ())
-            ),
-            gallery_posters=tuple(
-                str(value) for value in raw.get("galleryPosters", ())
-            ),
-            video_titles=tuple(str(value) for value in raw.get("videoTitles", ())),
-            videos=tuple(
-                VideoInfo(
-                    title=str(item.get("title") or "Trailer"),
-                    key=str(item.get("key") or ""),
-                    site=str(item.get("site") or "YouTube"),
-                    thumbnail_file=(
-                        str(item["thumbnailFile"])
-                        if item.get("thumbnailFile") is not None
-                        else None
-                    ),
-                )
-                for item in raw.get("videos", ())
-                if isinstance(item, dict) and item.get("key")
-            ),
-            episode_history=tuple(
-                EpisodeWatch(
-                    season=int(item["season"]),
-                    episode=int(item["episode"]),
-                    watched_at=str(item.get("watchedAt", "")),
-                )
-                for item in raw.get("episodeHistory", ())
-                if isinstance(item, dict)
-                and item.get("season") is not None
-                and item.get("episode") is not None
-            ),
-            episode_history_loaded=bool(raw.get("episodeHistoryLoaded", False)),
-        )
-
-
-def title_record_to_mapping(record: TitleRecord) -> dict[str, Any]:
-    """Serialize one locally owned library record without losing rich metadata."""
-    return {
-        "id": record.id,
-        "title": record.title,
-        "type": record.media_type,
-        "status": record.status,
-        "date": record.date,
-        "year": record.year,
-        "runtime": record.runtime,
-        "rating": record.rating,
-        "userRating": record.user_rating,
-        "genres": list(record.genres),
-        "country": record.country,
-        "creator": record.creator,
-        "description": record.description,
-        "posterPalette": list(record.poster_palette),
-        "posterVariant": record.poster_variant,
-        "order": record.order,
-        "certification": record.certification,
-        "language": record.language,
-        "availability": record.availability,
-        "network": record.network,
-        "externalRatings": [
-            {"source": source, "value": value}
-            for source, value in record.external_ratings
-        ],
-        "cast": [
-            {
-                "name": member.name,
-                "role": member.role,
-                "profileFile": member.profile_file,
-            }
-            for member in record.cast
-        ],
-        "seasons": [
-            {
-                "id": season.id,
-                "number": season.number,
-                "title": season.title,
-                "watched": season.watched,
-                "episodes": season.episodes,
-                "episodeItems": [
-                    {
-                        "id": episode.id,
-                        "number": episode.number,
-                        "title": episode.title,
-                        "date": episode.date,
-                        "description": episode.description,
-                        "watched": episode.watched,
-                        "imageVariant": episode.image_variant,
-                        "artworkFile": episode.artwork_file,
-                        "runtime": episode.runtime,
-                        "cast": [
-                            {
-                                "name": member.name,
-                                "role": member.role,
-                                "profileFile": member.profile_file,
-                            }
-                            for member in episode.cast
-                        ],
-                    }
-                    for episode in season.episode_items
-                ],
-            }
-            for season in record.seasons
-        ],
-        "recommendations": list(record.recommendations),
-        "discoverPeriod": record.discover_period,
-        "featured": record.featured,
-        "popularity": record.popularity,
-        "releaseRank": record.release_rank,
-        "layout": record.discover_layout,
-        "tmdbId": record.tmdb_id,
-        "tmdbMediaType": record.tmdb_media_type,
-        "simklId": record.simkl_id,
-        "imdbId": record.imdb_id,
-        "tvdbId": record.tvdb_id,
-        "malId": record.mal_id,
-        "artworkFile": record.artwork_file,
-        "posterFile": record.poster_file,
-        "backdropFile": record.backdrop_file,
-        "galleryBackdrops": list(record.gallery_backdrops),
-        "galleryPosters": list(record.gallery_posters),
-        "videoTitles": list(record.video_titles),
-        "videos": [
-            {
-                "title": item.title,
-                "key": item.key,
-                "site": item.site,
-                "thumbnailFile": item.thumbnail_file,
-            }
-            for item in record.videos
-        ],
-        "episodeHistory": [
-            {
-                "season": item.season,
-                "episode": item.episode,
-                "watchedAt": item.watched_at,
-            }
-            for item in record.episode_history
-        ],
-        "episodeHistoryLoaded": record.episode_history_loaded,
-    }
-
-
-def load_catalog(
-    *,
-    sample_data_path: Path | None = None,
-) -> tuple[
-    tuple[TitleRecord, ...],
-    tuple[TitleRecord, ...],
-    dict[str, dict[str, int]],
-]:
-    if sample_data_path is not None:
-        with sample_data_path.open(encoding="utf-8") as source:
-            payload = json.load(source)
-    else:
-        payload = {"library": (), "explore": ()}
-
-    # Production callers omit the fixture path, so both the personal library
-    # and Explore start empty and are populated only by user actions or APIs.
-    records = tuple(TitleRecord.from_mapping(raw) for raw in payload["library"])
-    explore_records = tuple(
-        TitleRecord.from_mapping(raw) for raw in payload.get("explore", ())
-    )
-    totals = {
-        media_type: {status: 0 for status in COLLECTION_NAMES}
-        for media_type in MEDIA_TYPES
-    }
-    return records, explore_records, totals
-
-
-def _tmdb_palette(tmdb_id: int) -> tuple[str, str, str]:
-    red = 36 + tmdb_id * 37 % 92
-    green = 42 + tmdb_id * 53 % 90
-    blue = 54 + tmdb_id * 71 % 110
-    return (
-        f"#{red // 2:02x}{green // 2:02x}{blue // 2:02x}",
-        f"#{red:02x}{green:02x}{blue:02x}",
-        f"#{min(255, red + 74):02x}{min(255, green + 74):02x}{min(255, blue + 74):02x}",
-    )
-
-
-def tmdb_rating_from_payload(payload: dict[str, Any]) -> float | None:
-    """Return a real TMDB rating only when TMDB reports at least one vote."""
-    vote_count = payload.get("vote_count")
-    vote_average = payload.get("vote_average")
-    if (
-        not isinstance(vote_count, int)
-        or isinstance(vote_count, bool)
-        or vote_count <= 0
-        or not isinstance(vote_average, (int, float))
-        or isinstance(vote_average, bool)
-    ):
-        return None
-    rating = float(vote_average)
-    if not math.isfinite(rating) or not 0.0 <= rating <= 10.0:
-        return None
-    return round(rating, 1)
-
-
-def title_record_from_tmdb(
-    raw: dict[str, Any],
-    media_type: str,
-    position: int,
-    poster_file: str | None,
-    backdrop_file: str | None,
-) -> TitleRecord:
-    tmdb_id = int(raw["id"])
-    tmdb_namespace = "movie" if media_type == "Movies" else "tv"
-    title = str(raw.get("title") or raw.get("name") or "Untitled")
-    release_date = str(raw.get("release_date") or raw.get("first_air_date") or "")
-    year = (
-        int(release_date[:4])
-        if release_date[:4].isdigit()
-        else datetime.now().astimezone().year
-    )
-    genres = tuple(
-        TMDB_GENRES[genre_id]
-        for genre_id in raw.get("genre_ids", ())
-        if genre_id in TMDB_GENRES
-    ) or ("Uncategorized",)
-    origin = raw.get("origin_country") or ()
-    country = str(origin[0]) if origin else "—"
-    tmdb_rating = tmdb_rating_from_payload(raw)
-    rating = tmdb_rating if tmdb_rating is not None else 0.0
-    return TitleRecord(
-        id=f"tmdb-{tmdb_namespace}-{tmdb_id}",
-        title=title,
-        media_type=media_type,
-        status="Watchlist",
-        date=release_date or "Release date unavailable",
-        year=year,
-        runtime="Runtime unavailable",
-        rating=rating,
-        user_rating=None,
-        genres=genres,
-        country=country,
-        creator="TMDB",
-        description=str(raw.get("overview") or "No overview is available yet."),
-        poster_palette=_tmdb_palette(tmdb_id),
-        poster_variant=tmdb_id % 6 + 1,
-        order=max(1, 1000 - position),
-        certification="Loading…",
-        language=str(raw.get("original_language") or "—").upper(),
-        availability="Released" if media_type == "Movies" else "Airing",
-        network="TMDB",
-        external_ratings=(
-            (("TMDB", f"{tmdb_rating:.1f}"),) if tmdb_rating is not None else ()
-        ),
-        cast=(),
-        seasons=(),
-        recommendations=(),
-        discover_period="This month",
-        featured=position == 1,
-        popularity=round(float(raw.get("popularity") or 0)),
-        release_rank=position,
-        discover_layout="poster",
-        tmdb_id=tmdb_id,
-        tmdb_media_type=tmdb_namespace,
-        artwork_file=poster_file or backdrop_file,
-        poster_file=poster_file,
-        backdrop_file=backdrop_file,
-    )
-
-
-def recommendation_records_from_tmdb(
-    items: Any,
-    parent: TitleRecord,
-    *,
-    start_position: int = 1,
-) -> tuple[TitleRecord, ...]:
-    """Normalize TMDB recommendation results into openable title records.
-
-    Matches the shared ``title_record_from_tmdb()`` path used by Explore and
-    search results. Skips the parent title and duplicate TMDB IDs, preserves
-    TMDB order, and caps the result at 12 entries.
-    """
-    if not isinstance(items, (list, tuple)):
-        return ()
-    parent_ids = {parent.tmdb_id} if parent.tmdb_id is not None else set()
-    seen: set[int] = set(parent_ids)
-    records: list[TitleRecord] = []
-    position = max(1, start_position)
-    for item in items:
-        if len(records) >= 12:
-            break
-        if not isinstance(item, dict):
-            continue
-        try:
-            tmdb_id = int(item["id"])
-        except (TypeError, ValueError, KeyError):
-            continue
-        if tmdb_id in seen:
-            continue
-        seen.add(tmdb_id)
-        kind = str(item.get("media_type") or "").lower()
-        if kind == "movie":
-            media_type = "Movies"
-        elif kind == "tv":
-            media_type = (
-                parent.media_type
-                if parent.media_type in ("Shows", "Anime")
-                else "Shows"
-            )
-        elif parent.media_type in ("Movies", "Shows", "Anime"):
-            media_type = parent.media_type
-        elif (parent.tmdb_media_type or "movie") == "movie":
-            media_type = "Movies"
-        else:
-            media_type = "Shows"
-        try:
-            poster_file = tmdb_client.cached_image(
-                str(item.get("poster_path") or ""),
-                size="w342",
-            )
-            backdrop_file = tmdb_client.cached_image(
-                str(item.get("backdrop_path") or ""),
-                size="w780",
-            )
-        except OSError:
-            poster_file, backdrop_file = None, None
-        try:
-            record = title_record_from_tmdb(
-                item,
-                media_type,
-                position,
-                poster_file,
-                backdrop_file,
-            )
-        except (TypeError, ValueError, KeyError):
-            continue
-        if record.id == parent.id:
-            continue
-        records.append(record)
-        position += 1
-    return tuple(records)
-
-
-def video_infos_from_tmdb(items: Any) -> tuple[VideoInfo, ...]:
-    """Normalize playable YouTube videos and attach any cached thumbnails."""
-    if not isinstance(items, (list, tuple)):
-        return ()
-    videos: list[VideoInfo] = []
-    seen: set[str] = set()
-    for item in items:
-        if len(videos) >= 8:
-            break
-        if not isinstance(item, dict):
-            continue
-        site = str(item.get("site") or "")
-        key = str(item.get("key") or "").strip()
-        if site.casefold() != "youtube" or not key or key in seen:
-            continue
-        seen.add(key)
-        videos.append(
-            VideoInfo(
-                title=str(item.get("name") or "Trailer"),
-                key=key,
-                site=site,
-                thumbnail_file=tmdb_client.cached_youtube_thumbnail(key),
-            )
-        )
-    return tuple(videos)
-
-
-def runtime_from_tmdb(payload: dict[str, Any], fallback: str) -> str:
-    """Read a useful duration even when TMDB omits episode_run_time."""
-    candidates: list[Any] = [payload.get("runtime")]
-    episode_runtimes = payload.get("episode_run_time")
-    if isinstance(episode_runtimes, (list, tuple)):
-        candidates.extend(episode_runtimes)
-    if fallback in {"", "Loading from TMDB…", "Runtime unavailable"}:
-        for episode_key in ("last_episode_to_air", "next_episode_to_air"):
-            episode = payload.get(episode_key)
-            if isinstance(episode, dict):
-                candidates.append(episode.get("runtime"))
-    for candidate in candidates:
-        try:
-            minutes = int(candidate or 0)
-        except (TypeError, ValueError):
-            continue
-        if minutes > 0:
-            return format_watch_time(minutes)
-    return fallback
-
-
-def enrich_record_from_tmdb(
-    record: TitleRecord,
-    payload: dict[str, Any],
-    *,
-    poster_file: str | None = None,
-    backdrop_file: str | None = None,
-) -> TitleRecord:
-    """Apply TMDB-owned catalog metadata while preserving Simkl user state."""
-    title = str(payload.get("title") or payload.get("name") or record.title)
-    release_date = str(
-        payload.get("release_date") or payload.get("first_air_date") or ""
-    )
-    year = int(release_date[:4]) if release_date[:4].isdigit() else record.year
-    genre_items = payload.get("genres", ())
-    genres = tuple(
-        str(item["name"])
-        for item in genre_items
-        if isinstance(item, dict) and item.get("name")
-    )
-    if not genres:
-        genres = (
-            tuple(
-                TMDB_GENRES[genre_id]
-                for genre_id in payload.get("genre_ids", ())
-                if genre_id in TMDB_GENRES
-            )
-            or record.genres
-        )
-
-    runtime = runtime_from_tmdb(payload, record.runtime)
-
-    countries = [
-        str(item.get("name") or item.get("iso_3166_1"))
-        for item in payload.get("production_countries", ())
-        if isinstance(item, dict) and (item.get("name") or item.get("iso_3166_1"))
-    ]
-    if not countries:
-        countries = [str(value) for value in payload.get("origin_country", ()) if value]
-    creators = [
-        str(item.get("name"))
-        for item in payload.get("created_by", ())
-        if isinstance(item, dict) and item.get("name")
-    ]
-    if not creators:
-        creators = [
-            str(item.get("name"))
-            for item in payload.get("production_companies", ())[:2]
-            if isinstance(item, dict) and item.get("name")
-        ]
-    networks = [
-        str(item.get("name"))
-        for item in payload.get("networks", ())
-        if isinstance(item, dict) and item.get("name")
-    ]
-    tmdb_rating = tmdb_rating_from_payload(payload)
-    external_ratings = (
-        (("TMDB", f"{tmdb_rating:.1f}"),) if tmdb_rating is not None else ()
-    )
-    if record.user_rating is not None:
-        external_ratings += (("Your rating", str(record.user_rating)),)
-
-    poster_path = str(payload.get("poster_path") or "")
-    backdrop_path = str(payload.get("backdrop_path") or "")
-    poster_file = poster_file or tmdb_client.cached_image(poster_path, size="w500")
-    backdrop_file = backdrop_file or tmdb_client.cached_image(
-        backdrop_path,
-        size="w780",
-    )
-    return replace(
-        record,
-        title=title,
-        year=year,
-        runtime=runtime,
-        rating=tmdb_rating if tmdb_rating is not None else 0.0,
-        genres=genres,
-        country=", ".join(countries[:2]) or record.country,
-        creator=", ".join(creators[:2]) or "TMDB",
-        description=str(payload.get("overview") or record.description),
-        certification=certification_from_tmdb(
-            payload,
-            record.tmdb_media_type or "movie",
-        ),
-        language=str(payload.get("original_language") or record.language).upper(),
-        availability=str(payload.get("status") or record.availability),
-        network=", ".join(networks[:2]) or "TMDB",
-        external_ratings=external_ratings,
-        popularity=round(float(payload.get("popularity") or record.popularity)),
-        artwork_file=poster_file or backdrop_file or record.artwork_file,
-        poster_file=poster_file or record.poster_file,
-        backdrop_file=backdrop_file or record.backdrop_file,
-    )
-
-
-def enrich_records_from_tmdb_cache(
-    records: tuple[TitleRecord, ...],
-) -> tuple[TitleRecord, ...]:
-    enriched: list[TitleRecord] = []
-    for record in records:
-        if record.tmdb_id is None or record.tmdb_media_type is None:
-            enriched.append(record)
-            continue
-        summary = tmdb_client.load_summary(
-            record.tmdb_media_type,
-            record.tmdb_id,
-        )
-        enriched.append(
-            enrich_record_from_tmdb(record, summary) if summary is not None else record
-        )
-    return tuple(enriched)
-
-
-def title_records_from_simkl(payload: dict[str, Any]) -> tuple[TitleRecord, ...]:
-    status_map = {
-        "plantowatch": "Watchlist",
-        "watching": "Watching",
-        "hold": "On Hold",
-        "completed": "Watched",
-        "dropped": "Dropped",
-    }
-    media_map = {
-        "movies": ("Movies", "movie", "movie"),
-        "shows": ("Shows", "show", "tv"),
-        "anime": ("Anime", "show", "tv"),
-    }
-    sortable: list[tuple[str, TitleRecord]] = []
-    for group, (media_type, object_key, tmdb_namespace) in media_map.items():
-        items = payload.get(group, ())
-        if not isinstance(items, list):
-            continue
-        for position, entry in enumerate(items, start=1):
-            if not isinstance(entry, dict):
-                continue
-            media = entry.get(object_key)
-            if not isinstance(media, dict):
-                continue
-            ids = media.get("ids") if isinstance(media.get("ids"), dict) else {}
-            simkl_id = ids.get("simkl")
-            try:
-                numeric_simkl_id = int(simkl_id)
-            except (TypeError, ValueError):
-                continue
-            user_rating = entry.get("user_rating")
-            raw_status = str(entry.get("status") or "")
-            if raw_status not in status_map:
-                continue
-            status = status_map[raw_status]
-            try:
-                watched_count = int(entry.get("watched_episodes_count") or 0)
-                total_count = int(entry.get("total_episodes_count") or 0)
-            except (TypeError, ValueError):
-                continue
-            try:
-                simkl_runtime_minutes = int(media.get("runtime") or 0)
-            except (TypeError, ValueError):
-                simkl_runtime_minutes = 0
-            simkl_runtime = (
-                format_watch_time(simkl_runtime_minutes)
-                if simkl_runtime_minutes > 0
-                else "Runtime unavailable"
-            )
-            raw_seasons = entry.get("seasons")
-            episode_history: list[EpisodeWatch] = []
-            if isinstance(raw_seasons, list):
-                for raw_season in raw_seasons:
-                    if not isinstance(raw_season, dict):
-                        continue
-                    try:
-                        season_number = int(raw_season.get("number") or 0)
-                    except (TypeError, ValueError):
-                        continue
-                    raw_episodes = raw_season.get("episodes")
-                    if not isinstance(raw_episodes, list):
-                        continue
-                    for raw_episode in raw_episodes:
-                        if not isinstance(raw_episode, dict):
-                            continue
-                        mapping = raw_episode.get("tvdb")
-                        mapped_season = season_number
-                        mapped_episode = raw_episode.get("number")
-                        if isinstance(mapping, dict):
-                            mapped_season = mapping.get("season", mapped_season)
-                            mapped_episode = mapping.get("episode", mapped_episode)
-                        try:
-                            mapped_season = int(mapped_season)
-                            mapped_episode = int(mapped_episode)
-                        except (TypeError, ValueError):
-                            continue
-                        watched_value = raw_episode.get("watched")
-                        if mapped_episode <= 0 or (
-                            watched_value is not None and not bool(watched_value)
-                        ):
-                            continue
-                        episode_history.append(
-                            EpisodeWatch(
-                                season=mapped_season,
-                                episode=mapped_episode,
-                                watched_at=str(raw_episode.get("watched_at") or ""),
-                            )
-                        )
-            last_activity = str(
-                entry.get("last_watched_at") or entry.get("added_to_watchlist_at") or ""
-            )
-            tmdb_value = ids.get("tmdb")
-            try:
-                tmdb_id = int(tmdb_value) if tmdb_value is not None else None
-            except (TypeError, ValueError):
-                tmdb_id = None
-            record = TitleRecord(
-                id=f"simkl-{group}-{simkl_id}",
-                title=_("Loading from TMDB…"),
-                media_type=media_type,
-                status=status,
-                date=last_activity or "Synced from Simkl",
-                year=0,
-                runtime=simkl_runtime,
-                rating=0.0,
-                user_rating=(
-                    int(user_rating)
-                    if isinstance(user_rating, int) and 1 <= user_rating <= 10
-                    else None
-                ),
-                genres=("Loading from TMDB",),
-                country="—",
-                creator="TMDB",
-                description=_("Catalog metadata is loading from TMDB."),
-                poster_palette=_tmdb_palette(numeric_simkl_id),
-                poster_variant=numeric_simkl_id % 6 + 1,
-                order=max(1, 100000 - position),
-                certification="Loading…",
-                language="—",
-                availability=str(entry.get("status") or "Synced")
-                .replace("plantowatch", "Plan to watch")
-                .title(),
-                network="TMDB",
-                external_ratings=(
-                    (("Your rating", str(user_rating)),)
-                    if isinstance(user_rating, int) and 1 <= user_rating <= 10
-                    else ()
-                ),
-                cast=(),
-                seasons=(
-                    (
-                        SeasonInfo(
-                            id="s1",
-                            number=1,
-                            title=_("Progress"),
-                            watched=watched_count,
-                            episodes=total_count,
-                        ),
-                    )
-                    if media_type != "Movies" and total_count
-                    else ()
-                ),
-                recommendations=(),
-                discover_period="All releases",
-                featured=False,
-                popularity=0,
-                release_rank=position,
-                discover_layout="poster",
-                tmdb_id=tmdb_id,
-                tmdb_media_type=tmdb_namespace if tmdb_id is not None else None,
-                simkl_id=numeric_simkl_id,
-                imdb_id=str(ids.get("imdb") or "").strip() or None,
-                tvdb_id=(
-                    int(ids["tvdb"]) if str(ids.get("tvdb") or "").isdigit() else None
-                ),
-                mal_id=(
-                    int(ids["mal"]) if str(ids.get("mal") or "").isdigit() else None
-                ),
-                episode_history=tuple(episode_history),
-                episode_history_loaded=isinstance(raw_seasons, list),
-            )
-            sortable.append((last_activity, record))
-    sortable.sort(key=lambda item: (item[0], item[1].id), reverse=True)
-    return tuple(
-        replace(record, order=max(1, len(sortable) - position))
-        for position, (_activity, record) in enumerate(sortable)
-    )
-
-
-def should_refresh_simkl_stats(
-    *,
-    has_incremental_state: bool,
-    repairing_metadata: bool,
-    cached_stats: dict[str, Any],
-    activities: dict[str, Any],
-    last_sync: str,
-) -> bool:
-    """Avoid the expensive statistics request when account activity is unchanged."""
-    if not cached_stats:
-        return True
-    if repairing_metadata:
-        return False
-    return not has_incremental_state or activities.get("all") != last_sync
-
-
-def build_explore_layout_plan(
-    count: int,
-    columns: int,
-    seed: int,
-) -> tuple[tuple[tuple[str, int], ...], ...]:
-    """Build varied rows without ever assigning one card the complete width."""
-    columns = max(1, columns)
-    if columns == 1:
-        patterns = ((("poster", 1),),)
-    elif columns == 2:
-        patterns = ((("poster", 1), ("poster", 1)),)
-    elif columns == 3:
-        patterns = ((("poster", 1), ("poster", 1), ("poster", 1)),)
-    elif columns == 4:
-        patterns = (
-            (("poster", 1), ("poster", 1), ("poster", 1), ("poster", 1)),
-            (("landscape", 2), ("landscape", 2)),
-            (("landscape", 2), ("poster", 1), ("poster", 1)),
-            (("poster", 1), ("poster", 1), ("landscape", 2)),
-        )
-    else:
-        patterns = (
-            tuple(("poster", 1) for _ in range(columns)),
-            (
-                ("hero", 3),
-                ("landscape", 2),
-                *(("poster", 1) for _ in range(columns - 5)),
-            ),
-            (
-                ("landscape", 2),
-                ("hero", 3),
-                *(("poster", 1) for _ in range(columns - 5)),
-            ),
-            (("hero", 3), *(("poster", 1) for _ in range(columns - 3))),
-            (
-                ("landscape", 2),
-                ("landscape", 2),
-                *(("poster", 1) for _ in range(columns - 4)),
-            ),
-            (("landscape", 2), *(("poster", 1) for _ in range(columns - 2))),
-        )
-
-    rng = random.Random(seed)
-    rows: list[tuple[tuple[str, int], ...]] = []
-    remaining = max(0, count)
-    previous_signature: tuple[str, ...] | None = None
-    while remaining:
-        candidates = [pattern for pattern in patterns if len(pattern) <= remaining]
-        if not candidates:
-            rows.append(tuple(("poster", 1) for _ in range(remaining)))
-            break
-        alternatives = [
-            pattern
-            for pattern in candidates
-            if tuple(kind for kind, _span in pattern) != previous_signature
-        ]
-        pattern = rng.choice(alternatives or candidates)
-        rows.append(pattern)
-        previous_signature = tuple(kind for kind, _span in pattern)
-        remaining -= len(pattern)
-    return tuple(rows)
-
-
-def preserve_explore_page_prefix(
-    existing: tuple[TitleRecord, ...],
-    filtered: tuple[TitleRecord, ...],
-) -> tuple[TitleRecord, ...]:
-    """Keep rendered pagination results stable and append newly visible rows."""
-    filtered_by_id = {record.id: record for record in filtered}
-    existing_ids = tuple(
-        record.id for record in existing if record.id in filtered_by_id
-    )
-    existing_id_set = set(existing_ids)
-    return (
-        *(filtered_by_id[record_id] for record_id in existing_ids),
-        *(record for record in filtered if record.id not in existing_id_set),
-    )
-
-
-def _hex_to_rgb(value: str) -> tuple[float, float, float]:
-    value = value.removeprefix("#")
-    return tuple(int(value[index : index + 2], 16) / 255 for index in (0, 2, 4))
-
-
-def _rounded_rectangle(
-    context: cairo.Context,
-    x: float,
-    y: float,
-    width: float,
-    height: float,
-    radius: float,
-) -> None:
-    radius = min(radius, width / 2, height / 2)
-    context.new_sub_path()
-    context.arc(x + width - radius, y + radius, radius, -math.pi / 2, 0)
-    context.arc(x + width - radius, y + height - radius, radius, 0, math.pi / 2)
-    context.arc(x + radius, y + height - radius, radius, math.pi / 2, math.pi)
-    context.arc(x + radius, y + radius, radius, math.pi, math.pi * 1.5)
-    context.close_path()
-
-
-class GeneratedPosterWidget(Gtk.DrawingArea):
-    """Tiny native poster renderer; no image decoder or browser is required."""
-
-    def __init__(
-        self,
-        record: TitleRecord,
-        width: int,
-        height: int,
-        *,
-        variant_offset: int = 0,
-        show_text: bool = True,
-        fixed_size: bool = True,
-    ) -> None:
-        super().__init__()
-        self.record = record
-        self.variant_offset = variant_offset
-        self.show_text = show_text
-        if fixed_size:
-            self.set_content_width(width)
-            self.set_content_height(height)
-            self.set_size_request(width, height)
-        self.set_tooltip_text(f"{record.title}, {record.year}")
-        self.set_accessible_role(Gtk.AccessibleRole.IMG)
-        self.update_property(
-            [Gtk.AccessibleProperty.LABEL],
-            [f"Poster artwork for {record.title}"],
-        )
-        self.set_draw_func(self._draw)
-
-    def _draw(
-        self,
-        _area: Gtk.DrawingArea,
-        context: cairo.Context,
-        width: int,
-        height: int,
-    ) -> None:
-        first, second, third = (
-            _hex_to_rgb(color) for color in self.record.poster_palette
-        )
-        radius = min(11.0, width * 0.12)
-
-        context.save()
-        _rounded_rectangle(context, 0.5, 0.5, width - 1, height - 1, radius)
-        context.clip()
-
-        gradient = cairo.LinearGradient(0, 0, width, height)
-        gradient.add_color_stop_rgb(0, *first)
-        gradient.add_color_stop_rgb(0.58, *second)
-        gradient.add_color_stop_rgb(1, *third)
-        context.set_source(gradient)
-        context.paint()
-
-        self._draw_art(context, width, height, third)
-
-        if not self.show_text:
-            fade = cairo.LinearGradient(0, height * 0.54, 0, height)
-            fade.add_color_stop_rgba(0, 0, 0, 0, 0)
-            fade.add_color_stop_rgba(1, 0, 0, 0, 0.48)
-            context.set_source(fade)
-            context.rectangle(0, height * 0.54, width, height * 0.46)
-            context.fill()
-            context.restore()
-            context.set_line_width(1)
-            context.set_source_rgba(1, 1, 1, 0.16)
-            _rounded_rectangle(context, 0.5, 0.5, width - 1, height - 1, radius)
-            context.stroke()
-            return
-
-        context.set_source_rgba(0, 0, 0, 0.58)
-        context.rectangle(0, height * 0.73, width, height * 0.27)
-        context.fill()
-
-        context.set_source_rgb(1, 1, 1)
-        title = self.record.title.upper()
-        context.move_to(width * 0.08, height * 0.87)
-        title_layout = PangoCairo.create_layout(context)
-        title_layout.set_text(title, -1)
-        title_layout.set_width(int(width * 0.84 * Pango.SCALE))
-        title_layout.set_ellipsize(Pango.EllipsizeMode.END)
-        title_layout.set_single_paragraph_mode(True)
-        title_font = Pango.FontDescription("Sans Bold")
-        title_font.set_absolute_size(int(max(7.0, width * 0.085) * Pango.SCALE))
-        title_layout.set_font_description(title_font)
-        PangoCairo.show_layout(context, title_layout)
-
-        context.set_source_rgba(1, 1, 1, 0.78)
-        context.move_to(width * 0.08, height * 0.95)
-        year_layout = PangoCairo.create_layout(context)
-        year_layout.set_text(str(self.record.year), -1)
-        year_font = Pango.FontDescription("Sans")
-        year_font.set_absolute_size(int(max(6.0, width * 0.07) * Pango.SCALE))
-        year_layout.set_font_description(year_font)
-        PangoCairo.show_layout(context, year_layout)
-
-        context.restore()
-
-        context.set_line_width(1)
-        context.set_source_rgba(1, 1, 1, 0.16)
-        _rounded_rectangle(context, 0.5, 0.5, width - 1, height - 1, radius)
-        context.stroke()
-
-    def _draw_art(
-        self,
-        context: cairo.Context,
-        width: int,
-        height: int,
-        accent: tuple[float, float, float],
-    ) -> None:
-        variant = ((self.record.poster_variant - 1 + self.variant_offset) % 6) + 1
-        context.set_line_width(max(1.0, width * 0.018))
-
-        if variant == 1:
-            context.set_source_rgba(*accent, 0.9)
-            context.arc(width * 0.68, height * 0.23, width * 0.2, 0, math.tau)
-            context.fill()
-            context.set_source_rgba(0, 0, 0, 0.55)
-            context.arc(width * 0.75, height * 0.18, width * 0.18, 0, math.tau)
-            context.fill()
-            context.arc(width * 0.5, height * 0.5, width * 0.1, 0, math.tau)
-            context.fill()
-            context.rectangle(width * 0.4, height * 0.57, width * 0.2, height * 0.26)
-            context.fill()
-        elif variant == 2:
-            context.set_source_rgba(0, 0, 0, 0.56)
-            for center_x in (0.36, 0.64):
-                context.arc(width * center_x, height * 0.48, width * 0.14, 0, math.tau)
-                context.fill()
-                context.rectangle(
-                    width * (center_x - 0.13),
-                    height * 0.56,
-                    width * 0.26,
-                    height * 0.27,
-                )
-                context.fill()
-        elif variant == 3:
-            context.set_source_rgba(*accent, 0.72)
-            context.arc(width * 0.55, height * 0.4, width * 0.27, 0, math.tau)
-            context.fill()
-            context.set_source_rgba(1, 0.78, 0.25, 0.72)
-            for index in range(12):
-                angle = math.tau * index / 12
-                context.move_to(
-                    width * 0.55 + math.cos(angle) * width * 0.31,
-                    height * 0.4 + math.sin(angle) * width * 0.31,
-                )
-                context.line_to(
-                    width * 0.55 + math.cos(angle) * width * 0.44,
-                    height * 0.4 + math.sin(angle) * width * 0.44,
-                )
-            context.stroke()
-        elif variant == 4:
-            context.set_source_rgba(1, 1, 1, 0.78)
-            context.rectangle(width * 0.08, height * 0.1, width * 0.38, height * 0.6)
-            context.fill()
-            context.set_source_rgba(0, 0, 0, 0.7)
-            context.rectangle(width * 0.14, height * 0.18, width * 0.2, height * 0.22)
-            context.fill()
-            context.set_source_rgba(*accent, 0.86)
-            context.rectangle(width * 0.5, height * 0.28, width * 0.42, height * 0.25)
-            context.fill()
-        elif variant == 5:
-            context.set_source_rgba(*accent, 0.74)
-            for index in range(5):
-                angle = -math.pi / 2 + index * math.tau / 5
-                next_angle = angle + math.tau * 2 / 5
-                context.move_to(
-                    width * 0.5 + math.cos(angle) * width * 0.33,
-                    height * 0.42 + math.sin(angle) * width * 0.33,
-                )
-                context.line_to(
-                    width * 0.5 + math.cos(next_angle) * width * 0.33,
-                    height * 0.42 + math.sin(next_angle) * width * 0.33,
-                )
-            context.stroke()
-            context.set_source_rgba(0, 0, 0, 0.55)
-            context.arc(width * 0.5, height * 0.43, width * 0.16, 0, math.tau)
-            context.fill()
-        else:
-            context.set_source_rgba(*accent, 0.72)
-            context.arc(width * 0.62, height * 0.29, width * 0.25, 0, math.tau)
-            context.fill()
-            context.set_source_rgba(1, 1, 1, 0.38)
-            context.move_to(width * 0.08, height * 0.67)
-            context.curve_to(
-                width * 0.32,
-                height * 0.48,
-                width * 0.6,
-                height * 0.8,
-                width * 0.94,
-                height * 0.56,
-            )
-            context.line_to(width * 0.94, height * 0.78)
-            context.line_to(width * 0.08, height * 0.78)
-            context.close_path()
-            context.fill()
-
-
-class PosterWidget(Gtk.Widget):
-    """Display cached TMDB artwork, falling back to the local poster renderer."""
-
-    def __init__(
-        self,
-        record: TitleRecord,
-        width: int,
-        height: int,
-        *,
-        variant_offset: int = 0,
-        show_text: bool = True,
-        flexible_width: bool = False,
-    ) -> None:
-        super().__init__()
-        self.fixed_width = width
-        self.fixed_height = height
-        self.flexible_width = flexible_width
-        if flexible_width:
-            self.set_size_request(-1, height)
-        else:
-            self.set_size_request(width, height)
-        self.set_overflow(Gtk.Overflow.HIDDEN)
-        self.add_css_class("rounded-media")
-        self.set_tooltip_text(f"{record.title}, {record.year}")
-        self.set_accessible_role(Gtk.AccessibleRole.IMG)
-        self.update_property(
-            [Gtk.AccessibleProperty.LABEL],
-            [f"Artwork for {record.title}"],
-        )
-
-        artwork_path = Path(record.artwork_file) if record.artwork_file else None
-        if artwork_path is not None and artwork_path.is_file():
-            picture = Gtk.Picture.new_for_filename(str(artwork_path))
-            picture.set_content_fit(Gtk.ContentFit.COVER)
-            picture.set_can_shrink(True)
-            picture.set_hexpand(True)
-            picture.set_vexpand(True)
-            self._media_child: Gtk.Widget = picture
-        else:
-            pending = Gtk.Box()
-            pending.set_hexpand(True)
-            pending.set_vexpand(True)
-            pending.add_css_class("content-skeleton-surface")
-            pending.set_tooltip_text(
-                _("Loading artwork for {title}").format(title=record.title)
-            )
-            self._media_child = pending
-        self._media_child.set_parent(self)
-
-    def do_measure(
-        self,
-        orientation: Gtk.Orientation,
-        _for_size: int,
-    ) -> tuple[int, int, int, int]:
-        """Keep cached images from imposing their intrinsic size on card layouts."""
-        if orientation == Gtk.Orientation.HORIZONTAL:
-            if self.flexible_width:
-                # The parent grid assigns this width.  A natural artwork width
-                # would otherwise be propagated through GtkGrid and make the
-                # outer window request room for a card span.
-                return 0, 0, -1, -1
-            return self.fixed_width, self.fixed_width, -1, -1
-        return self.fixed_height, self.fixed_height, -1, -1
-
-    def do_size_allocate(
-        self,
-        width: int,
-        height: int,
-        baseline: int,
-    ) -> None:
-        self._media_child.allocate(width, height, baseline, None)
-
-    def do_snapshot(self, snapshot: Gtk.Snapshot) -> None:
-        self.snapshot_child(self._media_child, snapshot)
-
-    def do_dispose(self) -> None:
-        if self._media_child is not None:
-            self._media_child.unparent()
-            self._media_child = None
-        super().do_dispose()
-
-
-class MediaViewer(Gtk.Overlay):
-    """A Tuba-inspired, in-window viewer for a collection of local images."""
-
-    def __init__(self, window: Adw.ApplicationWindow) -> None:
-        super().__init__()
-        self.window = window
-        self.items: tuple[tuple[str, str], ...] = ()
-        self.position = 0
-        self.zoom_level = 1.0
-        self.texture: Gdk.Texture | None = None
-        self._fullscreen_from_viewer = False
-
-        self.set_hexpand(True)
-        self.set_vexpand(True)
-        self.set_halign(Gtk.Align.FILL)
-        self.set_valign(Gtk.Align.FILL)
-        self.set_focusable(True)
-        self.set_visible(False)
-        self.set_can_target(False)
-        self.add_css_class("media-viewer")
-
-        toolbar = Adw.ToolbarView()
-        header = Adw.HeaderBar()
-        header.set_show_start_title_buttons(False)
-        header.set_show_end_title_buttons(False)
-        header.add_css_class("media-viewer-header")
-
-        close_button = Gtk.Button.new_from_icon_name("go-previous-symbolic")
-        close_button.set_tooltip_text(_("Back to Gisheh"))
-        close_button.connect("clicked", lambda *_args: self.close())
-        header.pack_start(close_button)
-
-        self.window_title = Adw.WindowTitle(
-            title=_("Media Viewer"),
-            subtitle="",
-        )
-        header.set_title_widget(self.window_title)
-
-        copy_button = Gtk.Button.new_from_icon_name("edit-copy-symbolic")
-        copy_button.set_tooltip_text(_("Copy image"))
-        copy_button.connect("clicked", self._copy_image)
-        header.pack_end(copy_button)
-
-        self.fullscreen_button = Gtk.Button.new_from_icon_name(
-            "view-fullscreen-symbolic"
-        )
-        self.fullscreen_button.set_tooltip_text(_("Toggle fullscreen"))
-        self.fullscreen_button.connect("clicked", self._toggle_fullscreen)
-        header.pack_end(self.fullscreen_button)
-        toolbar.add_top_bar(header)
-
-        stage = Gtk.Overlay()
-        stage.set_hexpand(True)
-        stage.set_vexpand(True)
-
-        self.scroller = Gtk.ScrolledWindow()
-        self.scroller.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        self.scroller.set_hexpand(True)
-        self.scroller.set_vexpand(True)
-        self.scroller.add_css_class("media-viewer-stage")
-
-        self.picture = Gtk.Picture()
-        self.picture.set_can_shrink(True)
-        self.picture.set_content_fit(Gtk.ContentFit.CONTAIN)
-        self.picture.set_halign(Gtk.Align.CENTER)
-        self.picture.set_valign(Gtk.Align.CENTER)
-        self.picture.add_css_class("media-viewer-picture")
-        self.scroller.set_child(self.picture)
-        stage.set_child(self.scroller)
-
-        page_controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        page_controls.set_halign(Gtk.Align.START)
-        page_controls.set_valign(Gtk.Align.END)
-        page_controls.set_margin_start(18)
-        page_controls.set_margin_bottom(18)
-        page_controls.add_css_class("media-viewer-osd-box")
-        self.previous_button = Gtk.Button.new_from_icon_name("go-previous-symbolic")
-        self.previous_button.set_tooltip_text(_("Previous image (Left)"))
-        self.previous_button.add_css_class("flat")
-        self.previous_button.connect("clicked", lambda *_args: self.previous())
-        page_controls.append(self.previous_button)
-        self.page_label = Gtk.Label(label="1 / 1")
-        self.page_label.add_css_class("numeric")
-        self.page_label.add_css_class("caption")
-        page_controls.append(self.page_label)
-        self.next_button = Gtk.Button.new_from_icon_name("go-next-symbolic")
-        self.next_button.set_tooltip_text(_("Next image (Right)"))
-        self.next_button.add_css_class("flat")
-        self.next_button.connect("clicked", lambda *_args: self.next())
-        page_controls.append(self.next_button)
-        stage.add_overlay(page_controls)
-
-        zoom_controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        zoom_controls.set_halign(Gtk.Align.END)
-        zoom_controls.set_valign(Gtk.Align.END)
-        zoom_controls.set_margin_end(18)
-        zoom_controls.set_margin_bottom(18)
-        zoom_controls.add_css_class("media-viewer-osd-box")
-        zoom_out = Gtk.Button.new_from_icon_name("zoom-out-symbolic")
-        zoom_out.set_tooltip_text(_("Zoom out (Ctrl+-)"))
-        zoom_out.add_css_class("flat")
-        zoom_out.connect("clicked", lambda *_args: self.zoom_out())
-        zoom_controls.append(zoom_out)
-        self.zoom_label = Gtk.Label(label=_("Fit"))
-        self.zoom_label.set_width_chars(6)
-        self.zoom_label.add_css_class("numeric")
-        self.zoom_label.add_css_class("caption")
-        zoom_controls.append(self.zoom_label)
-        zoom_in = Gtk.Button.new_from_icon_name("zoom-in-symbolic")
-        zoom_in.set_tooltip_text(_("Zoom in (Ctrl++)"))
-        zoom_in.add_css_class("flat")
-        zoom_in.connect("clicked", lambda *_args: self.zoom_in())
-        zoom_controls.append(zoom_in)
-        stage.add_overlay(zoom_controls)
-
-        toolbar.set_content(stage)
-        self.set_child(toolbar)
-
-        key_controller = Gtk.EventControllerKey()
-        key_controller.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
-        key_controller.connect("key-pressed", self._on_key_pressed)
-        self.add_controller(key_controller)
-
-        double_click = Gtk.GestureClick()
-        double_click.set_button(Gdk.BUTTON_PRIMARY)
-        double_click.connect("pressed", self._on_picture_pressed)
-        self.picture.add_controller(double_click)
-
-        scroll = Gtk.EventControllerScroll.new(
-            Gtk.EventControllerScrollFlags.VERTICAL
-            | Gtk.EventControllerScrollFlags.DISCRETE
-        )
-        scroll.connect("scroll", self._on_scroll)
-        self.picture.add_controller(scroll)
-
-    def open(
-        self,
-        items: tuple[tuple[str, str], ...],
-        position: int = 0,
-    ) -> None:
-        valid_items = tuple(
-            (path, label) for path, label in items if path and Path(path).is_file()
-        )
-        if not valid_items:
-            return
-        self.items = valid_items
-        self.position = max(0, min(position, len(valid_items) - 1))
-        self.set_visible(True)
-        self.set_can_target(True)
-        self._show_current()
-        GLib.idle_add(self._focus_viewer)
-
-    def _focus_viewer(self) -> bool:
-        self.grab_focus()
-        return GLib.SOURCE_REMOVE
-
-    def close(self) -> None:
-        if not self.get_visible():
-            return
-        if self._fullscreen_from_viewer and self.window.is_fullscreen():
-            self.window.unfullscreen()
-        self._fullscreen_from_viewer = False
-        self.fullscreen_button.set_icon_name("view-fullscreen-symbolic")
-        self.picture.set_paintable(None)
-        self.texture = None
-        self.items = ()
-        self.set_can_target(False)
-        self.set_visible(False)
-
-    def _show_current(self) -> None:
-        if not self.items:
-            return
-        path, label = self.items[self.position]
-        try:
-            self.texture = Gdk.Texture.new_from_filename(path)
-        except GLib.Error:
-            self.texture = None
-        self.picture.set_paintable(self.texture)
-        self.picture.set_alternative_text(label)
-        self.window_title.set_title(label)
-        self.window_title.set_subtitle(
-            f"Image {self.position + 1} of {len(self.items)}"
-        )
-        self.page_label.set_label(f"{self.position + 1} / {len(self.items)}")
-        self.previous_button.set_sensitive(self.position > 0)
-        self.next_button.set_sensitive(self.position < len(self.items) - 1)
-        self.zoom_level = 1.0
-        self._apply_zoom()
-
-    def previous(self) -> None:
-        if self.position <= 0:
-            return
-        self.position -= 1
-        self._show_current()
-
-    def next(self) -> None:
-        if self.position >= len(self.items) - 1:
-            return
-        self.position += 1
-        self._show_current()
-
-    def zoom_in(self) -> None:
-        self.zoom_level = min(4.0, self.zoom_level + 0.5)
-        self._apply_zoom()
-
-    def zoom_out(self) -> None:
-        self.zoom_level = max(1.0, self.zoom_level - 0.5)
-        self._apply_zoom()
-
-    def _apply_zoom(self) -> None:
-        if self.texture is None or self.zoom_level <= 1.0:
-            self.picture.set_size_request(-1, -1)
-            self.picture.set_hexpand(True)
-            self.picture.set_vexpand(True)
-            self.zoom_label.set_label(_("Fit"))
-            return
-        self.picture.set_hexpand(False)
-        self.picture.set_vexpand(False)
-        self.picture.set_size_request(
-            round(self.texture.get_width() * self.zoom_level),
-            round(self.texture.get_height() * self.zoom_level),
-        )
-        self.zoom_label.set_label(f"{round(self.zoom_level * 100)}%")
-
-    def _on_picture_pressed(
-        self,
-        _gesture: Gtk.GestureClick,
-        press_count: int,
-        _x: float,
-        _y: float,
-    ) -> None:
-        if press_count != 2:
-            return
-        self.zoom_level = 1.0 if self.zoom_level > 1.0 else 2.0
-        self._apply_zoom()
-
-    def _on_scroll(
-        self,
-        controller: Gtk.EventControllerScroll,
-        _dx: float,
-        dy: float,
-    ) -> bool:
-        state = controller.get_current_event_state()
-        if not state & Gdk.ModifierType.CONTROL_MASK:
-            return False
-        if dy < 0:
-            self.zoom_in()
-        else:
-            self.zoom_out()
-        return True
-
-    def _on_key_pressed(
-        self,
-        _controller: Gtk.EventControllerKey,
-        keyval: int,
-        _keycode: int,
-        state: Gdk.ModifierType,
-    ) -> bool:
-        if keyval == Gdk.KEY_Escape:
-            self.close()
-            return True
-        if keyval in (Gdk.KEY_Left, Gdk.KEY_KP_Left):
-            self.previous()
-            return True
-        if keyval in (Gdk.KEY_Right, Gdk.KEY_KP_Right):
-            self.next()
-            return True
-        if state & Gdk.ModifierType.CONTROL_MASK:
-            if keyval in (Gdk.KEY_plus, Gdk.KEY_equal, Gdk.KEY_KP_Add):
-                self.zoom_in()
-                return True
-            if keyval in (Gdk.KEY_minus, Gdk.KEY_KP_Subtract):
-                self.zoom_out()
-                return True
-        return False
-
-    def _toggle_fullscreen(self, _button: Gtk.Button) -> None:
-        if self.window.is_fullscreen():
-            self.window.unfullscreen()
-            self._fullscreen_from_viewer = False
-            self.fullscreen_button.set_icon_name("view-fullscreen-symbolic")
-        else:
-            self.window.fullscreen()
-            self._fullscreen_from_viewer = True
-            self.fullscreen_button.set_icon_name("view-restore-symbolic")
-
-    def _copy_image(self, _button: Gtk.Button) -> None:
-        if self.texture is not None:
-            self.window.get_clipboard().set_texture(self.texture)
-
-
-class SidebarRow(Gtk.ListBoxRow):
-    def __init__(
-        self,
-        key: str,
-        label: str,
-        icon_name: str,
-    ) -> None:
-        super().__init__()
-        self.key = key
-
-        content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        content.set_margin_top(6)
-        content.set_margin_bottom(6)
-        content.set_margin_start(8)
-        content.set_margin_end(8)
-
-        icon = Gtk.Image.new_from_icon_name(icon_name)
-        title = Gtk.Label(label=label, xalign=0)
-        title.set_hexpand(True)
-
-        content.append(icon)
-        content.append(title)
-        self.set_child(content)
-        self.title_label = title
-
-    def set_label(self, label: str) -> None:
-        """Update the visible label (used for live language switches)."""
-        self.title_label.set_label(label)
+from .controllers import CalendarController, ExploreController, DetailsController, SyncController
+from .jobs import BackgroundJobs
+from .transactions import persisted_change
 
 
 class GishehWindow:
+    def _guard_state_callback(self, callback):
+        def invoke(_self, *args, **kwargs):
+            return callback(*args, **kwargs)
+        wrapped = persisted_change(invoke)
+        return lambda *args, **kwargs: wrapped(self, *args, **kwargs)
+
+    def _background_jobs(self):
+        if not hasattr(self, '_jobs'):
+            self._jobs = BackgroundJobs(GLib.idle_add)
+        return self._jobs
+
+    def _start_worker(self, name, target, *args):
+        if getattr(self, '_closed', False):
+            return None
+        return self._background_jobs().submit(name, target, *args)
+
+    def _image_executor(self):
+        return self._background_jobs().image_executor()
+
+    def _post_ui(self, callback, *args):
+        if getattr(self, '_closed', False):
+            return 0
+        return self._background_jobs().post(callback, *args)
+
+    def _invalidate_background_jobs(self):
+        if hasattr(self, '_jobs'):
+            self._jobs.invalidate()
+        for name in (
+            '_tmdb_details_loading', '_tmdb_cast_images_loading',
+            '_tmdb_gallery_images_loading', '_tmdb_episode_details_loading',
+            '_tmdb_season_details_loading', '_tmdb_explore_pages_loading',
+            '_simkl_mutations_inflight',
+        ):
+            value = getattr(self, name, None)
+            if value is not None:
+                value.clear()
+        self._tmdb_search_loading = False
+        self._calendar_refresh_inflight = False
+        self._simkl_poll_cancelled = True
+
+    def close_background_jobs(self):
+        self._closed = True
+        for name in (
+            '_details_reset_source_id', '_details_resize_source_id',
+            '_explore_resize_source_id', '_explore_search_debounce_source_id',
+            '_responsive_layout_source_id', '_sidebar_resize_source_id',
+            '_tmdb_library_refresh_source_id',
+        ):
+            source_id = getattr(self, name, 0)
+            if source_id:
+                if GLib.MainContext.default().find_source_by_id(source_id) is not None:
+                    GLib.source_remove(source_id)
+                setattr(self, name, 0)
+        if hasattr(self, 'data_actions'):
+            self.data_actions.cancellable.cancel()
+        if hasattr(self, '_jobs'):
+            self._jobs.close()
+
+
     """Controller for the Gtk.Builder-defined window."""
 
     def __init__(
@@ -2430,10 +399,6 @@ class GishehWindow:
         today = datetime.now().astimezone().date()
         self.calendar_month = today.replace(day=1)
         self.calendar_selected_date = today
-        self.calendar_scope = "my"
-        self.calendar_media_filter = "all"
-        self.calendar_include_watched = False
-        self.calendar_include_dropped = False
         self.calendar_snapshot: simkl_client.CalendarSnapshot | None = None
         self._calendar_refresh_inflight = False
         self._calendar_generation = 0
@@ -2535,21 +500,13 @@ class GishehWindow:
         self._explore_search_debounce_source_id = 0
         self._tmdb_library_generation = 0
         self._tmdb_library_refresh_source_id = 0
-        self._log_dialog: Adw.AlertDialog | None = None
+        self._log_dialog: Adw.Dialog | None = None
         self._log_text_view: Gtk.TextView | None = None
         self._simkl_sync_started_at = 0.0
         self._simkl_sync_error: str | None = None
         self._simkl_mutations_inflight: set[str] = set()
         self._simkl_state_generation = 0
         self.color_scheme = "system"
-        temporary_language = os.environ.get("GISHEH_LANGUAGE", "").strip()
-        self.temporary_language = (
-            temporary_language
-            if temporary_language in TEMPORARY_LANGUAGES[1:]
-            else "system"
-        )
-        # Experimental TMDB content language: "system" (default, follows the
-        # OS) or an explicit TMDB locale. Applied live, without restart.
         self.content_language = "system"
         self.auto_sync = True
         self.auto_calendar_refresh = True
@@ -2638,13 +595,13 @@ class GishehWindow:
                 )
             else:
                 self._app_log("Scheduling Simkl user-state refresh.")
-            GLib.idle_add(self._start_simkl_sync)
+            self._post_ui(self._start_simkl_sync)
         if (
             self.library_mode == LIBRARY_MODE_SIMKL
             and self.auto_calendar_refresh
             and self.simkl_client_id
         ):
-            GLib.idle_add(self._start_calendar_refresh, False)
+            self._post_ui(self._start_calendar_refresh, False)
 
     def _object(self, name: str) -> Any:
         obj = self.builder.get_object(name)
@@ -2684,7 +641,6 @@ class GishehWindow:
             "sidebar_profile_avatar",
             "main_workspace",
             "collection_pane",
-            "eyebrow_label",
             "section_title",
             "search_entry",
             "sort_dropdown",
@@ -2725,7 +681,6 @@ class GishehWindow:
             "detail_extra_sections",
             "explore_pane",
             "explore_header",
-            "explore_eyebrow_label",
             "explore_filter_bar",
             "explore_search_entry",
             "explore_sort_dropdown",
@@ -2883,10 +838,10 @@ class GishehWindow:
     ) -> tuple[tuple[str, str], ...]:
         if mode == "posters":
             candidates = (record.poster_file, *record.gallery_posters)
-            kind = "Poster"
+            kind = _("Poster")
         else:
             candidates = (record.backdrop_file, *record.gallery_backdrops)
-            kind = "Backdrop"
+            kind = _("Backdrop")
         paths = tuple(
             dict.fromkeys(
                 path for path in candidates if path is not None and Path(path).is_file()
@@ -2905,24 +860,28 @@ class GishehWindow:
     ) -> None:
         items = self._media_items(record, mode)
         if not items:
-            self._toast(f"No {mode} available for {record.title}")
+            self._toast(
+                _("No {mode} available for {title}").format(
+                    mode=(
+                        _("posters")
+                        if mode == "posters"
+                        else _("backdrops") if mode == "backdrops" else mode
+                    ),
+                    title=record.title,
+                )
+            )
             return
         self.media_viewer.open(items, position)
 
     def _configure_accessibility(self) -> None:
         self.activity_progress.update_property(
             [Gtk.AccessibleProperty.LABEL],
-            ["Watch progress"],
+            [_("Watch progress")],
         )
 
-    def _load_user_state(self) -> None:
-        try:
-            with self.state_file.open(encoding="utf-8") as source:
-                payload = json.load(source)
-        except FileNotFoundError:
-            return
-        except (OSError, ValueError, TypeError) as error:
-            print(f"Gisheh could not read user state: {error}", file=sys.stderr)
+    def _load_user_state(self, payload=None) -> None:
+        payload = read_state(self.state_file) if payload is None else payload
+        if not payload:
             return
 
         preferences = payload.get("preferences", {})
@@ -3084,8 +1043,8 @@ class GishehWindow:
             if color_scheme in COLOR_SCHEMES:
                 self.color_scheme = str(color_scheme)
             content_language = preferences.get("contentLanguage", "system")
-            if content_language in CONTENT_LANGUAGES:
-                self.content_language = str(content_language)
+            if isinstance(content_language, str):
+                self.content_language = tmdb_client.normalize_content_language(content_language)
                 try:
                     tmdb_client.set_content_language(self.content_language)
                 except (AttributeError, ValueError):
@@ -3135,7 +1094,7 @@ class GishehWindow:
         }
         payload.update(personal_state)
         if getattr(self, "library_mode", LIBRARY_MODE_LOCAL) == LIBRARY_MODE_LOCAL:
-            payload["localProfile"] = personal_state
+            payload["localProfile"] = {**payload.get("localProfile", {}), **personal_state}
         payload["localLibrary"] = [
             title_record_to_mapping(record)
             for _record_id, record in sorted(
@@ -3143,6 +1102,7 @@ class GishehWindow:
             )
         ]
         payload["preferences"] = {
+            **payload.get("preferences", {}),
             "colorScheme": self.color_scheme,
             "contentLanguage": getattr(self, "content_language", "system"),
             "autoSync": self.auto_sync,
@@ -3186,10 +1146,7 @@ class GishehWindow:
                 for collection in COLLECTION_NAMES
             },
         }
-        try:
-            write_state(payload, self.state_file)
-        except OSError as error:
-            print(f"Gisheh could not save user state: {error}", file=sys.stderr)
+        write_state(payload, self.state_file)
 
     def _load_view_mode_preference(self) -> None:
         """Load the library view from GSettings, migrating the legacy JSON value."""
@@ -3302,13 +1259,56 @@ class GishehWindow:
         )
         self.explore_period_dropdown.set_selected(0)
 
+        self.main_menu_button.set_menu_model(self._primary_menu())
+
+    @staticmethod
+    def _primary_menu() -> Gio.Menu:
         menu = Gio.Menu()
-        menu.append(_("Preferences"), "win.preferences")
-        menu.append(_("Application Log"), "app.logs")
-        menu.append(_("Credits & Data Sources"), "app.credits")
-        menu.append(_("About Gisheh"), "app.about")
-        menu.append(_("Quit"), "app.quit")
-        self.main_menu_button.set_menu_model(menu)
+        tools = Gio.Menu()
+        tools.append(_("Application _Log"), "app.logs")
+        tools.append(_("_Credits & Data Sources"), "app.credits")
+        menu.append_section(None, tools)
+        standard = Gio.Menu()
+        standard.append(_("_Preferences"), "win.preferences")
+        standard.append(_("_Keyboard Shortcuts"), "win.shortcuts")
+        standard.append(_("_About Gisheh"), "app.about")
+        menu.append_section(None, standard)
+        return menu
+
+    @staticmethod
+    def _shortcuts_dialog() -> Adw.ShortcutsDialog:
+        dialog = Adw.ShortcutsDialog()
+        general = Adw.ShortcutsSection(title=_("General"))
+        for title, action in (
+            (_("Main Menu"), "win.main-menu"),
+            (_("Preferences"), "win.preferences"),
+            (_("Keyboard Shortcuts"), "win.shortcuts"),
+            (_("Close Window"), "win.close"),
+            (_("Quit"), "app.quit"),
+        ):
+            general.add(Adw.ShortcutsItem(title=title, action_name=action))
+        dialog.add(general)
+        navigation = Adw.ShortcutsSection(title=_("Navigation"))
+        for title, action in (
+            (_("Search"), "win.find"),
+            (_("Search Explore"), "win.search"),
+            (_("Show or Hide Sidebar"), "win.toggle-sidebar"),
+            (_("Go Back"), "win.back"),
+        ):
+            navigation.add(Adw.ShortcutsItem(title=title, action_name=action))
+        navigation.add(
+            Adw.ShortcutsItem(title=_("Dismiss or Go Back"), accelerator="Escape")
+        )
+        dialog.add(navigation)
+        return dialog
+
+    def _show_shortcuts(self, *_args) -> None:
+        dialog = self._shortcuts_dialog()
+        dialog.present(self.window)
+
+    def _show_main_menu(self, *_args) -> None:
+        self._set_sidebar_open(True)
+        self.main_menu_button.popup()
 
     def _build_sidebar(self) -> None:
         self.explore_row = SidebarRow(
@@ -3494,47 +1494,12 @@ class GishehWindow:
         header.set_margin_bottom(14)
         header.set_margin_start(24)
         header.set_margin_end(24)
-        eyebrow = Gtk.Label(label=_("Browse / Simkl"), xalign=0)
-        eyebrow.add_css_class("caption")
-        eyebrow.add_css_class("dim-label")
-        header.append(eyebrow)
         title = Gtk.Label(label=_("Calendar"), xalign=0)
         title.add_css_class("title-1")
         header.append(title)
 
         controls = Adw.WrapBox(child_spacing=6, line_spacing=6)
         controls.set_hexpand(True)
-        self.calendar_scope_switcher = Adw.ToggleGroup()
-        self.calendar_scope_switcher.add(Adw.Toggle(name="my", label=_("My Calendar")))
-        self.calendar_scope_switcher.set_active_name("my")
-        controls.append(self.calendar_scope_switcher)
-
-        self.calendar_media_dropdown = Gtk.DropDown(
-            model=Gtk.StringList.new(["All", "Movies", "Shows", "Anime"])
-        )
-        self.calendar_media_dropdown.set_tooltip_text(
-            _("Filter releases by media type")
-        )
-        controls.append(self.calendar_media_dropdown)
-
-        self.calendar_filter_button = Gtk.MenuButton(
-            icon_name="view-more-symbolic",
-            tooltip_text=_("Calendar status filters"),
-        )
-        filter_popover = Gtk.Popover()
-        filter_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        filter_box.set_margin_top(12)
-        filter_box.set_margin_bottom(12)
-        filter_box.set_margin_start(12)
-        filter_box.set_margin_end(12)
-        self.calendar_watched_check = Gtk.CheckButton(label=_("Show watched"))
-        self.calendar_dropped_check = Gtk.CheckButton(label=_("Show dropped"))
-        filter_box.append(self.calendar_watched_check)
-        filter_box.append(self.calendar_dropped_check)
-        filter_popover.set_child(filter_box)
-        self.calendar_filter_button.set_popover(filter_popover)
-        controls.append(self.calendar_filter_button)
-
         spacer = Gtk.Box()
         spacer.set_hexpand(True)
         controls.append(spacer)
@@ -3556,6 +1521,7 @@ class GishehWindow:
             self.calendar_next_button,
             self.calendar_refresh_button,
         ):
+            button.update_property([Gtk.AccessibleProperty.LABEL], [button.get_tooltip_text()])
             button.add_css_class("flat")
             controls.append(button)
         header.append(controls)
@@ -3590,14 +1556,6 @@ class GishehWindow:
         self.calendar_scroller.set_child(self.calendar_content)
         self.calendar_pane.append(self.calendar_scroller)
 
-        self.calendar_scope_switcher.connect(
-            "notify::active-name", self._on_calendar_scope_changed
-        )
-        self.calendar_media_dropdown.connect(
-            "notify::selected", self._on_calendar_media_changed
-        )
-        self.calendar_watched_check.connect("toggled", self._on_calendar_filter_changed)
-        self.calendar_dropped_check.connect("toggled", self._on_calendar_filter_changed)
         self.calendar_previous_button.connect("clicked", self._on_calendar_previous)
         self.calendar_today_button.connect("clicked", self._on_calendar_today)
         self.calendar_next_button.connect("clicked", self._on_calendar_next)
@@ -3649,39 +1607,21 @@ class GishehWindow:
 
         def worker() -> None:
             try:
-                snapshots: list[simkl_client.CalendarSnapshot] = []
-                errors: list[str] = []
-                for media in ("movies", "shows", "anime"):
-                    try:
-                        snapshots.append(
-                            simkl_client.fetch_calendar(
-                                media,
-                                client_id=client_id or "",
-                                year=year,
-                                month=month,
-                                display_timezone=display_timezone,
-                                force=force,
-                            )
-                        )
-                    except simkl_client.SimklError as error:
-                        errors.append(str(error))
-                if not snapshots:
-                    raise simkl_client.SimklError(
-                        errors[0] if errors else "Calendar is unavailable."
-                    )
-                result = simkl_client.merge_calendar_snapshots(snapshots)
-                warning = errors[0] if errors else None
-                GLib.idle_add(
+                result, warning = CalendarController(simkl_client).fetch_month(
+                    client_id or "", year, month, display_timezone, force
+                )
+                self._post_ui(
                     self._finish_calendar_refresh, generation, result, warning
                 )
             except simkl_client.SimklError as error:
-                GLib.idle_add(
+                self._post_ui(
                     self._finish_calendar_refresh, generation, None, str(error)
                 )
 
-        threading.Thread(target=worker, name="simkl-calendar", daemon=True).start()
+        self._start_worker('simkl-calendar', worker, *())
         return GLib.SOURCE_REMOVE
 
+    @persisted_change
     def _finish_calendar_refresh(
         self,
         generation: int,
@@ -3708,36 +1648,12 @@ class GishehWindow:
     def _reset_calendar_timeline(self) -> None:
         self.calendar_timeline_limit = CALENDAR_TIMELINE_PAGE_SIZE
 
-    def _on_calendar_scope_changed(
-        self, group: Adw.ToggleGroup, _parameter: Any
-    ) -> None:
-        # The only available source is My Calendar. Keeping this assignment
-        # explicit prevents a stale or programmatic value from exposing the
-        # removed All Releases source.
-        self.calendar_scope = "my"
-        self._reset_calendar_timeline()
-        self._render_calendar()
-
-    def _on_calendar_media_changed(
-        self, dropdown: Gtk.DropDown, _parameter: Any
-    ) -> None:
-        self.calendar_media_filter = ("all", "movies", "shows", "anime")[
-            dropdown.get_selected()
-        ]
-        self._reset_calendar_timeline()
-        self._render_calendar()
-
-    def _on_calendar_filter_changed(self, _button: Gtk.CheckButton) -> None:
-        self.calendar_include_watched = self.calendar_watched_check.get_active()
-        self.calendar_include_dropped = self.calendar_dropped_check.get_active()
-        self._reset_calendar_timeline()
-        self._render_calendar()
-
     @staticmethod
     def _shift_month(month: date, offset: int) -> date:
         index = month.year * 12 + month.month - 1 + offset
         return date(index // 12, index % 12 + 1, 1)
 
+    @persisted_change
     def _on_calendar_previous(self, _button: Gtk.Button) -> None:
         self.calendar_month = self._shift_month(self.calendar_month, -1)
         self.calendar_selected_date = self.calendar_month
@@ -3745,6 +1661,7 @@ class GishehWindow:
         self.calendar_snapshot = None
         self._start_calendar_refresh(False, supersede=True)
 
+    @persisted_change
     def _on_calendar_next(self, _button: Gtk.Button) -> None:
         self.calendar_month = self._shift_month(self.calendar_month, 1)
         self.calendar_selected_date = self.calendar_month
@@ -3752,6 +1669,7 @@ class GishehWindow:
         self.calendar_snapshot = None
         self._start_calendar_refresh(False, supersede=True)
 
+    @persisted_change
     def _on_calendar_today(self, _button: Gtk.Button) -> None:
         today = datetime.now().astimezone().date()
         month_changed = self.calendar_month != today.replace(day=1)
@@ -3831,34 +1749,11 @@ class GishehWindow:
             None,
         )
 
-    def _calendar_events(self) -> tuple[simkl_client.CalendarEvent, ...]:
-        if self.calendar_snapshot is None:
-            return ()
-        visible: list[simkl_client.CalendarEvent] = []
-        for event in self.calendar_snapshot.events:
-            moment = event.local_datetime
-            if moment is None or (
-                moment.year != self.calendar_month.year
-                or moment.month != self.calendar_month.month
-            ):
-                continue
-            if (
-                self.calendar_media_filter != "all"
-                and event.media_type != self.calendar_media_filter
-            ):
-                continue
-            record = self._calendar_record(event)
-            if record is None or not self._calendar_record_is_in_library(record):
-                continue
-            status = self._effective_status(record)
-            if status == "Watched" and not self.calendar_include_watched:
-                continue
-            if status == "Dropped" and not self.calendar_include_dropped:
-                continue
-            if status not in {"Watching", "Watchlist", "On Hold", "Watched", "Dropped"}:
-                continue
-            visible.append(event)
-        return tuple(visible)
+    def _calendar_events(self):
+        return CalendarController.visible_events(
+            self.calendar_snapshot, self.calendar_month, self._calendar_record,
+            self._calendar_record_is_in_library, self._effective_status,
+        )
 
     def _calendar_record_is_in_library(self, record: TitleRecord) -> bool:
         canonical = self._canonical_record_id(record)
@@ -3873,56 +1768,26 @@ class GishehWindow:
     def _calendar_eligible_library_count(self) -> int:
         seen: set[str] = set()
         for record in self.records:
-            if (
-                self.calendar_media_filter != "all"
-                and {"Movies": "movies", "Shows": "shows", "Anime": "anime"}.get(
-                    record.media_type
-                )
-                != self.calendar_media_filter
-            ):
-                continue
             status = self._effective_status(record)
-            if status == "Watched" and not self.calendar_include_watched:
-                continue
-            if status == "Dropped" and not self.calendar_include_dropped:
-                continue
-            if status in {"Watching", "Watchlist", "On Hold", "Watched", "Dropped"}:
+            if status in {"Watching", "Watchlist", "On Hold"}:
                 seen.add(self._canonical_record_id(record))
         return len(seen)
 
     @staticmethod
-    def _calendar_events_by_day(
-        events: tuple[simkl_client.CalendarEvent, ...],
-    ) -> tuple[tuple[date, tuple[simkl_client.CalendarEvent, ...]], ...]:
-        """Return local Calendar events in chronological, day-sized groups."""
-        ordered = sorted(
-            (event for event in events if event.local_datetime is not None),
-            key=lambda event: (
-                event.local_datetime,
-                event.title.title.casefold(),
-                event.simkl_id,
-            ),
-        )
-        grouped: list[tuple[date, tuple[simkl_client.CalendarEvent, ...]]] = []
-        for event in ordered:
-            event_day = event.local_datetime.date()
-            if grouped and grouped[-1][0] == event_day:
-                grouped[-1] = (event_day, (*grouped[-1][1], event))
-            else:
-                grouped.append((event_day, (event,)))
-        return tuple(grouped)
+    def _calendar_events_by_day(events):
+        return CalendarController.group_days(events)
 
     @staticmethod
     def _calendar_day_heading(day: date, *, today: date | None = None) -> str:
         reference = today or datetime.now().astimezone().date()
         relative = {
-            -1: "Yesterday",
-            0: "Today",
-            1: "Tomorrow",
+            -1: _("Yesterday"),
+            0: _("Today"),
+            1: _("Tomorrow"),
         }.get((day - reference).days)
         absolute = day.strftime("%B %-d, %Y")
         week = day.isocalendar().week
-        parts = [absolute, f"Week {week}", day.strftime("%A")]
+        parts = [absolute, _("Week {week}").format(week=week), day.strftime("%A")]
         if relative:
             parts.insert(0, relative)
         return " • ".join(parts)
@@ -3933,36 +1798,22 @@ class GishehWindow:
     ) -> str:
         count = len(events)
         minutes = sum(runtime_minutes(event.title.runtime or "") for event in events)
-        releases = f"{count} release{'s' if count != 1 else ''}"
+        releases = ngettext("{count} release", "{count} releases", count).format(count=count)
         if not minutes:
             return releases
         hours, remainder = divmod(minutes, 60)
         duration = (
-            f"{hours}h {remainder:02d}m"
+            _("{hours}h {minutes:02d}m").format(hours=hours, minutes=remainder)
             if hours and remainder
-            else f"{hours}h"
+            else _("{hours}h").format(hours=hours)
             if hours
-            else f"{remainder}m"
+            else _("{minutes}m").format(minutes=remainder)
         )
         return f"{releases} • {duration}"
 
     @staticmethod
-    def _calendar_timeline_page(
-        groups: tuple[tuple[date, tuple[simkl_client.CalendarEvent, ...]], ...],
-        limit: int,
-    ) -> tuple[
-        tuple[tuple[date, tuple[simkl_client.CalendarEvent, ...]], ...],
-        int,
-    ]:
-        """Select complete day groups up to a progressive event limit."""
-        visible: list[tuple[date, tuple[simkl_client.CalendarEvent, ...]]] = []
-        shown = 0
-        for group in groups:
-            if shown >= limit:
-                break
-            visible.append(group)
-            shown += len(group[1])
-        return tuple(visible), shown
+    def _calendar_timeline_page(groups, limit):
+        return CalendarController.page(groups, limit)
 
     def _calendar_skeleton(self) -> Gtk.Box:
         shell = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
@@ -4076,7 +1927,7 @@ class GishehWindow:
 
         if shown < len(events):
             remaining = len(events) - shown
-            load_more = Gtk.Button(label=f"Load more releases ({remaining} remaining)")
+            load_more = Gtk.Button(label=_("Load more releases ({remaining} remaining)").format(remaining=remaining))
             load_more.set_halign(Gtk.Align.CENTER)
             load_more.add_css_class("pill")
             load_more.connect("clicked", self._on_calendar_load_more)
@@ -4084,6 +1935,7 @@ class GishehWindow:
         self.calendar_timeline_visible_count = shown
         return timeline
 
+    @persisted_change
     def _on_calendar_load_more(self, _button: Gtk.Button) -> None:
         self.calendar_timeline_limit = (
             getattr(self, "calendar_timeline_limit", CALENDAR_TIMELINE_PAGE_SIZE)
@@ -4091,119 +1943,16 @@ class GishehWindow:
         )
         self._render_calendar()
 
-    def _calendar_event_row(self, event: simkl_client.CalendarEvent) -> Gtk.Box:
+    def _calendar_event_row(self, event):
         record = self._calendar_record(event)
-        library_record = (
-            record
-            if record is not None and self._calendar_record_is_in_library(record)
-            else None
+        library_record = record if record is not None and self._calendar_record_is_in_library(record) else None
+        poster = self._create_poster_overlay(record, 76, 114) if record is not None else self._calendar_poster_overlay(event.title, 76, 114)
+        return build_calendar_row(
+            event, record, library_record, poster,
+            configure_label=self._configure_bounded_card_label,
+            effective_status=self._effective_status,
+            can_add=self._simkl_writable(), on_add=self._add_calendar_watchlist,
         )
-        row = Gtk.Box(spacing=12)
-        row.add_css_class("movie-row-content")
-        if record is not None:
-            row.append(self._create_poster_overlay(record, 76, 114))
-        else:
-            row.append(self._calendar_poster_overlay(event.title, 76, 114))
-
-        text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
-        text.set_hexpand(True)
-
-        top = Gtk.CenterBox()
-        media_label = {
-            "movies": "Movie",
-            "shows": "Show",
-            "anime": "Anime",
-        }[event.media_type]
-        schedule = media_label
-        if event.local_datetime:
-            schedule = f"{media_label} · {event.local_datetime.strftime('%H:%M')}"
-        schedule_label = Gtk.Label(label=schedule, xalign=0)
-        schedule_label.add_css_class("caption")
-        schedule_label.add_css_class("dim-label")
-        top.set_start_widget(schedule_label)
-        score = record.rating if record is not None else event.title.rating
-        if score is not None:
-            rating = Gtk.Label(label=f"★ {score:.1f}")
-            rating.add_css_class("caption")
-            rating.add_css_class("numeric")
-            top.set_end_widget(rating)
-        text.append(top)
-
-        title_label = Gtk.Label(label=event.title.title, xalign=0)
-        self._configure_bounded_card_label(title_label, 22, lines=2)
-        title_label.add_css_class("title-3")
-        title_label.set_tooltip_text(event.title.title)
-        text.append(title_label)
-
-        episode_details: list[str] = []
-        if event.episode is not None:
-            if event.season is not None:
-                episode_details.append(
-                    f"S{event.season:02d}E{event.episode_number:02d}"
-                )
-            else:
-                episode_details.append(f"E{event.episode_number:02d}")
-            if event.episode_title:
-                episode_details.append(event.episode_title)
-        elif event.title.dvd_date:
-            episode_details.append(f"Home release {event.title.dvd_date}")
-        subtitle = Gtk.Label(label=" · ".join(episode_details), xalign=0)
-        subtitle.set_ellipsize(Pango.EllipsizeMode.END)
-        subtitle.set_lines(2)
-        subtitle.set_wrap(True)
-        subtitle.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
-        subtitle.add_css_class("dim-label")
-        subtitle.add_css_class("body")
-        if episode_details:
-            text.append(subtitle)
-
-        original_title = event.title.original_title
-        if original_title and original_title.casefold() == event.title.title.casefold():
-            original_title = None
-        metadata_values = [
-            value
-            for value in (
-                str(record.year) if record is not None else None,
-                event.title.network,
-                event.title.runtime,
-                original_title,
-            )
-            if value
-        ]
-        if metadata_values:
-            metadata = Gtk.Label(label="  ·  ".join(metadata_values), xalign=0)
-            metadata.set_ellipsize(Pango.EllipsizeMode.END)
-            metadata.add_css_class("caption")
-            metadata.add_css_class("dim-label")
-            text.append(metadata)
-
-        badges = Adw.WrapBox(child_spacing=5, line_spacing=5)
-        badge_values: list[str] = []
-        if event.season == 1 and event.episode_number == 1:
-            badge_values.append("Premiere")
-        if event.finale_label:
-            badge_values.append(event.finale_label)
-        if library_record is not None:
-            badge_values.append(self._effective_status(library_record))
-        for value in badge_values:
-            badge = Gtk.Label(label=value)
-            badge.add_css_class("status-pill")
-            badges.append(badge)
-        if badge_values:
-            text.append(badges)
-        row.append(text)
-        if library_record is None and self._simkl_writable():
-            add = Gtk.Button(
-                icon_name="bookmark-new-symbolic", tooltip_text=_("Add to Watchlist")
-            )
-            add.set_valign(Gtk.Align.START)
-            add.add_css_class("flat")
-            add.add_css_class("circular")
-            add.connect(
-                "clicked", lambda button: self._add_calendar_watchlist(button, event)
-            )
-            row.append(add)
-        return row
 
     def _open_calendar_event(self, event: simkl_client.CalendarEvent) -> None:
         record = self._calendar_record(event)
@@ -4248,7 +1997,7 @@ class GishehWindow:
         picture.add_css_class("calendar-poster")
         picture.add_css_class("rounded-media")
         picture.update_property(
-            [Gtk.AccessibleProperty.LABEL], [f"Poster artwork for {title.title}"]
+            [Gtk.AccessibleProperty.LABEL], [_("Poster artwork for {title}").format(title=title.title)]
         )
         cached = simkl_client.cached_calendar_poster(title)
         if cached:
@@ -4260,7 +2009,7 @@ class GishehWindow:
 
         def worker() -> None:
             path = simkl_client.fetch_calendar_poster(title)
-            GLib.idle_add(finish, path)
+            self._post_ui(finish, path)
 
         def finish(path: str | None) -> bool:
             self._calendar_posters_loading.discard(title.simkl_id)
@@ -4268,11 +2017,7 @@ class GishehWindow:
                 picture.set_filename(path)
             return GLib.SOURCE_REMOVE
 
-        threading.Thread(
-            target=worker,
-            name=f"calendar-poster-{title.simkl_id}",
-            daemon=True,
-        ).start()
+        self._start_worker(f'calendar-poster-{title.simkl_id}', worker, *())
         return picture
 
     def _open_calendar_record(self, record: TitleRecord) -> None:
@@ -4291,17 +2036,6 @@ class GishehWindow:
                 "Could not open Calendar link: %s", error, level=logging.WARNING
             )
             self._toast(_("Could not open this Simkl page"))
-
-    @staticmethod
-    def _title_external_url(record: TitleRecord) -> str | None:
-        if record.tmdb_id is None:
-            return None
-        namespace = (
-            "movie"
-            if record.tmdb_media_type == "movie" or record.media_type == "Movies"
-            else "tv"
-        )
-        return f"https://www.themoviedb.org/{namespace}/{record.tmdb_id}"
 
     def _open_external_uri_with_warning(
         self,
@@ -4335,24 +2069,6 @@ class GishehWindow:
         dialog.connect("response", respond)
         dialog.present(self.window)
 
-    def _on_detail_title_activated(self, _button: Gtk.LinkButton) -> bool:
-        record = self.records_by_id.get(self.selected_id or "")
-        if record is None:
-            return True
-        uri = self._title_external_url(record)
-        if uri is None:
-            self._toast(_("No external page is available for this title"))
-            return True
-        self._open_external_uri_with_warning(
-            uri,
-            heading=_("Open an external link?"),
-            body=_(
-                "Gisheh will open the TMDB page for “{title}” in your default "
-                "web browser."
-            ).format(title=record.title),
-        )
-        return True
-
     def _add_calendar_watchlist(
         self, button: Gtk.Button, event: simkl_client.CalendarEvent
     ) -> None:
@@ -4375,7 +2091,7 @@ class GishehWindow:
                 )
             ),
             lambda: self._start_simkl_sync(),
-            "Added to Simkl watchlist",
+            _("Added to Simkl watchlist"),
         )
 
     def _render_calendar(
@@ -4387,9 +2103,9 @@ class GishehWindow:
         self.calendar_month_label.set_label(self.calendar_month.strftime("%B %Y"))
         snapshot = self.calendar_snapshot
         if snapshot is not None:
-            updated = snapshot.fetched_at.astimezone().strftime("Updated %b %-d, %H:%M")
+            updated = _("Updated {date}").format(date=snapshot.fetched_at.astimezone().strftime("%x %X"))
             if snapshot.stale:
-                updated = f"Showing cached schedule · {updated}"
+                updated = _("Showing cached schedule · {updated}").format(updated=updated)
             self.calendar_updated_label.set_label(updated)
             self.calendar_updated_label.set_tooltip_text(
                 self._calendar_cache_subtitle()
@@ -4397,7 +2113,7 @@ class GishehWindow:
         else:
             self.calendar_updated_label.set_label("")
         if self.library_mode == LIBRARY_MODE_LOCAL:
-            action = "Use Simkl" if self.simkl_client_id else None
+            action = _("Use Simkl") if self.simkl_client_id else None
             callback = (
                 (lambda *_args: self.set_library_mode(LIBRARY_MODE_SIMKL))
                 if self.simkl_client_id
@@ -4436,7 +2152,10 @@ class GishehWindow:
                     "network-offline-symbolic",
                     _("Calendar is unavailable"),
                     error
-                    or "No cached schedule is available. Check your connection and try again.",
+                    or _(
+                        "No cached schedule is available. "
+                        "Check your connection and try again."
+                    ),
                     _("Retry"),
                     lambda *_args: self._start_calendar_refresh(True),
                 )
@@ -4458,12 +2177,11 @@ class GishehWindow:
                 self._calendar_status(
                     "bookmark-new-symbolic",
                     _("Nothing scheduled in My Calendar"),
-                    (
-                        f"Simkl has no published events this month for the {eligible_count} "
-                        "matching Library title"
-                        f"{'s' if eligible_count != 1 else ''}. Watching, Watchlist, "
-                        "and On Hold titles appear as soon as Simkl schedules them."
-                    ),
+                    _(
+                        "No events are published this month for the matching titles "
+                        "in your library ({count}). Watching, Watchlist, and On Hold "
+                        "titles appear as soon as Simkl schedules them."
+                    ).format(count=eligible_count),
                     _("Open Explore"),
                     self._open_explore_from_calendar,
                 )
@@ -4473,31 +2191,25 @@ class GishehWindow:
         self.calendar_content.append(self.calendar_timeline_view)
 
     def _build_profile_view(self) -> None:
+        from .profile import ProfileView
+
         self.profile_pane = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.profile_pane.add_css_class("main-content-pane")
-
-        self.profile_scroller = Gtk.ScrolledWindow()
+        self.profile_scroller = Gtk.ScrolledWindow(vexpand=True)
         self.profile_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        self.profile_scroller.set_vexpand(True)
         self.profile_pane.append(self.profile_scroller)
-
-        clamp = Adw.Clamp(maximum_size=1040, tightening_threshold=760)
-        clamp.set_margin_top(24)
-        clamp.set_margin_bottom(40)
-        clamp.set_margin_start(24)
-        clamp.set_margin_end(24)
+        clamp = Adw.Clamp(maximum_size=680, tightening_threshold=520)
+        for side in ("start", "end"):
+            getattr(clamp, f"set_margin_{side}")(18)
+        clamp.set_margin_top(32)
+        clamp.set_margin_bottom(36)
         self.profile_scroller.set_child(clamp)
-
-        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
-        clamp.set_child(content)
-
-        self.profile_statistics_host = Gtk.Box(
-            orientation=Gtk.Orientation.VERTICAL,
-            spacing=20,
+        self.profile_view = ProfileView(
+            on_preferences=lambda: self._on_preferences_clicked(None),
+            on_explore=lambda: self.destination_list.select_row(self.explore_row),
         )
-        content.append(self.profile_statistics_host)
+        clamp.set_child(self.profile_view)
         self._update_profile_identity()
-
         self.browser_stack.add_named(self.profile_pane, "profile")
         self._refresh_profile()
 
@@ -4528,6 +2240,9 @@ class GishehWindow:
         self.settings_library_mode_row.add_suffix(self.settings_library_mode_button)
         ownership.add(self.settings_library_mode_row)
         general_page.add(ownership)
+        from .data_actions import LibraryDataActions
+        self.data_actions = LibraryDataActions(self)
+        self.data_actions.add_to(general_page)
 
         appearance = Adw.PreferencesGroup(
             title=_("Appearance"),
@@ -4548,55 +2263,31 @@ class GishehWindow:
         )
         appearance.add(self.settings_color_scheme_row)
 
-        self.settings_language_row = Adw.ComboRow(
-            title=_("Application language"),
-            subtitle=_(
-                "Temporarily change the language and restart Gisheh. "
-                "This choice is not saved."
-            ),
-        )
-        self.settings_language_row.set_model(
-            Gtk.StringList.new([_("System Language"), "English", "فارسی"])
-        )
-        self.settings_language_row.set_selected(
-            TEMPORARY_LANGUAGES.index(self.temporary_language)
-        )
-        self.settings_language_row.connect(
-            "notify::selected", self._on_settings_language_changed
-        )
-        appearance.add(self.settings_language_row)
-
         general_page.add(appearance)
 
-        experimental = Adw.PreferencesGroup(
-            title=_("Experimental"),
-            description=_(
-                "Try upcoming features. Content language applies instantly "
-                "without restarting Gisheh."
-            ),
+        content = Adw.PreferencesGroup(
+            title=_("TMDB content"),
+            description=_("Choose the language of titles and descriptions. The interface follows your system language."),
         )
         self.settings_content_language_row = Adw.ComboRow(
             title=_("Content language"),
-            subtitle=_(
-                "Choose the TMDB content language. System follows the "
-                "operating system language with English fallback."
-            ),
+            subtitle=_("Missing translations fall back to English. Changes apply immediately."),
+            enable_search=True,
         )
-        self.settings_content_language_row.set_model(
-            Gtk.StringList.new([_("System Language"), "English", "فارسی"])
-        )
-        try:
-            initial_content = CONTENT_LANGUAGES.index(
-                getattr(self, "content_language", "system")
-            )
-        except ValueError:
-            initial_content = 0
-        self.settings_content_language_row.set_selected(initial_content)
+        self._content_languages_loading = False
+        self._content_language_options = []
+        self._set_content_language_options(tmdb_client.cached_languages())
         self.settings_content_language_row.connect(
             "notify::selected", self._on_settings_content_language_changed
         )
-        experimental.add(self.settings_content_language_row)
-        general_page.add(experimental)
+        content.add(self.settings_content_language_row)
+        self.settings_languages_status_row = Adw.ActionRow(title=_("TMDB languages"))
+        retry_languages = Gtk.Button(label=_("Refresh"), valign=Gtk.Align.CENTER)
+        retry_languages.connect("clicked", lambda _button: self._load_content_languages())
+        self.settings_languages_status_row.add_suffix(retry_languages)
+        content.add(self.settings_languages_status_row)
+        general_page.add(content)
+        self.settings_dialog.connect("notify::visible", self._on_preferences_visible)
 
         library = Adw.PreferencesGroup(
             title=_("Library"),
@@ -4756,6 +2447,7 @@ class GishehWindow:
         self._update_settings_account_rows()
         self.settings_dialog.add(general_page)
         self.settings_dialog.add(services_page)
+        self.settings_dialog.set_focus(self.settings_library_mode_button)
 
     def _apply_color_scheme(self) -> None:
         schemes = {
@@ -4785,12 +2477,9 @@ class GishehWindow:
             pass
 
     def _apply_text_direction(self) -> None:
-        """Apply RTL when Persian is selected, LTR otherwise (live)."""
+        """Let navigation and child widgets follow the system text direction."""
         try:
-            rtl = is_rtl_language_selection(
-                getattr(self, "temporary_language", "system"),
-                getattr(self, "content_language", "system"),
-            )
+            rtl = is_rtl_language_selection()
             direction = (
                 Gtk.TextDirection.RTL if rtl else Gtk.TextDirection.LTR
             )
@@ -4798,6 +2487,13 @@ class GishehWindow:
             window = getattr(self, "window", None)
             if window is not None:
                 window.set_direction(direction)
+            workspace = getattr(self, "workspace", None)
+            if workspace is None:
+                workspace = self.builder.get_object("workspace")
+            if workspace is not None:
+                workspace.set_sidebar_position(
+                    sidebar_position_for_direction(rtl)
+                )
         except (AttributeError, RuntimeError):
             pass
         self._refresh_sidebar_labels()
@@ -4810,33 +2506,33 @@ class GishehWindow:
         )
         if hasattr(self, "settings_library_mode_row"):
             self.settings_library_mode_row.set_subtitle(
-                "Local-first · Personal data stays on this device"
+                _("Local-first · Personal data stays on this device")
                 if local_mode
-                else "Simkl sync · Simkl manages lists, ratings and watch history"
+                else _("Simkl sync · Simkl manages lists, ratings and watch history")
             )
         if local_mode:
-            simkl_subtitle = "Not active · Local-first mode is managing this library"
+            simkl_subtitle = _("Not active · Local-first mode is managing this library")
         elif self.simkl_connected:
-            simkl_subtitle = "Connected · Library and watch state sync enabled"
+            simkl_subtitle = _("Connected · Library and watch state sync enabled")
         elif getattr(self, "simkl_client_id", None):
-            simkl_subtitle = "Ready to connect · Sign in with a Simkl PIN"
+            simkl_subtitle = _("Ready to connect · Sign in with a Simkl PIN")
         else:
-            simkl_subtitle = "Unavailable · This build has no Simkl application ID"
+            simkl_subtitle = _("Unavailable · This build has no Simkl application ID")
         self.settings_simkl_row.set_subtitle(simkl_subtitle)
         self.settings_simkl_button.set_label(
-            "Syncing…"
+            _("Syncing…")
             if syncing
             else (
-                "Use Simkl"
+                _("Use Simkl")
                 if local_mode and getattr(self, "simkl_client_id", None)
-                else "Unavailable"
+                else _("Unavailable")
                 if local_mode
-                else "Sync Now"
+                else _("Sync Now")
                 if self.simkl_connected
                 else (
-                    "Connect"
+                    _("Connect")
                     if getattr(self, "simkl_client_id", None)
-                    else "Unavailable"
+                    else _("Unavailable")
                 )
             )
         )
@@ -4854,21 +2550,22 @@ class GishehWindow:
         if getattr(self, "tmdb_token", None) and tmdb_source is None:
             tmdb_source = "user"
         if tmdb_source == "bundled":
-            tmdb_subtitle = "Connected · Credential provided by this build"
+            tmdb_subtitle = _("Connected · Credential provided by this build")
         elif tmdb_source == "environment":
-            tmdb_subtitle = "Connected · Developer environment override"
+            tmdb_subtitle = _("Connected · Developer environment override")
         elif tmdb_source == "user":
-            tmdb_subtitle = "Connected · Developer token stored for this user"
+            tmdb_subtitle = _("Connected · Developer token stored for this user")
         else:
-            tmdb_subtitle = "Unavailable · This build has no TMDB credential"
+            tmdb_subtitle = _("Unavailable · This build has no TMDB credential")
         self.settings_tmdb_row.set_subtitle(tmdb_subtitle)
         self.settings_tmdb_button.set_label(
-            "Data Source"
+            _("Data Source")
             if tmdb_source in {"bundled", "environment"}
-            else ("Change Token" if tmdb_source == "user" else "Developer Setup")
+            else (_("Change Token") if tmdb_source == "user" else _("Developer Setup"))
         )
         self.settings_tmdb_disconnect_button.set_visible(tmdb_source == "user")
 
+    @persisted_change
     def _on_settings_color_scheme_changed(
         self, row: Adw.ComboRow, _parameter: Any
     ) -> None:
@@ -4876,6 +2573,7 @@ class GishehWindow:
         self._apply_color_scheme()
         self._save_user_state()
 
+    @persisted_change
     def _on_change_library_mode_clicked(self, _button: Gtk.Button) -> None:
         dialog = Adw.AlertDialog(
             heading=_("Choose how your library is managed"),
@@ -4905,39 +2603,72 @@ class GishehWindow:
         dialog.connect("response", on_response)
         dialog.present(self.settings_dialog)
 
+    @persisted_change
     def _on_settings_default_media_changed(
         self, row: Adw.ComboRow, _parameter: Any
     ) -> None:
         self.default_media = MEDIA_TYPES[row.get_selected()]
         self._save_user_state()
 
-    def _on_settings_language_changed(
-        self, row: Adw.ComboRow, _parameter: Any
-    ) -> None:
-        language = TEMPORARY_LANGUAGES[row.get_selected()]
-        if language == self.temporary_language:
-            return
-        self.temporary_language = language
-        self._apply_text_direction()
-        row.set_sensitive(False)
-        self._save_user_state()
-        self._save_window_state()
-        try:
-            self._restart_application(language=language)
-        except OSError as error:
-            row.set_sensitive(True)
-            self._toast(
-                _("Could not restart Gisheh with the selected language: {error}").format(
-                    error=error
-                )
-            )
+    def _on_preferences_visible(self, dialog, _parameter) -> None:
+        if dialog.get_visible():
+            self._load_content_languages()
 
+    def _set_content_language_options(self, languages) -> None:
+        selected = getattr(self, "content_language", "system")
+        options = [("system", _("System Language")), *languages]
+        if selected not in {code for code, _label in options}:
+            options.append((selected, selected))
+        self._updating_content_languages = True
+        try:
+            self._content_language_options = [code for code, _label in options]
+            self.settings_content_language_row.set_model(
+                Gtk.StringList.new([label for _code, label in options])
+            )
+            self.settings_content_language_row.set_selected(
+                self._content_language_options.index(selected)
+            )
+        finally:
+            self._updating_content_languages = False
+
+    def _load_content_languages(self) -> None:
+        if self._content_languages_loading:
+            return
+        token = self.tmdb_token
+        if not token:
+            self.settings_languages_status_row.set_subtitle(_("Connect TMDB to load its language list."))
+            return
+        self._content_languages_loading = True
+        self.settings_languages_status_row.set_subtitle(_("Loading languages…"))
+
+        def worker():
+            try:
+                languages = tmdb_client.fetch_languages(token)
+            except tmdb_client.TmdbError:
+                self._post_ui(finish, None)
+            else:
+                self._post_ui(finish, languages)
+
+        def finish(languages):
+            self._content_languages_loading = False
+            if languages is None:
+                self.settings_languages_status_row.set_subtitle(_("Could not load languages. Check your connection and try again."))
+            else:
+                self._set_content_language_options(languages)
+                self.settings_languages_status_row.set_subtitle(_("Language list updated from TMDB."))
+            return GLib.SOURCE_REMOVE
+
+        self._start_worker("gisheh-tmdb-languages", worker)
+
+    @persisted_change
     def _on_settings_content_language_changed(
         self, row: Adw.ComboRow, _parameter: Any
     ) -> None:
-        """Apply the experimental TMDB content language without restart."""
+        """Apply the TMDB content language without changing the interface."""
+        if getattr(self, "_updating_content_languages", False):
+            return
         try:
-            language = CONTENT_LANGUAGES[row.get_selected()]
+            language = self._content_language_options[row.get_selected()]
         except IndexError:
             return
         if language == getattr(self, "content_language", "system"):
@@ -4948,7 +2679,6 @@ class GishehWindow:
             tmdb_client.set_content_language(language)
         except (AttributeError, ValueError):
             pass
-        self._apply_text_direction()
         # Persist only the new content language; all other preferences stay
         # untouched because _save_user_state rewrites the same payload shape.
         try:
@@ -4959,7 +2689,7 @@ class GishehWindow:
                 tmdb_client.set_content_language(previous)
             except (AttributeError, ValueError):
                 pass
-            self._apply_text_direction()
+            row.set_selected(self._content_language_options.index(previous))
             self._toast(_("Could not save the content language"))
             return
         self._refresh_tmdb_content_language()
@@ -4969,7 +2699,7 @@ class GishehWindow:
         """Reload language-dependent TMDB data after a content-language change.
 
         The on-disk metadata cache is already keyed by
-        resource ID + content type + language, so cached English/Persian
+        resource ID + content type + language, so differently localized
         payloads coexist. Here we only invalidate the in-memory language
         state and re-request every active page in the new language.
         """
@@ -5025,6 +2755,7 @@ class GishehWindow:
         except (AttributeError, RuntimeError, TypeError):
             pass
 
+    @persisted_change
     def _on_settings_view_changed(self, row: Adw.ComboRow, _parameter: Any) -> None:
         self.preferred_view_mode = ("list", "grid")[row.get_selected()]
         self.view_mode = self.preferred_view_mode
@@ -5035,12 +2766,14 @@ class GishehWindow:
         self._save_view_mode_preference()
         self._save_user_state()
 
+    @persisted_change
     def _on_settings_auto_sync_changed(
         self, row: Adw.SwitchRow, _parameter: Any
     ) -> None:
         self.auto_sync = row.get_active()
         self._save_user_state()
 
+    @persisted_change
     def _on_settings_auto_calendar_changed(
         self, row: Adw.SwitchRow, _parameter: Any
     ) -> None:
@@ -5050,9 +2783,9 @@ class GishehWindow:
     def _calendar_cache_subtitle(self) -> str:
         snapshot = getattr(self, "calendar_snapshot", None)
         if snapshot is None:
-            return "No schedule has been cached yet."
+            return _("No schedule has been cached yet.")
         local = snapshot.fetched_at.astimezone()
-        return f"Last refreshed {local.strftime('%b %-d, %Y at %H:%M')}"
+        return _("Last refreshed {date}").format(date=local.strftime("%x %X"))
 
     def _on_clear_calendar_cache_clicked(self, _button: Gtk.Button) -> None:
         dialog = Adw.AlertDialog(
@@ -5069,8 +2802,9 @@ class GishehWindow:
         dialog.set_close_response("cancel")
         dialog.set_response_appearance("clear", Adw.ResponseAppearance.DESTRUCTIVE)
         dialog.connect("response", self._on_clear_calendar_cache_response)
-        dialog.present(self.window)
+        dialog.present(self.settings_dialog)
 
+    @persisted_change
     def _on_clear_calendar_cache_response(
         self, _dialog: Adw.AlertDialog, response: str
     ) -> None:
@@ -5105,7 +2839,7 @@ class GishehWindow:
         dialog.set_close_response("cancel")
         dialog.set_response_appearance("clear", Adw.ResponseAppearance.DESTRUCTIVE)
         dialog.connect("response", self._on_clear_cache_response)
-        dialog.present(self.window)
+        dialog.present(self.settings_dialog)
 
     def _on_clear_cache_response(self, _dialog: Adw.AlertDialog, response: str) -> None:
         if response != "clear":
@@ -5166,30 +2900,16 @@ class GishehWindow:
             self.settings_factory_reset_button.set_sensitive(True)
             failure = Adw.AlertDialog(
                 heading=_("Gisheh was reset but could not restart"),
-                body=f"Close and open Gisheh again.\n\n{error}",
+                body=_("Close and open Gisheh again.\n\n{error}").format(error=error),
             )
             failure.add_response("close", _("Close"))
             failure.present(self.settings_dialog)
 
     @staticmethod
-    def _restart_application(*, language: str | None = None) -> None:
-        """Replace this process, optionally applying a session-only language."""
+    def _restart_application() -> None:
+        """Replace this process, preserving the system locale."""
         simkl_client.close_image_http_client()
         environment = os.environ.copy()
-        if language == "system":
-            original = environment.pop("GISHEH_ORIGINAL_LANGUAGE", None)
-            environment.pop("GISHEH_LANGUAGE", None)
-            if original == "__unset__":
-                environment.pop("LANGUAGE", None)
-            elif original is not None:
-                environment["LANGUAGE"] = original
-        elif language in TEMPORARY_LANGUAGES[1:]:
-            environment.setdefault(
-                "GISHEH_ORIGINAL_LANGUAGE",
-                environment.get("LANGUAGE", "__unset__"),
-            )
-            environment["GISHEH_LANGUAGE"] = language
-            environment["LANGUAGE"] = language
         python_paths = [entry for entry in sys.path if entry]
         inherited = environment.get("PYTHONPATH", "")
         if inherited:
@@ -5202,43 +2922,6 @@ class GishehWindow:
             *sys.argv[1:],
         ]
         os.execvpe(sys.executable, arguments, environment)
-
-    @staticmethod
-    def _profile_card() -> Gtk.Box:
-        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        card.add_css_class("profile-card")
-        return card
-
-    @staticmethod
-    def _profile_heading(title: str, subtitle: str | None = None) -> Gtk.Box:
-        heading = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        title_label = Gtk.Label(label=title, xalign=0)
-        title_label.add_css_class("title-3")
-        heading.append(title_label)
-        if subtitle:
-            subtitle_label = Gtk.Label(label=subtitle, xalign=0)
-            subtitle_label.add_css_class("dim-label")
-            subtitle_label.add_css_class("caption")
-            heading.append(subtitle_label)
-        return heading
-
-    @staticmethod
-    def _profile_metric(icon: str, value: str, label: str) -> Gtk.Box:
-        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-        card.add_css_class("profile-metric-card")
-        icon_widget = Gtk.Image.new_from_icon_name(icon)
-        icon_widget.set_halign(Gtk.Align.START)
-        icon_widget.add_css_class("accent")
-        card.append(icon_widget)
-        value_label = Gtk.Label(label=value, xalign=0)
-        value_label.set_wrap(True)
-        value_label.add_css_class("title-2")
-        card.append(value_label)
-        label_widget = Gtk.Label(label=label, xalign=0)
-        label_widget.set_wrap(True)
-        label_widget.add_css_class("dim-label")
-        card.append(label_widget)
-        return card
 
     def _profile_stats(self) -> dict[str, Any]:
         watched_records = tuple(
@@ -5346,7 +3029,7 @@ class GishehWindow:
             genre
             for record in watched_records
             for genre in record.genres
-            if genre != "Synced"
+            if genre not in {"Synced", _("Synced")}
         )
         if self.simkl_stats:
             movies_stats = self.simkl_stats.get("movies", {})
@@ -5412,279 +3095,10 @@ class GishehWindow:
             ),
         }
 
-    @staticmethod
-    def _review_metric(value: str, label: str) -> Gtk.Box:
-        metric = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        metric.set_hexpand(True)
-        value_label = Gtk.Label(label=value, xalign=0)
-        value_label.add_css_class("title-2")
-        metric.append(value_label)
-        caption = Gtk.Label(label=label, xalign=0)
-        caption.add_css_class("caption")
-        caption.add_css_class("dim-label")
-        metric.append(caption)
-        return metric
-
-    def _build_review_summary(
-        self,
-        period: str,
-        minutes: int,
-        episodes: int,
-        movies: int,
-        active_days: int,
-    ) -> Gtk.Box:
-        summary = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
-        summary.add_css_class("profile-review-summary")
-        period_label = Gtk.Label(label=period, xalign=0)
-        period_label.add_css_class("heading")
-        summary.append(period_label)
-        watch_time = Gtk.Label(label=format_watch_time(minutes), xalign=0)
-        watch_time.add_css_class("review-watch-time")
-        summary.append(watch_time)
-        watch_caption = Gtk.Label(label=_("Watch time"), xalign=0)
-        watch_caption.add_css_class("dim-label")
-        summary.append(watch_caption)
-
-        metrics = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=24)
-        metrics.append(self._review_metric(str(episodes), "Episodes"))
-        metrics.append(self._review_metric(str(movies), "Movies"))
-        metrics.append(self._review_metric(str(active_days), "Active days"))
-        summary.append(metrics)
-        return summary
-
-    def _build_monthly_review(self, stats: dict[str, Any]) -> Gtk.Box:
-        today = datetime.now().astimezone().date()
-        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
-        content.append(
-            self._build_review_summary(
-                today.strftime("%B %Y"),
-                stats["month_minutes"],
-                stats["month_episode_count"],
-                stats["month_movie_count"],
-                len(stats["month_activity"]),
-            )
-        )
-
-        return content
-
-    def _build_yearly_review(self, stats: dict[str, Any]) -> Gtk.Box:
-        today = datetime.now().astimezone().date()
-        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
-        content.append(
-            self._build_review_summary(
-                str(today.year),
-                stats["year_minutes"],
-                stats["year_episode_count"],
-                stats["year_movie_count"],
-                stats["active_days_year"],
-            )
-        )
-        content.append(self._profile_heading(_("Activity through the year")))
-
-        chart = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL,
-            spacing=8,
-            homogeneous=True,
-        )
-        maximum = max(stats["year_month_activity"].values(), default=1)
-        for month in range(1, 13):
-            column = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-            column.set_valign(Gtk.Align.END)
-            bar_host = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-            bar_host.set_vexpand(True)
-            bar_host.set_valign(Gtk.Align.END)
-            count = stats["year_month_activity"].get(month, 0)
-            bar = Gtk.Box()
-            bar.set_size_request(-1, max(4, round(count / maximum * 112)))
-            bar.add_css_class("review-month-bar")
-            if month == today.month:
-                bar.add_css_class("current")
-            bar.set_tooltip_text(
-                f"{date(today.year, month, 1).strftime('%B')}: {count} watched"
-            )
-            bar_host.append(bar)
-            column.append(bar_host)
-            label = Gtk.Label(label=date(today.year, month, 1).strftime("%b")[0])
-            label.add_css_class("caption")
-            label.add_css_class("dim-label")
-            column.append(label)
-            chart.append(column)
-        content.append(chart)
-        return content
-
-    def _build_review_card(self, stats: dict[str, Any]) -> Gtk.Box:
-        card = self._profile_card()
-        card.add_css_class("profile-review-shell")
-
-        heading = Gtk.CenterBox()
-        heading.set_start_widget(
-            self._profile_heading(_("Review"), _("Your activity over time"))
-        )
-        self.profile_review_switcher = Adw.ToggleGroup()
-        self.profile_review_switcher.add(Adw.Toggle(name="month", label=_("Month")))
-        self.profile_review_switcher.add(Adw.Toggle(name="year", label=_("Year")))
-        active = getattr(self, "profile_review_mode", "month")
-        self.profile_review_switcher.set_active_name(active)
-        self.profile_review_switcher.connect(
-            "notify::active-name",
-            self._on_profile_review_changed,
-        )
-        heading.set_end_widget(self.profile_review_switcher)
-        card.append(heading)
-
-        self.profile_review_stack = Gtk.Stack()
-        self.profile_review_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
-        self.profile_review_stack.set_transition_duration(180)
-        self.profile_review_stack.set_vhomogeneous(False)
-        self.profile_review_stack.add_named(
-            self._build_monthly_review(stats),
-            "month",
-        )
-        self.profile_review_stack.add_named(
-            self._build_yearly_review(stats),
-            "year",
-        )
-        self.profile_review_stack.set_visible_child_name(active)
-        card.append(self.profile_review_stack)
-        return card
-
-    def _on_profile_review_changed(
-        self,
-        group: Adw.ToggleGroup,
-        _parameter: Any,
-    ) -> None:
-        active = group.get_active_name()
-        if active not in ("month", "year"):
-            return
-        self.profile_review_mode = active
-        self.profile_review_stack.set_visible_child_name(active)
-
-    def _build_habits_card(self, stats: dict[str, Any]) -> Gtk.Box:
-        card = self._profile_card()
-        card.append(
-            self._profile_heading(_("Watching habits"), _("All-time library totals"))
-        )
-        for label, value in (
-            ("All time", format_watch_time(stats["total_minutes"])),
-            ("Movie time", format_watch_time(stats["movie_minutes"])),
-            ("TV & anime time", format_watch_time(stats["television_minutes"])),
-            ("Movies", str(stats["movie_count"])),
-            ("Episodes", f"{stats['episode_count']:,}"),
-        ):
-            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-            name = Gtk.Label(label=label, xalign=0)
-            name.set_hexpand(True)
-            name.add_css_class("dim-label")
-            row.append(name)
-            result = Gtk.Label(label=value)
-            result.add_css_class("heading")
-            row.append(result)
-            card.append(row)
-        return card
-
-    def _build_ratings_card(self, stats: dict[str, Any]) -> Gtk.Box:
-        card = self._profile_card()
-        card.append(
-            self._profile_heading(
-                _("Ratings"),
-                f"{stats['rating_count']} ratings across your library",
-            )
-        )
-        chart = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL, spacing=10, homogeneous=True
-        )
-        maximum = max(stats["rating_histogram"].values(), default=1)
-        for score in range(1, 11):
-            column = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-            column.set_valign(Gtk.Align.END)
-            bar_host = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-            bar_host.set_vexpand(True)
-            bar_host.set_valign(Gtk.Align.END)
-            bar = Gtk.Box()
-            count = stats["rating_histogram"].get(score, 0)
-            bar.set_size_request(-1, max(4, round(count / maximum * 96)))
-            bar.add_css_class("profile-rating-bar")
-            bar.set_tooltip_text(f"{score}/10: {count} ratings")
-            bar_host.append(bar)
-            column.append(bar_host)
-            label = Gtk.Label(label=str(score))
-            label.add_css_class("caption")
-            column.append(label)
-            chart.append(column)
-        card.append(chart)
-        return card
-
-    def _build_genres_card(self, stats: dict[str, Any]) -> Gtk.Box:
-        card = self._profile_card()
-        card.append(
-            self._profile_heading(_("Favorite genres"), _("Based on watched titles"))
-        )
-        top_genres = stats["genres"].most_common(6)
-        maximum = top_genres[0][1] if top_genres else 1
-        for genre, count in top_genres:
-            labels = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-            title = Gtk.Label(label=genre, xalign=0)
-            title.set_hexpand(True)
-            labels.append(title)
-            value = Gtk.Label(label=str(count))
-            value.add_css_class("dim-label")
-            labels.append(value)
-            card.append(labels)
-            progress = Gtk.ProgressBar(fraction=count / maximum)
-            progress.update_property(
-                [Gtk.AccessibleProperty.LABEL],
-                [f"{genre}: {count} watched titles"],
-            )
-            card.append(progress)
-        return card
-
     def _refresh_profile(self) -> None:
-        stats = self._profile_stats()
-        self._clear_container(self.profile_statistics_host)
-        self.profile_statistics_host.append(self._build_review_card(stats))
+        self.profile_view.update(self._profile_stats())
 
-        metrics = Gtk.FlowBox()
-        metrics.set_selection_mode(Gtk.SelectionMode.NONE)
-        metrics.set_min_children_per_line(2)
-        metrics.set_max_children_per_line(4)
-        metrics.set_column_spacing(12)
-        metrics.set_row_spacing(12)
-        for metric in (
-            self._profile_metric(
-                "document-open-recent-symbolic",
-                format_watch_time(stats["total_minutes"]),
-                _("Total watch time"),
-            ),
-            self._profile_metric(
-                "object-select-symbolic",
-                str(len(stats["watched_records"])),
-                _("Completed titles"),
-            ),
-            self._profile_metric(
-                "media-playback-start-symbolic",
-                f"{stats['episode_count']:,}",
-                _("Episodes watched"),
-            ),
-            self._profile_metric(
-                "starred-symbolic",
-                str(stats["rating_count"]),
-                _("Ratings given"),
-            ),
-        ):
-            metrics.append(metric)
-        self.profile_statistics_host.append(metrics)
-
-        paired = Gtk.FlowBox()
-        paired.set_selection_mode(Gtk.SelectionMode.NONE)
-        paired.set_min_children_per_line(1)
-        paired.set_max_children_per_line(2)
-        paired.set_column_spacing(14)
-        paired.set_row_spacing(14)
-        paired.append(self._build_habits_card(stats))
-        paired.append(self._build_genres_card(stats))
-        self.profile_statistics_host.append(paired)
-        self.profile_statistics_host.append(self._build_ratings_card(stats))
-
+    @persisted_change
     def begin_simkl_connection(self) -> bool:
         """Enter Simkl mode and start its PIN or refresh flow."""
         self.library_mode = LIBRARY_MODE_SIMKL
@@ -5700,10 +3114,13 @@ class GishehWindow:
             self._on_simkl_button_clicked(None)
         return GLib.SOURCE_REMOVE
 
+    @persisted_change
     def set_library_mode(self, mode: str) -> None:
         """Apply an explicit data-ownership choice without deleting either copy."""
         if mode not in LIBRARY_MODES:
             raise ValueError(f"Unsupported library mode: {mode}")
+        if mode != self.library_mode:
+            self._invalidate_background_jobs()
         if mode == self.library_mode:
             if mode == LIBRARY_MODE_SIMKL and not self.simkl_connected:
                 self.begin_simkl_connection()
@@ -5715,7 +3132,7 @@ class GishehWindow:
             self._simkl_sync_started_at = 0.0
             stored_state = read_state(self.state_file)
             self.library_mode = mode
-            save_library_mode(mode, self.state_file)
+            stored_state["preferences"] = {**stored_state.get("preferences", {}), "libraryMode": mode}
             if isinstance(stored_state.get("localProfile"), dict):
                 records, _explore, _totals = load_catalog()
                 self._replace_library(records)
@@ -5740,7 +3157,7 @@ class GishehWindow:
                 self.episode_watched_at = {}
                 self.title_watched_at = {}
                 self.local_library_records = {}
-                self._load_user_state()
+                self._load_user_state(stored_state)
             else:
                 for record in tuple(self.records):
                     canonical = self._canonical_record_id(record)
@@ -5763,11 +3180,11 @@ class GishehWindow:
 
         self._save_user_state()
         self.library_mode = mode
-        save_library_mode(mode, self.state_file)
         self._update_settings_account_rows()
         self._update_profile_identity()
         self.begin_simkl_connection()
 
+    @persisted_change
     def _on_simkl_button_clicked(self, _button: Gtk.Button | None) -> None:
         if getattr(self, "library_mode", LIBRARY_MODE_LOCAL) == LIBRARY_MODE_LOCAL:
             self.set_library_mode(LIBRARY_MODE_SIMKL)
@@ -5799,25 +3216,20 @@ class GishehWindow:
         client_id = self.simkl_client_id
         self._app_log("Simkl sign-in started; requesting a PIN.")
         self._update_settings_account_rows(syncing=True)
-        threading.Thread(
-            target=self._simkl_pin_worker,
-            args=(client_id,),
-            name="gisheh-simkl-pin",
-            daemon=True,
-        ).start()
+        self._start_worker('gisheh-simkl-pin', self._simkl_pin_worker, *(client_id,))
 
     def _simkl_pin_worker(self, client_id: str) -> None:
         started_at = time.monotonic()
         try:
             payload = simkl_client.request_pin(client_id)
         except simkl_client.SimklError as error:
-            GLib.idle_add(self._on_simkl_failed, str(error), error.code)
+            self._post_ui(self._on_simkl_failed, str(error), error.code)
             return
         self._app_log(
             "Simkl PIN received in %.1fs.",
             time.monotonic() - started_at,
         )
-        GLib.idle_add(self._present_simkl_pin, client_id, payload)
+        self._post_ui(self._present_simkl_pin, client_id, payload)
 
     def _present_simkl_pin(
         self,
@@ -5870,12 +3282,7 @@ class GishehWindow:
                 error,
                 level=logging.WARNING,
             )
-        threading.Thread(
-            target=self._simkl_poll_worker,
-            args=(client_id, user_code, interval, expires_in),
-            name="gisheh-simkl-poll",
-            daemon=True,
-        ).start()
+        self._start_worker('gisheh-simkl-poll', self._simkl_poll_worker, *(client_id, user_code, interval, expires_in))
         return GLib.SOURCE_REMOVE
 
     def _on_simkl_pin_dialog_response(
@@ -5904,23 +3311,23 @@ class GishehWindow:
             try:
                 payload = simkl_client.poll_pin(client_id, user_code)
             except simkl_client.SimklError as error:
-                GLib.idle_add(self._on_simkl_failed, str(error), error.code)
+                self._post_ui(self._on_simkl_failed, str(error), error.code)
                 return
             if self._simkl_poll_cancelled:
                 return
             access_token = str(payload.get("access_token") or "")
             if payload.get("result") == "OK" and access_token:
-                GLib.idle_add(self._on_simkl_authorized, access_token)
+                self._post_ui(self._on_simkl_authorized, access_token)
                 return
             if payload.get("device_code"):
-                GLib.idle_add(
+                self._post_ui(
                     self._on_simkl_failed,
                     "The Simkl PIN expired. Request a new code.",
                     None,
                 )
                 return
         if not self._simkl_poll_cancelled:
-            GLib.idle_add(
+            self._post_ui(
                 self._on_simkl_failed,
                 "The Simkl PIN expired. Request a new code.",
                 None,
@@ -5962,12 +3369,7 @@ class GishehWindow:
         self._update_header_data_status()
         self._update_settings_account_rows(syncing=True)
         generation = self._simkl_state_generation
-        threading.Thread(
-            target=self._simkl_sync_worker,
-            args=(self.simkl_client_id, self.simkl_token, generation),
-            name="gisheh-simkl-sync",
-            daemon=True,
-        ).start()
+        self._start_worker('gisheh-simkl-sync', self._simkl_sync_worker, *(self.simkl_client_id, self.simkl_token, generation))
 
     def _simkl_sync_worker(self, client_id: str, token: str, generation: int) -> None:
         try:
@@ -6083,49 +3485,13 @@ class GishehWindow:
                     "Watch statistics received in %.1fs.",
                     time.monotonic() - phase_started,
                 )
-            if not has_incremental_state:
-                phase_started = time.monotonic()
-                if repairing_metadata:
-                    self._app_log("Repairing Simkl user state and external IDs.")
-                else:
-                    self._app_log("Initial sync: downloading Simkl user state and IDs.")
-                library = simkl_client.fetch_library(client_id, token)
-                if not repairing_metadata:
-                    activities = simkl_client.fetch_activities(client_id, token)
-                self._app_log(
-                    "%s library download finished in %.1fs.",
-                    "State repair" if repairing_metadata else "Initial",
-                    time.monotonic() - phase_started,
-                )
-            elif activities.get("all") == last_sync:
-                library = cached_library
-                self._app_log("No Simkl library changes; using the local snapshot.")
-            else:
-                phase_started = time.monotonic()
-                self._app_log(
-                    "Changes found; downloading the incremental library delta."
-                )
-                delta = simkl_client.fetch_library_delta(
-                    client_id,
-                    token,
-                    last_sync,
-                )
-                valid_ids = None
-                if simkl_client.removals_changed(cached_activities, activities):
-                    self._app_log(
-                        "Removed items detected; reconciling the compact ID list."
-                    )
-                    id_snapshot = simkl_client.fetch_library_ids(client_id, token)
-                    valid_ids = simkl_client.library_ids(id_snapshot)
-                library = simkl_client.merge_library(
-                    cached_library,
-                    delta,
-                    valid_ids,
-                )
-                self._app_log(
-                    "Incremental library merge finished in %.1fs.",
-                    time.monotonic() - phase_started,
-                )
+            library = SyncController(simkl_client).library(
+                client_id, token, cached_library=cached_library,
+                cached_activities=cached_activities, activities=activities,
+                last_sync=last_sync, incremental=has_incremental_state,
+            )
+            if not has_incremental_state and not repairing_metadata:
+                activities = simkl_client.fetch_activities(client_id, token)
             if not simkl_client.library_has_user_state(library):
                 raise simkl_client.SimklError(
                     "Simkl returned an incomplete user-state response."
@@ -6148,7 +3514,7 @@ class GishehWindow:
             self._app_log("Secure local Simkl snapshot updated.")
             records = enrich_records_from_tmdb_cache(title_records_from_simkl(library))
         except simkl_client.SimklError as error:
-            GLib.idle_add(self._on_simkl_failed, str(error), error.code)
+            self._post_ui(self._on_simkl_failed, str(error), error.code)
             return
         # This worker boundary must report unforeseen failures on GTK's main
         # loop; otherwise the daemon thread would terminate silently.
@@ -6158,13 +3524,13 @@ class GishehWindow:
                 type(error).__name__,
                 level=logging.ERROR,
             )
-            GLib.idle_add(
+            self._post_ui(
                 self._on_simkl_failed,
                 "Unexpected Simkl sync error. Open Application Log for details.",
                 None,
             )
             return
-        GLib.idle_add(
+        self._post_ui(
             self._apply_simkl_sync,
             settings,
             stats,
@@ -6206,6 +3572,7 @@ class GishehWindow:
             if record_id in valid_canonical_ids
         }
 
+    @persisted_change
     def _apply_simkl_sync(
         self,
         settings: dict[str, Any],
@@ -6274,12 +3641,7 @@ class GishehWindow:
             str(user.get("avatar") or "") or None if isinstance(user, dict) else None
         )
         if avatar_url and simkl_client.cached_avatar() is None:
-            threading.Thread(
-                target=self._cache_simkl_avatar,
-                args=(avatar_url,),
-                name="gisheh-simkl-avatar",
-                daemon=True,
-            ).start()
+            self._start_worker('gisheh-simkl-avatar', self._cache_simkl_avatar, *(avatar_url,))
         elapsed = (
             time.monotonic() - self._simkl_sync_started_at
             if self._simkl_sync_started_at
@@ -6292,7 +3654,7 @@ class GishehWindow:
         )
         if self.tmdb_token:
             self._toast(
-                f"Synced {len(records)} Simkl states — loading catalog from TMDB"
+                _("Synced {count} Simkl states — loading catalog from TMDB").format(count=len(records))
             )
             self._load_tmdb_library_async(records)
         else:
@@ -6305,7 +3667,7 @@ class GishehWindow:
     def _cache_simkl_avatar(self, avatar_url: str) -> None:
         avatar_file = simkl_client.cache_avatar(avatar_url)
         if avatar_file is not None:
-            GLib.idle_add(self._apply_simkl_avatar, avatar_file)
+            self._post_ui(self._apply_simkl_avatar, avatar_file)
 
     def _apply_simkl_avatar(self, avatar_file: str) -> bool:
         if not self.simkl_connected:
@@ -6313,6 +3675,8 @@ class GishehWindow:
         try:
             texture = Gdk.Texture.new_from_filename(avatar_file)
             self.sidebar_profile_avatar.set_custom_image(texture)
+            if hasattr(self, "profile_view"):
+                self.profile_view.avatar.set_custom_image(texture)
         except GLib.Error:
             pass
         return GLib.SOURCE_REMOVE
@@ -6369,20 +3733,23 @@ class GishehWindow:
         return GLib.SOURCE_REMOVE
 
     def _update_profile_identity(self) -> None:
+        local = getattr(self, "library_mode", LIBRARY_MODE_LOCAL) == LIBRARY_MODE_LOCAL
         user = self.simkl_settings.get("user", {})
-        name = (
-            str(user.get("name") or getuser()) if isinstance(user, dict) else getuser()
-        )
-        self.sidebar_profile_avatar.set_text(name)
-        cached_avatar = simkl_client.cached_avatar()
+        name = str(user.get("name") or getuser()) if not local and isinstance(user, dict) else getuser()
+        texture = None
+        cached_avatar = simkl_client.cached_avatar() if not local else None
         if cached_avatar:
             try:
                 texture = Gdk.Texture.new_from_filename(cached_avatar)
-                self.sidebar_profile_avatar.set_custom_image(texture)
             except GLib.Error:
                 pass
-        else:
-            self.sidebar_profile_avatar.set_custom_image(None)
+        self.sidebar_profile_avatar.set_text(name)
+        self.sidebar_profile_avatar.set_custom_image(texture)
+        if hasattr(self, "profile_view"):
+            source = _("Local profile · Stored on this device") if local else (
+                _("Connected to Simkl") if self.simkl_connected else _("Simkl profile · Not connected")
+            )
+            self.profile_view.set_identity(name, source, texture)
         self._update_header_data_status()
         self._update_settings_account_rows()
 
@@ -6429,6 +3796,7 @@ class GishehWindow:
             [self.header_data_status_label.get_label(), tooltip],
         )
 
+    @persisted_change
     def _on_header_data_status_clicked(self, _button: Gtk.Button) -> None:
         """Make the header status a direct action for its current state."""
         if self.library_mode == LIBRARY_MODE_LOCAL:
@@ -6484,6 +3852,7 @@ class GishehWindow:
         dialog.connect("response", self._on_simkl_disconnect_response)
         dialog.present(self.window)
 
+    @persisted_change
     def _on_simkl_disconnect_response(
         self,
         _dialog: Adw.AlertDialog,
@@ -6504,6 +3873,7 @@ class GishehWindow:
                 error,
                 level=logging.WARNING,
             )
+        self._invalidate_background_jobs()
         self.simkl_token = None
         self.simkl_connected = False
         self._simkl_sync_error = None
@@ -6757,8 +4127,11 @@ class GishehWindow:
         overview_title.add_css_class("heading")
         self.episode_overview_label = Gtk.Label(xalign=0)
         self.episode_overview_label.set_wrap(True)
-        self.episode_overview_label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
-        self.episode_overview_label.set_max_width_chars(42)
+        self.episode_overview_label.set_wrap_mode(Pango.WrapMode.WORD)
+        self.episode_overview_label.set_max_width_chars(-1)
+        self.episode_overview_label.set_hexpand(True)
+        self.episode_overview_label.set_halign(Gtk.Align.FILL)
+        self.episode_overview_label.set_justify(Gtk.Justification.FILL)
         self.episode_overview_label.add_css_class("dim-label")
         episode_overview = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
@@ -6906,7 +4279,7 @@ class GishehWindow:
 
         adjustment.connect("changed", update_visibility)
         update_visibility()
-        GLib.idle_add(lambda: (update_visibility(), GLib.SOURCE_REMOVE)[1])
+        self._post_ui(lambda: (update_visibility(), GLib.SOURCE_REMOVE)[1])
         return controls
 
     @staticmethod
@@ -7023,15 +4396,10 @@ class GishehWindow:
         )
         self.watched_button.connect("clicked", self._on_watched_clicked)
         self.bookmark_button.connect("toggled", self._on_bookmark_toggled)
-        self.detail_title.connect("activate-link", self._on_detail_title_activated)
-        self.detail_title.set_tooltip_text(_("Open this title on TMDB"))
-        self.detail_title.add_css_class("detail-title-link")
-        detail_title_label = self.detail_title.get_child()
-        if isinstance(detail_title_label, Gtk.Label):
-            detail_title_label.set_wrap(True)
-            detail_title_label.set_max_width_chars(28)
-            detail_title_label.set_xalign(0)
-            detail_title_label.add_css_class("title-2")
+        self.detail_title.set_wrap(True)
+        self.detail_title.set_wrap_mode(Pango.WrapMode.WORD)
+        self.detail_title.set_max_width_chars(28)
+        self.detail_title.set_xalign(0)
         self.season_watched_button.connect(
             "clicked",
             self._on_season_watched_clicked,
@@ -7041,6 +4409,33 @@ class GishehWindow:
             self._on_episode_watched_clicked,
         )
 
+        self._install_window_actions(application)
+
+        key_controller = Gtk.EventControllerKey()
+        key_controller.connect("key-pressed", self._on_search_key_pressed)
+        self.search_entry.add_controller(key_controller)
+
+        explore_search_key_controller = Gtk.EventControllerKey()
+        explore_search_key_controller.connect(
+            "key-pressed",
+            self._on_explore_search_key_pressed,
+        )
+        self.explore_search_entry.add_controller(explore_search_key_controller)
+
+        explore_adjustment = self.explore_scroller.get_vadjustment()
+        explore_adjustment.connect("value-changed", self._on_explore_scroll_changed)
+        explore_adjustment.connect("changed", self._on_explore_scroll_changed)
+
+        window_key_controller = Gtk.EventControllerKey()
+        window_key_controller.set_propagation_phase(Gtk.PropagationPhase.BUBBLE)
+        window_key_controller.connect("key-pressed", self._on_window_key_pressed)
+        self.window.add_controller(window_key_controller)
+
+        self.window.connect("close-request", self._on_window_close_request)
+        self.window.connect("realize", self._on_window_realized)
+
+    def _install_window_actions(self, application: Adw.Application) -> None:
+        """Keep discoverable shortcuts and actual actions in one place."""
         search_action = Gio.SimpleAction.new("search", None)
         search_action.connect("activate", self._on_search_requested)
         self.window.add_action(search_action)
@@ -7062,28 +4457,24 @@ class GishehWindow:
         self.window.add_action(settings_action)
         application.set_accels_for_action("win.preferences", ["<primary>comma"])
 
-        key_controller = Gtk.EventControllerKey()
-        key_controller.connect("key-pressed", self._on_search_key_pressed)
-        self.search_entry.add_controller(key_controller)
+        for name, callback, shortcuts in (
+            ("find", self._on_find_requested, ["<primary>f"]),
+            ("shortcuts", self._show_shortcuts, ["<primary>question"]),
+            ("main-menu", self._show_main_menu, ["F10"]),
+            ("back", lambda *_args: self._navigate_back(), ["<Alt>Left"]),
+            ("close", self._close_active_surface, ["<primary>w"]),
+        ):
+            action = Gio.SimpleAction.new(name, None)
+            action.connect("activate", callback)
+            self.window.add_action(action)
+            application.set_accels_for_action(f"win.{name}", shortcuts)
 
-        explore_search_key_controller = Gtk.EventControllerKey()
-        explore_search_key_controller.connect(
-            "key-pressed",
-            self._on_explore_search_key_pressed,
-        )
-        self.explore_search_entry.add_controller(explore_search_key_controller)
-
-        explore_adjustment = self.explore_scroller.get_vadjustment()
-        explore_adjustment.connect("value-changed", self._on_explore_scroll_changed)
-        explore_adjustment.connect("changed", self._on_explore_scroll_changed)
-
-        window_key_controller = Gtk.EventControllerKey()
-        window_key_controller.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
-        window_key_controller.connect("key-pressed", self._on_window_key_pressed)
-        self.window.add_controller(window_key_controller)
-
-        self.window.connect("close-request", self._on_window_close_request)
-        self.window.connect("realize", self._on_window_realized)
+    def _close_active_surface(self, *_args) -> None:
+        dialog = self.window.get_visible_dialog()
+        if dialog is not None:
+            dialog.close()
+        else:
+            self.window.close()
 
     def _on_window_realized(self, window: Gtk.Window) -> None:
         surface = window.get_surface()
@@ -7103,7 +4494,7 @@ class GishehWindow:
         """Coalesce allocations into one relayout after GTK has settled."""
         if self._explore_resize_source_id:
             return
-        self._explore_resize_source_id = GLib.idle_add(
+        self._explore_resize_source_id = self._post_ui(
             self._apply_explore_resize,
         )
 
@@ -7207,7 +4598,14 @@ class GishehWindow:
             else "All genres"
         )
         self._updating = True
-        self.genre_dropdown.set_model(Gtk.StringList.new(list(self.genre_options)))
+        self.genre_dropdown.set_model(
+            Gtk.StringList.new(
+                [
+                    _("All genres") if option == "All genres" else option
+                    for option in self.genre_options
+                ]
+            )
+        )
         self.genre_dropdown.set_selected(self.genre_options.index(selected_genre))
         self.genre = selected_genre
         self._updating = False
@@ -7230,7 +4628,12 @@ class GishehWindow:
         )
         self._updating = True
         self.explore_genre_dropdown.set_model(
-            Gtk.StringList.new(list(self.explore_genre_options))
+            Gtk.StringList.new(
+                [
+                    _("All genres") if option == "All genres" else option
+                    for option in self.explore_genre_options
+                ]
+            )
         )
         self.explore_genre_dropdown.set_selected(
             self.explore_genre_options.index(selected_genre)
@@ -7278,12 +4681,7 @@ class GishehWindow:
             len(ordered),
             tmdb_client.active_language(),
         )
-        threading.Thread(
-            target=self._load_tmdb_library_worker,
-            args=(ordered, token, generation),
-            name="gisheh-tmdb-library",
-            daemon=True,
-        ).start()
+        self._start_worker('gisheh-tmdb-library', self._load_tmdb_library_worker, *(ordered, token, generation))
 
     def _load_tmdb_library_worker(
         self,
@@ -7293,7 +4691,7 @@ class GishehWindow:
     ) -> None:
         started_at = time.monotonic()
         completed = 0
-        with ThreadPoolExecutor(max_workers=6) as executor:
+        with self._image_executor() as executor:
             futures = [
                 executor.submit(
                     self._load_tmdb_library_record,
@@ -7312,7 +4710,7 @@ class GishehWindow:
             len(records),
             time.monotonic() - started_at,
         )
-        GLib.idle_add(
+        self._post_ui(
             self._finish_tmdb_library_enrichment,
             generation,
             completed,
@@ -7347,7 +4745,7 @@ class GishehWindow:
                     level=logging.WARNING,
                 )
                 return False
-        GLib.idle_add(
+        self._post_ui(
             self._apply_tmdb_library_summary,
             generation,
             record.id,
@@ -7357,7 +4755,7 @@ class GishehWindow:
         if poster_path:
             poster_file = tmdb_client.cache_image(poster_path, size="w500")
             if poster_file is not None:
-                GLib.idle_add(
+                self._post_ui(
                     self._apply_tmdb_library_poster,
                     generation,
                     record.id,
@@ -7419,6 +4817,7 @@ class GishehWindow:
             self._refresh_profile()
         return GLib.SOURCE_REMOVE
 
+    @persisted_change
     def _finish_tmdb_library_enrichment(
         self,
         generation: int,
@@ -7432,7 +4831,11 @@ class GishehWindow:
             scroll_position = self.results_scroller.get_vadjustment().get_value()
             self._refresh_results()
             self._scroll_to_value(self.results_scroller, scroll_position)
-        self._toast(f"TMDB catalog ready for {completed}/{total} titles")
+        self._toast(
+            _("TMDB catalog ready for {completed}/{total} titles").format(
+                completed=completed, total=total
+            )
+        )
         return GLib.SOURCE_REMOVE
 
     def _load_tmdb_explore_async(self) -> None:
@@ -7452,12 +4855,7 @@ class GishehWindow:
             tmdb_client.active_language(),
             tmdb_client.token_source() or "unknown",
         )
-        threading.Thread(
-            target=self._load_tmdb_explore_worker,
-            args=(token, generation, self.active_media),
-            name="gisheh-tmdb-explore",
-            daemon=True,
-        ).start()
+        self._start_worker('gisheh-tmdb-explore', self._load_tmdb_explore_worker, *(token, generation, self.active_media))
 
     def _load_tmdb_explore_worker(
         self,
@@ -7471,7 +4869,7 @@ class GishehWindow:
             tmdb_client.active_language(),
         )
         try:
-            collections = tmdb_client.fetch_explore(token)
+            collections = ExploreController(tmdb_client).fetch(token)
             records: list[TitleRecord] = []
             image_work: list[tuple[int, int, str, str, str, str]] = []
             work_items = [
@@ -7522,13 +4920,13 @@ class GishehWindow:
             if not records:
                 raise tmdb_client.TmdbError("TMDB returned no titles.")
         except (KeyError, OSError, TypeError, ValueError, tmdb_client.TmdbError) as error:
-            GLib.idle_add(
+            self._post_ui(
                 self._on_tmdb_explore_failed,
                 generation,
                 str(error),
             )
             return
-        GLib.idle_add(self._apply_tmdb_explore, generation, tuple(records))
+        self._post_ui(self._apply_tmdb_explore, generation, tuple(records))
         self._app_log(
             "TMDB Explore metadata received: %d titles in %.1fs.",
             len(records),
@@ -7536,7 +4934,7 @@ class GishehWindow:
         )
 
         image_work.sort(key=lambda item: (item[0], item[1]))
-        with ThreadPoolExecutor(max_workers=8) as executor:
+        with self._image_executor() as executor:
             futures = {
                 executor.submit(tmdb_client.cache_image, path, size=size): (
                     record_id,
@@ -7549,7 +4947,7 @@ class GishehWindow:
                 if image_file is None:
                     continue
                 record_id, kind = futures[future]
-                GLib.idle_add(
+                self._post_ui(
                     self._apply_tmdb_explore_image,
                     generation,
                     record_id,
@@ -7603,12 +5001,7 @@ class GishehWindow:
         generation = self._tmdb_explore_generation
         self._tmdb_explore_pages_loading.add(media_type)
         self._sync_explore_loading_indicator()
-        threading.Thread(
-            target=self._load_next_tmdb_explore_page_worker,
-            args=(self.tmdb_token, generation, media_type, page),
-            name=f"gisheh-tmdb-explore-{media_type.lower()}-{page}",
-            daemon=True,
-        ).start()
+        self._start_worker(f'gisheh-tmdb-explore-{media_type.lower()}-{page}', self._load_next_tmdb_explore_page_worker, *(self.tmdb_token, generation, media_type, page))
 
     def _load_next_tmdb_explore_page_worker(
         self,
@@ -7618,7 +5011,7 @@ class GishehWindow:
         page: int,
     ) -> None:
         try:
-            payload = tmdb_client.fetch_explore_page(token, media_type, page)
+            payload = ExploreController(tmdb_client).page(token, media_type, page)
             raw_records = payload.get("results", ())
             records: list[TitleRecord] = []
             image_work: list[tuple[str, str, str]] = []
@@ -7644,7 +5037,7 @@ class GishehWindow:
                     image_work.append((record.id, "backdrop", backdrop_path))
             total_pages = int(payload.get("total_pages") or page)
         except tmdb_client.TmdbError as error:
-            GLib.idle_add(
+            self._post_ui(
                 self._on_next_tmdb_explore_page_failed,
                 generation,
                 media_type,
@@ -7652,7 +5045,7 @@ class GishehWindow:
             )
             return
 
-        GLib.idle_add(
+        self._post_ui(
             self._apply_next_tmdb_explore_page,
             generation,
             media_type,
@@ -7660,7 +5053,7 @@ class GishehWindow:
             total_pages,
             tuple(records),
         )
-        with ThreadPoolExecutor(max_workers=8) as executor:
+        with self._image_executor() as executor:
             futures = {
                 executor.submit(
                     tmdb_client.cache_image,
@@ -7674,7 +5067,7 @@ class GishehWindow:
                 if image_file is None:
                     continue
                 record_id, kind = futures[future]
-                GLib.idle_add(
+                self._post_ui(
                     self._apply_tmdb_explore_image,
                     generation,
                     record_id,
@@ -7772,12 +5165,7 @@ class GishehWindow:
             or not self.tmdb_token
         ):
             return GLib.SOURCE_REMOVE
-        threading.Thread(
-            target=self._load_tmdb_search_page_worker,
-            args=(self.tmdb_token, generation, media_type, query, 1),
-            name=f"gisheh-tmdb-search-{media_type.lower()}",
-            daemon=True,
-        ).start()
+        self._start_worker(f'gisheh-tmdb-search-{media_type.lower()}', self._load_tmdb_search_page_worker, *(self.tmdb_token, generation, media_type, query, 1))
         return GLib.SOURCE_REMOVE
 
     def _load_next_tmdb_search_page(self) -> None:
@@ -7791,18 +5179,7 @@ class GishehWindow:
         page = self._tmdb_search_page + 1
         self._tmdb_search_loading = True
         self._sync_explore_loading_indicator()
-        threading.Thread(
-            target=self._load_tmdb_search_page_worker,
-            args=(
-                self.tmdb_token,
-                self._tmdb_search_generation,
-                self.active_media,
-                self._tmdb_search_query,
-                page,
-            ),
-            name=f"gisheh-tmdb-search-{self.active_media.lower()}-{page}",
-            daemon=True,
-        ).start()
+        self._start_worker(f'gisheh-tmdb-search-{self.active_media.lower()}-{page}', self._load_tmdb_search_page_worker, *(self.tmdb_token, self._tmdb_search_generation, self.active_media, self._tmdb_search_query, page))
 
     def _load_tmdb_search_page_worker(
         self,
@@ -7813,7 +5190,7 @@ class GishehWindow:
         page: int,
     ) -> None:
         try:
-            payload = tmdb_client.search_titles_page(
+            payload = ExploreController(tmdb_client).search(
                 token,
                 media_type,
                 query,
@@ -7844,7 +5221,7 @@ class GishehWindow:
                     image_work.append((record.id, "backdrop", backdrop_path))
             total_pages = int(payload.get("total_pages") or page)
         except tmdb_client.TmdbError as error:
-            GLib.idle_add(
+            self._post_ui(
                 self._on_tmdb_search_failed,
                 generation,
                 media_type,
@@ -7853,7 +5230,7 @@ class GishehWindow:
             )
             return
 
-        GLib.idle_add(
+        self._post_ui(
             self._apply_tmdb_search_page,
             generation,
             media_type,
@@ -7862,7 +5239,7 @@ class GishehWindow:
             total_pages,
             tuple(records),
         )
-        with ThreadPoolExecutor(max_workers=8) as executor:
+        with self._image_executor() as executor:
             futures = {
                 executor.submit(
                     tmdb_client.cache_image,
@@ -7876,7 +5253,7 @@ class GishehWindow:
                 if image_file is None:
                     continue
                 record_id, kind = futures[future]
-                GLib.idle_add(
+                self._post_ui(
                     self._apply_tmdb_search_image,
                     generation,
                     record_id,
@@ -8069,12 +5446,7 @@ class GishehWindow:
             record.tmdb_id,
             tmdb_client.active_language(),
         )
-        threading.Thread(
-            target=self._load_tmdb_details_worker,
-            args=(record, self.tmdb_token, generation),
-            name=f"gisheh-tmdb-{record.tmdb_id}",
-            daemon=True,
-        ).start()
+        self._start_worker(f'gisheh-tmdb-{record.tmdb_id}', self._load_tmdb_details_worker, *(record, self.tmdb_token, generation))
 
     def _load_tmdb_details_worker(
         self,
@@ -8090,7 +5462,7 @@ class GishehWindow:
             record.tmdb_id,
         )
         try:
-            payload = tmdb_client.fetch_details(
+            payload = DetailsController(tmdb_client).fetch(
                 token,
                 record.tmdb_media_type or "movie",
                 record.tmdb_id or 0,
@@ -8100,10 +5472,12 @@ class GishehWindow:
             poster_file = tmdb_client.cached_image(poster_path, size="w500")
             backdrop_file = tmdb_client.cached_image(backdrop_path, size="w780")
             genres = (
-                tuple(
-                    str(item["name"])
-                    for item in payload.get("genres", ())
-                    if isinstance(item, dict) and item.get("name")
+                localize_genre_names(
+                    tuple(
+                        str(item["name"])
+                        for item in payload.get("genres", ())
+                        if isinstance(item, dict) and item.get("name")
+                    )
                 )
                 or record.genres
             )
@@ -8125,7 +5499,7 @@ class GishehWindow:
             cast = tuple(
                 CastMember(
                     str(item.get("name", "—")),
-                    str(item.get("character", "Cast")),
+                    str(item.get("character") or _("Cast")),
                     tmdb_client.cached_image(
                         str(item.get("profile_path") or ""),
                         size="w185",
@@ -8204,7 +5578,10 @@ class GishehWindow:
                     SeasonInfo(
                         id=f"s{int(item.get('season_number', position))}",
                         number=int(item.get("season_number", position)),
-                        title=str(item.get("name") or f"Season {position}"),
+                        title=str(
+                            item.get("name")
+                            or _("Season {number}").format(number=position)
+                        ),
                         watched=watched_by_number.get(
                             int(item.get("season_number", position)),
                             0,
@@ -8249,10 +5626,14 @@ class GishehWindow:
                 tmdb_record,
                 runtime=runtime,
                 genres=genres,
-                country=", ".join(countries[:2]) or record.country,
+                country=", ".join(localize_countries(tuple(countries[:2])))
+                or record.country,
                 creator=creator,
                 description=str(payload.get("overview") or record.description),
-                availability=str(payload.get("status") or record.availability),
+                availability=localize_tmdb_status(
+                    str(payload.get("status") or record.availability),
+                    fallback=record.availability,
+                ),
                 network=", ".join(networks[:2]) or record.network,
                 cast=cast or record.cast,
                 seasons=seasons or record.seasons,
@@ -8268,7 +5649,7 @@ class GishehWindow:
                 videos=videos,
             )
         except (KeyError, OSError, TypeError, ValueError, tmdb_client.TmdbError) as error:
-            GLib.idle_add(
+            self._post_ui(
                 self._on_tmdb_details_failed,
                 record.id,
                 generation,
@@ -8298,7 +5679,7 @@ class GishehWindow:
             kind: sum(work_kind == kind for work_kind, _path, _size in gallery_work)
             for kind in ("backdrop", "poster")
         }
-        GLib.idle_add(
+        self._post_ui(
             self._apply_tmdb_details,
             generation,
             updated,
@@ -8316,7 +5697,7 @@ class GishehWindow:
             else ()
         )
         recommendations = recommendation_records_from_tmdb(raw_recommendations, updated)
-        GLib.idle_add(
+        self._post_ui(
             self._apply_tmdb_recommendations,
             record.id,
             generation,
@@ -8341,7 +5722,7 @@ class GishehWindow:
             and item.tmdb_id is not None
             and poster_by_tmdb.get(item.tmdb_id)
         ]
-        with ThreadPoolExecutor(max_workers=4) as executor:
+        with self._image_executor() as executor:
             futures = {
                 executor.submit(tmdb_client.cache_image, path, size="w342"): item_id
                 for item_id, path in recommendation_work
@@ -8349,7 +5730,7 @@ class GishehWindow:
             for future in as_completed(futures):
                 image_file = future.result()
                 if image_file:
-                    GLib.idle_add(
+                    self._post_ui(
                         self._apply_tmdb_recommendation_artwork,
                         record.id,
                         generation,
@@ -8365,7 +5746,7 @@ class GishehWindow:
             if backdrop_path and backdrop_file is None
             else None,
         ]
-        with ThreadPoolExecutor(max_workers=2) as executor:
+        with self._image_executor() as executor:
             futures = {
                 executor.submit(tmdb_client.cache_image, path, size=size): kind
                 for job in main_images
@@ -8375,7 +5756,7 @@ class GishehWindow:
             for future in as_completed(futures):
                 image_file = future.result()
                 if image_file is not None:
-                    GLib.idle_add(
+                    self._post_ui(
                         self._apply_tmdb_detail_artwork,
                         record.id,
                         generation,
@@ -8383,14 +5764,14 @@ class GishehWindow:
                         image_file,
                     )
 
-        with ThreadPoolExecutor(max_workers=6) as executor:
+        with self._image_executor() as executor:
             futures = {
                 executor.submit(tmdb_client.cache_image, path, size="w185"): index
                 for index, path in profile_work
             }
             for future in as_completed(futures):
                 image_file = future.result()
-                GLib.idle_add(
+                self._post_ui(
                     self._apply_tmdb_cast_artwork,
                     record.id,
                     generation,
@@ -8398,14 +5779,14 @@ class GishehWindow:
                     image_file,
                 )
 
-        with ThreadPoolExecutor(max_workers=6) as executor:
+        with self._image_executor() as executor:
             futures = {
                 executor.submit(tmdb_client.cache_image, path, size=size): kind
                 for kind, path, size in gallery_work
             }
             for future in as_completed(futures):
                 image_file = future.result()
-                GLib.idle_add(
+                self._post_ui(
                     self._apply_tmdb_gallery_artwork,
                     record.id,
                     generation,
@@ -8418,7 +5799,7 @@ class GishehWindow:
             for index, item in enumerate(videos)
             if item.thumbnail_file is None
         ]
-        with ThreadPoolExecutor(max_workers=4) as executor:
+        with self._image_executor() as executor:
             futures = {
                 executor.submit(tmdb_client.cache_youtube_thumbnail, key): index
                 for index, key in video_work
@@ -8426,7 +5807,7 @@ class GishehWindow:
             for future in as_completed(futures):
                 image_file = future.result()
                 if image_file:
-                    GLib.idle_add(
+                    self._post_ui(
                         self._apply_tmdb_video_thumbnail,
                         record.id,
                         generation,
@@ -8637,18 +6018,7 @@ class GishehWindow:
         self._tmdb_season_details_loading.add(season_key)
         token = self.tmdb_token
         assert token is not None
-        threading.Thread(
-            target=self._load_tmdb_season_details_worker,
-            args=(
-                record.id,
-                token,
-                record.tmdb_id,
-                season.number,
-                season_key,
-            ),
-            name=f"gisheh-tmdb-season-{record.tmdb_id}-{season.number}",
-            daemon=True,
-        ).start()
+        self._start_worker(f'gisheh-tmdb-season-{record.tmdb_id}-{season.number}', self._load_tmdb_season_details_worker, *(record.id, token, record.tmdb_id, season.number, season_key))
 
     def _load_tmdb_season_details_worker(
         self,
@@ -8659,7 +6029,7 @@ class GishehWindow:
         season_key: str,
     ) -> None:
         try:
-            payload = tmdb_client.fetch_season_details(
+            payload = DetailsController(tmdb_client).season(
                 token,
                 tmdb_id,
                 season_number,
@@ -8704,8 +6074,8 @@ class GishehWindow:
                                 profile_file = None
                             cast_items.append(
                                 CastMember(
-                                    name=str(member.get("name") or "Unknown"),
-                                    role=str(member.get("character") or "Guest star"),
+                                    name=str(member.get("name") or _("Unknown")),
+                                    role=str(member.get("character") or _("Guest star")),
                                     profile_file=profile_file,
                                 )
                             )
@@ -8783,7 +6153,7 @@ class GishehWindow:
             # Publish the season only after every pending still has either
             # loaded or failed. Until this callback runs, episode rows remain
             # non-activatable and cannot open with partial data.
-            GLib.idle_add(
+            self._post_ui(
                 self._apply_tmdb_season_details,
                 record_id,
                 season_number,
@@ -8797,7 +6167,7 @@ class GishehWindow:
             ValueError,
             tmdb_client.TmdbError,
         ) as error:
-            GLib.idle_add(self._on_tmdb_season_details_failed, season_key, str(error))
+            self._post_ui(self._on_tmdb_season_details_failed, season_key, str(error))
 
     def _apply_tmdb_season_details(
         self,
@@ -8996,19 +6366,7 @@ class GishehWindow:
         self._tmdb_episode_details_loading.add(key)
         token = self.tmdb_token
         assert token is not None
-        threading.Thread(
-            target=self._load_tmdb_episode_details_worker,
-            args=(
-                record.id,
-                token,
-                record.tmdb_id,
-                season.number,
-                episode.number,
-                key,
-            ),
-            name=f"gisheh-tmdb-episode-{record.tmdb_id}-{season.number}-{episode.number}",
-            daemon=True,
-        ).start()
+        self._start_worker(f'gisheh-tmdb-episode-{record.tmdb_id}-{season.number}-{episode.number}', self._load_tmdb_episode_details_worker, *(record.id, token, record.tmdb_id, season.number, episode.number, key))
 
     def _load_tmdb_episode_details_worker(
         self,
@@ -9020,7 +6378,7 @@ class GishehWindow:
         key: str,
     ) -> None:
         try:
-            payload = tmdb_client.fetch_episode_details(
+            payload = DetailsController(tmdb_client).episode(
                 token,
                 tmdb_id,
                 season_number,
@@ -9033,8 +6391,8 @@ class GishehWindow:
                 guest_stars = []
             cast = tuple(
                 CastMember(
-                    name=str(item.get("name") or "Unknown"),
-                    role=str(item.get("character") or "Guest star"),
+                    name=str(item.get("name") or _("Unknown")),
+                    role=str(item.get("character") or _("Guest star")),
                     profile_file=tmdb_client.cached_image(
                         str(item.get("profile_path") or ""),
                         size="w185",
@@ -9045,15 +6403,21 @@ class GishehWindow:
             )
             still_path = str(payload.get("still_path") or "")
             cached_still = tmdb_client.cached_image(still_path, size="w780")
-            GLib.idle_add(
+            self._post_ui(
                 self._apply_tmdb_episode_details,
                 record_id,
                 season_number,
                 episode_number,
                 key,
-                str(payload.get("name") or f"Episode {episode_number}"),
-                str(payload.get("air_date") or "Air date unavailable"),
-                str(payload.get("overview") or "No episode overview is available."),
+                str(
+                    payload.get("name")
+                    or _("Episode {number}").format(number=episode_number)
+                ),
+                str(payload.get("air_date") or _("Air date unavailable")),
+                str(
+                    payload.get("overview")
+                    or _("No episode overview is available.")
+                ),
                 runtime,
                 cast,
                 cached_still,
@@ -9061,7 +6425,7 @@ class GishehWindow:
             if still_path and cached_still is None:
                 image_file = tmdb_client.cache_image(still_path, size="w780")
                 if image_file:
-                    GLib.idle_add(
+                    self._post_ui(
                         self._apply_tmdb_episode_artwork,
                         record_id,
                         season_number,
@@ -9069,7 +6433,7 @@ class GishehWindow:
                         image_file,
                     )
         except (tmdb_client.TmdbError, TypeError, ValueError) as error:
-            GLib.idle_add(self._on_tmdb_episode_details_failed, key, str(error))
+            self._post_ui(self._on_tmdb_episode_details_failed, key, str(error))
 
     def _apply_tmdb_episode_details(
         self,
@@ -9301,9 +6665,9 @@ class GishehWindow:
     def _show_tmdb_token_dialog(self, _button: Gtk.Button) -> None:
         dialog = Adw.AlertDialog(
             heading=(
-                "Change TMDB developer override"
+                _("Change TMDB developer override")
                 if tmdb_client.token_source() == "user"
-                else "Configure this development build"
+                else _("Configure this development build")
             ),
             body=(
                 _(
@@ -9319,11 +6683,22 @@ class GishehWindow:
         dialog.set_extra_child(entry)
         dialog.add_response("cancel", _("Cancel"))
         dialog.add_response("save", _("Save and connect"))
+        dialog.set_response_enabled("save", False)
+        entry.connect(
+            "changed",
+            lambda field: dialog.set_response_enabled(
+                "save", bool(field.get_text().strip())
+            ),
+        )
+        dialog.set_focus(entry)
+        entry.update_property(
+            [Gtk.AccessibleProperty.LABEL], [_("TMDB API Read Access Token")]
+        )
         dialog.set_default_response("save")
         dialog.set_close_response("cancel")
         dialog.set_response_appearance("save", Adw.ResponseAppearance.SUGGESTED)
         dialog.connect("response", self._on_tmdb_token_response, entry)
-        dialog.present(self.window)
+        dialog.present(self.settings_dialog)
 
     def _on_tmdb_token_response(
         self,
@@ -9374,7 +6749,7 @@ class GishehWindow:
         dialog.set_close_response("cancel")
         dialog.set_response_appearance("remove", Adw.ResponseAppearance.DESTRUCTIVE)
         dialog.connect("response", self._on_tmdb_disconnect_response)
-        dialog.present(self.window)
+        dialog.present(self.settings_dialog)
 
     def _on_tmdb_disconnect_response(
         self, _dialog: Adw.AlertDialog, response: str
@@ -9683,11 +7058,6 @@ class GishehWindow:
             self.empty_clear_button if has_filters else self.empty_explore_button
         )
 
-        self.eyebrow_label.set_label(
-            _("{media} / {collection}").format(
-                media=_(self.active_media), collection=_(self.active_collection)
-            )
-        )
         self.section_title.set_label(_(self.active_collection))
         self.result_count.set_label(_("All"))
         self.result_description.set_label(description)
@@ -9722,18 +7092,21 @@ class GishehWindow:
             )
         self.selected_id = self.explore_selected_id
 
-        self.explore_eyebrow_label.set_label(
-            f"{'TMDB Search' if query else 'Discover'} / {self.active_media}"
-        )
         if query:
             self.explore_empty_page.set_icon_name("system-search-symbolic")
             self.explore_empty_page.set_title(
-                "Searching TMDB…" if self._tmdb_search_loading else "No TMDB matches"
+                _("Searching TMDB…")
+                if self._tmdb_search_loading
+                else _("No TMDB matches")
             )
             self.explore_empty_page.set_description(
-                f"Searching the complete TMDB catalog for “{query}”."
+                _("Searching the complete TMDB catalog for “{query}”.").format(
+                    query=query
+                )
                 if self._tmdb_search_loading
-                else f"No {self.active_media.lower()} matched “{query}” on TMDB."
+                else _(
+                    "No {media} matched “{query}” on TMDB."
+                ).format(media=_(self.active_media).lower(), query=query)
             )
         else:
             self.explore_empty_page.set_icon_name("system-search-symbolic")
@@ -10055,45 +7428,35 @@ class GishehWindow:
         if self.results_scroller.get_child() is not child:
             self.results_scroller.set_child(child)
 
-    def _create_list_row(self, record: TitleRecord) -> Gtk.ListBoxRow:
-        row = Gtk.ListBoxRow()
-        row.record = record
-
-        content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        content.add_css_class("movie-row-content")
-        content.append(self._create_poster_overlay(record, 76, 114))
-        content.append(self._create_record_copy(record, compact=False))
-
-        menu_button = Gtk.MenuButton()
-        menu_button.set_icon_name("view-more-symbolic")
-        menu_button.set_tooltip_text(
-            _("More Options for {title}").format(title=record.title)
+    def _create_list_row(self, record):
+        return build_library_row(
+            record, self._create_poster_overlay(record, 76, 114),
+            self._create_record_copy(record, compact=False),
+            self._record_context_popover(record),
         )
-        menu_button.set_valign(Gtk.Align.START)
-        menu_button.add_css_class("flat")
-        menu_button.add_css_class("circular")
-        menu_button.set_popover(self._record_context_popover(record))
-        content.append(menu_button)
-        row.set_child(content)
-        return row
 
+    @persisted_change
     def _record_context_popover(self, record: TitleRecord) -> Gtk.PopoverMenu:
         menu = Gio.Menu()
         state_section = Gio.Menu()
         watched = self._is_record_completed(record)
         state_section.append(
-            "Mark as unwatched" if watched else "Mark as watched",
+            _("Mark as unwatched") if watched else _("Mark as watched"),
             "record.watch",
         )
         bookmarked = self._is_record_bookmarked(record)
         state_section.append(
-            "Remove from Watchlist" if bookmarked else "Add to Watchlist",
+            _("Remove from Watchlist")
+            if bookmarked
+            else _("Add to Watchlist"),
             "record.watchlist",
         )
         current_rating = self._effective_record_rating(record)
         rating_section = Gio.Menu()
         rating_section.append(
-            f"Rate…  ({current_rating}/10)" if current_rating is not None else "Rate…",
+            _("Rate…  ({rating}/10)").format(rating=current_rating)
+            if current_rating is not None
+            else _("Rate…"),
             "record.rate",
         )
         menu.append_section(None, state_section)
@@ -10128,16 +7491,19 @@ class GishehWindow:
     def _context_record(self, record_id: str) -> TitleRecord | None:
         return self.records_by_id.get(record_id)
 
+    @persisted_change
     def _activate_context_watched(self, record_id: str) -> None:
         record = self._context_record(record_id)
         if record is not None:
             self._activate_record_watched(record)
 
+    @persisted_change
     def _activate_context_watchlist(self, record_id: str, adding: bool) -> None:
         record = self._context_record(record_id)
         if record is not None:
             self._set_record_bookmarked(record, adding)
 
+    @persisted_change
     def _activate_context_rating(self, record_id: str) -> None:
         record = self._context_record(record_id)
         if record is not None:
@@ -10145,7 +7511,7 @@ class GishehWindow:
 
     def _show_record_rating_dialog(self, record: TitleRecord) -> None:
         dialog = Adw.AlertDialog(
-            heading=f"Rate {record.title}",
+            heading=_("Rate {title}").format(title=record.title),
             body=_("Choose a score from 1 to 10, then save your rating."),
         )
         rating_grid = Gtk.Grid(column_homogeneous=True, row_homogeneous=True)
@@ -10387,8 +7753,7 @@ class GishehWindow:
                         video.url or "",
                         heading=_("Open the trailer?"),
                         body=(
-                            f"Gisheh will open “{video.title}” on YouTube "
-                            "in your default web browser."
+                            _("Gisheh will open “{title}” on YouTube in your default web browser.").format(title=video.title)
                         ),
                     )
                 ),
@@ -10435,9 +7800,9 @@ class GishehWindow:
         if not rating_sources:
             message = Gtk.Label(
                 label=(
-                    "Loading ratings…"
+                    _("Loading ratings…")
                     if record.id in self._tmdb_details_loading
-                    else "No rating information is available."
+                    else _("No rating information is available.")
                 )
             )
             message.set_wrap(True)
@@ -10453,7 +7818,11 @@ class GishehWindow:
             score = Gtk.Label(label=value)
             score.add_css_class("numeric")
             score.add_css_class("heading")
-            source_label = Gtk.Label(label=source)
+            source_label = Gtk.Label(
+                label=(
+                    _("Your rating") if source == "Your rating" else source
+                )
+            )
             source_label.set_ellipsize(Pango.EllipsizeMode.END)
             source_label.add_css_class("caption")
             source_label.add_css_class("dim-label")
@@ -10473,8 +7842,10 @@ class GishehWindow:
         container: Gtk.Box,
         record: TitleRecord,
         *,
-        empty_message: str = "Cast information is unavailable.",
+        empty_message: str | None = None,
     ) -> None:
+        if empty_message is None:
+            empty_message = _("Cast information is unavailable.")
         self._clear_container(container)
         if record.id in self._tmdb_details_loading:
             for _index in range(4):
@@ -10582,13 +7953,13 @@ class GishehWindow:
 
         numbers = [int(value) for value in record.runtime.split() if value.isdigit()]
         is_completed = self._is_record_completed(record)
-        if "episodes" in record.runtime:
+        if "episodes" in record.runtime or _("episodes") in record.runtime:
             episode_count = numbers[0] if numbers else 12
             return (
                 SeasonInfo(
                     "s1",
                     1,
-                    "Season 1",
+                    _("Season 1"),
                     episode_count if is_completed else 0,
                     episode_count,
                 ),
@@ -10599,7 +7970,7 @@ class GishehWindow:
             SeasonInfo(
                 f"s{index}",
                 index,
-                f"Season {index}",
+                _("Season {number}").format(number=index),
                 10 if is_completed else 0,
                 10,
             )
@@ -10624,7 +7995,7 @@ class GishehWindow:
                 episode = EpisodeInfo(
                     id=f"e{number}",
                     number=number,
-                    title=f"Episode {number}",
+                    title=_("Episode {number}").format(number=number),
                     date=str(record.year + season_index),
                     description=record.description,
                     watched=None,
@@ -10712,16 +8083,24 @@ class GishehWindow:
         fraction = watched_episodes / total_episodes if total_episodes > 0 else 0.0
         percentage = round(fraction * 100)
         if total_episodes == 0:
-            activity_status = "Episode data unavailable"
+            activity_status = _("Episode data unavailable")
             tooltip = activity_status
         elif watched_episodes == 0:
-            activity_status = f"0 of {total_episodes} episodes watched"
+            activity_status = _("{watched} of {total} episodes watched").format(
+                watched=0, total=total_episodes
+            )
             tooltip = activity_status
         elif watched_episodes >= total_episodes:
-            activity_status = f"All {total_episodes} episodes watched"
-            tooltip = f"{total_episodes} of {total_episodes} episodes watched"
+            activity_status = _("All {total} episodes watched").format(
+                total=total_episodes
+            )
+            tooltip = _("{watched} of {total} episodes watched").format(
+                watched=total_episodes, total=total_episodes
+            )
         else:
-            activity_status = f"{watched_episodes} of {total_episodes} episodes watched"
+            activity_status = _("{watched} of {total} episodes watched").format(
+                watched=watched_episodes, total=total_episodes
+            )
             tooltip = activity_status
         self.activity_status.set_label(activity_status)
         self.activity_percentage.set_label(f"{percentage}%")
@@ -10846,7 +8225,7 @@ class GishehWindow:
         next_item, last_item = self._episode_progress_items(record)
 
         if next_item is None:
-            next_episode = "Up to date"
+            next_episode = _("Up to date")
             next_subtitle = record.availability
         else:
             next_season_index, next_info = next_item
@@ -10854,17 +8233,17 @@ class GishehWindow:
             next_subtitle = next_info.title
 
         if last_item is None:
-            last_episode = "Not started"
+            last_episode = _("Not started")
             last_subtitle = record.network
         else:
             last_season_index, last_info = last_item
             last_episode = self._episode_code(record, last_season_index, last_info)
             last_subtitle = last_info.title
         self.episode_cards_box.append(
-            self._episode_card("Next episode", next_episode, next_subtitle)
+            self._episode_card(_("Next episode"), next_episode, next_subtitle)
         )
         self.episode_cards_box.append(
-            self._episode_card("Last episode", last_episode, last_subtitle)
+            self._episode_card(_("Last episode"), last_episode, last_subtitle)
         )
 
         for season_index, season in enumerate(seasons):
@@ -10872,7 +8251,9 @@ class GishehWindow:
             season_complete = is_episode_group_complete(watched, season.episodes)
             row = Adw.ActionRow(
                 title=season.title,
-                subtitle=f"{watched}/{season.episodes} episodes",
+                subtitle=_("{watched}/{total} episodes").format(
+                    watched=watched, total=season.episodes
+                ),
             )
             row.season_index = season_index
             row.set_activatable(True)
@@ -10924,7 +8305,9 @@ class GishehWindow:
         self.season_header_title.set_title(season.title)
         self.season_header_title.set_subtitle(record.title)
         self.season_summary_label.set_label(
-            f"{watched} of {len(episodes)} episodes watched · {record.network}"
+            _("{watched} of {total} episodes watched · {network}").format(
+                watched=watched, total=len(episodes), network=record.network
+            )
         )
         self._set_watched_action_state(
             self.season_watched_button,
@@ -10996,7 +8379,9 @@ class GishehWindow:
         self.detail_record_id = record.id
         self.current_season_index = season_index
         self.current_episode_index = episode_index
-        self.episode_header_title.set_title(f"Episode {episode.number}")
+        self.episode_header_title.set_title(
+            _("Episode {number}").format(number=episode.number)
+        )
         self.episode_header_title.set_subtitle(season.title)
 
         self._clear_container(self.episode_hero_host)
@@ -11008,13 +8393,17 @@ class GishehWindow:
         self.episode_date_label.set_label(
             " · ".join(value for value in (episode_code, episode.date) if value)
         )
-        self.episode_runtime_label.set_label(episode.runtime or "Runtime unavailable")
+        self.episode_runtime_label.set_label(
+            episode.runtime or _("Runtime unavailable")
+        )
         self.episode_series_label.set_label(f"{record.title} · {season.title}")
         self.episode_overview_label.set_label(episode.description)
         self._populate_cast_container(
             self.episode_cast_box,
             replace(record, cast=episode.cast),
-            empty_message="Guest cast information is unavailable for this episode.",
+            empty_message=_(
+                "Guest cast information is unavailable for this episode."
+            ),
         )
         self._update_episode_watch_controls(record, season_index, episode)
         if reset_scroll:
@@ -11034,11 +8423,13 @@ class GishehWindow:
             self._episode_key(record, season_index, episode)
         )
         if watched and watched_at:
-            status = f"Watched · {format_watched_iso(watched_at)}"
+            status = _("Watched · {date}").format(
+                date=format_watched_iso(watched_at)
+            )
         elif watched:
-            status = "Watched"
+            status = _("Watched")
         else:
-            status = "Not watched yet"
+            status = _("Not watched yet")
         self.episode_watched_at_label.set_label(status)
 
     @staticmethod
@@ -11047,7 +8438,15 @@ class GishehWindow:
         watched: bool,
         noun: str,
     ) -> None:
-        label = f"Mark {noun} unwatched" if watched else f"Mark {noun} watched"
+        translated_noun = (
+            _("season") if noun == "season" else _("episode") if noun == "episode" else noun
+        )
+        if watched:
+            # Translators: e.g. "Mark season unwatched". "{noun}" is the
+            # translated "season"/"episode" word above.
+            label = _("Mark {noun} unwatched").format(noun=translated_noun)
+        else:
+            label = _("Mark {noun} watched").format(noun=translated_noun)
         button.action_label.set_label(label)
         button.action_icon.set_from_icon_name(
             "edit-undo-symbolic" if watched else "object-select-symbolic"
@@ -11118,8 +8517,7 @@ class GishehWindow:
                     item.url or "",
                     heading=_("Open the video?"),
                     body=(
-                        f"Gisheh will open “{item.title}” on YouTube "
-                        "in your default web browser."
+                        _("Gisheh will open “{title}” on YouTube in your default web browser.").format(title=item.title)
                     ),
                 ),
             )
@@ -11130,7 +8528,7 @@ class GishehWindow:
         if record.id in self._tmdb_details_loading:
             for _index in range(2):
                 self.videos_box.append(
-                    self._loading_media_placeholder(156, 112, "Loading video")
+                    self._loading_media_placeholder(156, 112, _("Loading video"))
                 )
             return
         self.videos_section.set_visible(bool(record.videos))
@@ -11144,7 +8542,9 @@ class GishehWindow:
         if record.id in self._tmdb_details_loading:
             for _index in range(3 if is_poster else 2):
                 self.images_box.append(
-                    self._loading_media_placeholder(width, height, "Loading image")
+                    self._loading_media_placeholder(
+                        width, height, _("Loading image")
+                    )
                 )
             return
         mode = "posters" if is_poster else "backdrops"
@@ -11171,7 +8571,15 @@ class GishehWindow:
             button.add_css_class("detail-media-card")
             button.add_css_class("media-thumbnail")
             button.set_tooltip_text(
-                f"Open {self.image_mode[:-1]} {index + 1} for {record.title}"
+                _("Open {kind} {index} for {title}").format(
+                    kind=(
+                        _("poster")
+                        if self.image_mode == "posters"
+                        else _("backdrop")
+                    ),
+                    index=index + 1,
+                    title=record.title,
+                )
             )
             button.connect(
                 "clicked",
@@ -11182,14 +8590,25 @@ class GishehWindow:
                             image_index,
                         )
                         if media_items
-                        else self._toast(f"No {mode} available for {record.title}")
+                        else self._toast(
+                            _("No {mode} available for {title}").format(
+                                mode=(
+                                    _("posters")
+                                    if mode == "posters"
+                                    else _("backdrops")
+                                    if mode == "backdrops"
+                                    else mode
+                                ),
+                                title=record.title,
+                            )
+                        )
                     )
                 ),
             )
             self.images_box.append(button)
         for _index in range(pending_count):
             self.images_box.append(
-                self._loading_media_placeholder(width, height, "Loading image")
+                self._loading_media_placeholder(width, height, _("Loading image"))
             )
 
     def _related_records(self, record: TitleRecord) -> tuple[TitleRecord, ...]:
@@ -11276,18 +8695,17 @@ class GishehWindow:
         self._build_detail_hero(record)
 
         is_completed = self._is_record_completed(record)
-        self.detail_status_label.set_label(self._effective_status(record))
+        self.detail_status_label.set_label(
+            localize_collection_status(self._effective_status(record))
+        )
         self.detail_overline.set_label(" · ".join(record.genres))
         self.detail_title.set_label(record.title)
-        external_uri = self._title_external_url(record)
-        self.detail_title.set_uri(external_uri or "https://www.themoviedb.org")
-        self.detail_title.set_sensitive(external_uri is not None)
         tmdb_rating = self._tmdb_rating_value(record)
         self.community_rating.set_visible(tmdb_rating is not None)
         if tmdb_rating is not None:
             self.community_rating.set_label(f"★ {tmdb_rating}")
         self.watched_button.set_label(
-            "✓  Watched" if is_completed else "＋  Mark watched"
+            _("✓  Watched") if is_completed else _("＋  Mark watched")
         )
         self.runtime_label.set_label(
             f"{record.certification} · {record.language} · {record.runtime}"
@@ -11295,7 +8713,7 @@ class GishehWindow:
         self.genres_label.set_label(f"{record.year} · {record.availability}")
         self.overview_label.set_label(record.description)
         self.creator_row.set_title(
-            "Director" if record.media_type == "Movies" else "Creator"
+            _("Director") if record.media_type == "Movies" else _("Creator")
         )
         self.creator_row.set_subtitle(record.creator)
         self.release_row.set_subtitle(f"{record.year} · {record.availability}")
@@ -11308,12 +8726,16 @@ class GishehWindow:
         score = self._effective_record_rating(record)
         for value, button in self.rating_buttons.items():
             button.set_active(value == score)
-        self.rating_value.set_label("Not rated" if score is None else f"{score}/10")
+        self.rating_value.set_label(
+            _("Not rated") if score is None else f"{score}/10"
+        )
         self.rating_button.set_icon_name(
             "non-starred-symbolic" if score is None else "starred-symbolic"
         )
         self.rating_button.set_tooltip_text(
-            "Rate this title" if score is None else f"Your rating: {score}/10"
+            _("Rate this title")
+            if score is None
+            else _("Your rating: {score}/10").format(score=score)
         )
         self._updating_details = False
         self._populate_detail_sections(record)
@@ -11369,6 +8791,7 @@ class GishehWindow:
             "Descending order" if descending else "Ascending order"
         )
 
+    @persisted_change
     def _on_media_changed(self, group: Adw.ToggleGroup, _parameter: Any) -> None:
         if self._updating:
             return
@@ -11406,6 +8829,7 @@ class GishehWindow:
             self._update_genre_model()
             self._refresh_results()
 
+    @persisted_change
     def _on_destination_selected(
         self,
         _list_box: Gtk.ListBox,
@@ -11573,6 +8997,13 @@ class GishehWindow:
     def _set_media_switcher_available(self, available: bool) -> None:
         """Show the media selector only where changing media is meaningful."""
         self._media_switcher_available = available
+        if hasattr(self, "header_bar"):
+            if available:
+                self.header_bar.set_title_widget(self.media_switcher)
+            else:
+                self.header_bar.set_title_widget(Adw.WindowTitle(
+                    title=_("Profile") if self.active_destination == "profile" else _("Calendar")
+                ))
         if not hasattr(self, "compact_media_switcher"):
             self.media_switcher.set_visible(available)
             return
@@ -11760,6 +9191,7 @@ class GishehWindow:
         self._queue_explore_resize()
         return GLib.SOURCE_REMOVE
 
+    @persisted_change
     def _on_collection_selected(
         self,
         _list_box: Gtk.ListBox,
@@ -11769,6 +9201,7 @@ class GishehWindow:
             return
         self._activate_collection(row.key)
 
+    @persisted_change
     def _activate_collection(self, collection_name: str) -> None:
         """Open one direct collection destination in the shared view."""
         if collection_name not in COLLECTION_NAMES:
@@ -11798,6 +9231,7 @@ class GishehWindow:
         self._close_sidebar_overlay()
         self._queue_responsive_layout()
 
+    @persisted_change
     def _on_search_changed(self, _entry: Gtk.SearchEntry) -> None:
         if not self._updating:
             self._refresh_results()
@@ -11806,15 +9240,23 @@ class GishehWindow:
         if not self._updating and self.active_destination == "explore":
             self._queue_tmdb_explore_search()
 
+    def _on_find_requested(self, *_args: Any) -> None:
+        if self.active_destination == "collection":
+            self._close_sidebar_overlay()
+            self.search_entry.grab_focus()
+        else:
+            self._on_search_requested()
+
     def _on_search_requested(self, *_args: Any) -> None:
         if self.active_destination != "explore":
             self.destination_list.select_row(self.explore_row)
-        GLib.idle_add(self._focus_explore_search)
+        self._post_ui(self._focus_explore_search)
 
     def _focus_explore_search(self) -> bool:
         self.explore_search_entry.grab_focus()
         return GLib.SOURCE_REMOVE
 
+    @persisted_change
     def _on_sort_changed(self, dropdown: Gtk.DropDown, _parameter: Any) -> None:
         if self._updating:
             return
@@ -11825,6 +9267,7 @@ class GishehWindow:
         self.sort_reversed = False
         self._refresh_results()
 
+    @persisted_change
     def _on_genre_changed(self, dropdown: Gtk.DropDown, _parameter: Any) -> None:
         if self._updating:
             return
@@ -11834,6 +9277,7 @@ class GishehWindow:
         self.genre = self.genre_options[selected]
         self._refresh_results()
 
+    @persisted_change
     def _on_reverse_sort(self, _button: Gtk.Button) -> None:
         self.sort_reversed = not self.sort_reversed
         self._refresh_results()
@@ -11904,6 +9348,7 @@ class GishehWindow:
         self._set_details_open(True)
         self._load_tmdb_details_async(self.records_by_id[record_id])
 
+    @persisted_change
     def _on_view_changed(self, group: Adw.ToggleGroup, _parameter: Any) -> None:
         if self._updating:
             return
@@ -11984,6 +9429,7 @@ class GishehWindow:
             int(episode_index),
         )
 
+    @persisted_change
     def _on_episode_row_watched_clicked(
         self,
         _button: Gtk.Button,
@@ -12201,6 +9647,7 @@ class GishehWindow:
         )
         dialog.present(self.window)
 
+    @persisted_change
     def _on_season_watched_clicked(self, _button: Gtk.Button) -> None:
         record = self.records_by_id.get(self.detail_record_id or "")
         if record is None:
@@ -12246,6 +9693,7 @@ class GishehWindow:
         else:
             self._defer_collection_refresh_for_detail_mutation()
 
+    @persisted_change
     def _defer_collection_refresh_for_detail_mutation(self) -> None:
         """Keep the open title stable, then refresh its filter after closing."""
         if self.active_destination != "collection":
@@ -12255,6 +9703,7 @@ class GishehWindow:
             return
         self._refresh_results()
 
+    @persisted_change
     def _mark_season_watched(
         self,
         record: TitleRecord,
@@ -12272,6 +9721,7 @@ class GishehWindow:
         if not newly_watched:
             return
 
+        @self._guard_state_callback
         def apply() -> None:
             if self._local_mode_active():
                 self._ensure_local_library_record(record)
@@ -12327,6 +9777,7 @@ class GishehWindow:
             "",
         )
 
+    @persisted_change
     def _unmark_season_watched(self, record: TitleRecord, season_index: int) -> None:
         seasons = self._series_seasons(record)
         season = seasons[season_index]
@@ -12352,6 +9803,7 @@ class GishehWindow:
                 ),
             )
 
+        @self._guard_state_callback
         def apply() -> None:
             for episode in episodes:
                 key = self._episode_key(record, season_index, episode)
@@ -12388,6 +9840,7 @@ class GishehWindow:
             "",
         )
 
+    @persisted_change
     def _restore_season_watched(
         self,
         record: TitleRecord,
@@ -12399,6 +9852,7 @@ class GishehWindow:
             return
         season = self._series_seasons(record)[season_index]
 
+        @self._guard_state_callback
         def apply() -> None:
             episodes_by_number = {
                 episode.number: episode
@@ -12435,6 +9889,7 @@ class GishehWindow:
             _("Season Restored"),
         )
 
+    @persisted_change
     def _on_episode_watched_clicked(self, _button: Gtk.Button) -> None:
         record = self.records_by_id.get(self.detail_record_id or "")
         if record is None:
@@ -12463,6 +9918,7 @@ class GishehWindow:
             ),
         )
 
+    @persisted_change
     def _mark_episode_watched(
         self,
         record: TitleRecord,
@@ -12484,6 +9940,7 @@ class GishehWindow:
             return
         key = self._episode_key(record, season_index, match)
 
+        @self._guard_state_callback
         def apply() -> None:
             current_record = self.records_by_id.get(record.id, record)
             if self._local_mode_active():
@@ -12555,6 +10012,7 @@ class GishehWindow:
             "",
         )
 
+    @persisted_change
     def _unmark_episode_watched(
         self,
         record: TitleRecord,
@@ -12578,6 +10036,7 @@ class GishehWindow:
                 ),
             )
 
+        @self._guard_state_callback
         def apply() -> None:
             current_record = self.records_by_id.get(record.id, record)
             self.episode_status_overrides[key] = False
@@ -12790,6 +10249,7 @@ class GishehWindow:
             self._on_details_transition_complete,
         )
 
+    @persisted_change
     def _on_details_transition_complete(self) -> bool:
         self._details_resize_source_id = 0
         self._pending_details_mode = None
@@ -12829,13 +10289,12 @@ class GishehWindow:
             self._set_details_open(False)
         return True
 
+    @persisted_change
     def _on_window_close_request(self, _window: Gtk.Window) -> bool:
         self._save_user_state()
         self._save_window_state()
-        if not self.details_open:
-            return False
-        self._set_details_open(False)
-        return True
+        self.close_background_jobs()
+        return False
 
     def _on_window_key_pressed(
         self,
@@ -12844,8 +10303,12 @@ class GishehWindow:
         _keycode: int,
         _state: Gdk.ModifierType,
     ) -> bool:
+        # Let dialogs and focused controls handle Escape before page navigation.
+        if self.window.get_visible_dialog() is not None:
+            return False
         return keyval == Gdk.KEY_Escape and self._navigate_back()
 
+    @persisted_change
     def _on_clear_filters(self, _button: Gtk.Button) -> None:
         self._updating = True
         self.search_entry.set_text("")
@@ -13016,6 +10479,7 @@ class GishehWindow:
                 level=logging.WARNING,
             )
 
+    @persisted_change
     def _apply_title_history_result(
         self,
         record: TitleRecord,
@@ -13077,7 +10541,7 @@ class GishehWindow:
             try:
                 operation()
             except simkl_client.SimklError as error:
-                GLib.idle_add(
+                self._post_ui(
                     self._finish_simkl_mutation,
                     key,
                     None,
@@ -13085,7 +10549,7 @@ class GishehWindow:
                     str(error),
                 )
                 return
-            GLib.idle_add(
+            self._post_ui(
                 self._finish_simkl_mutation,
                 key,
                 on_success,
@@ -13093,11 +10557,7 @@ class GishehWindow:
                 None,
             )
 
-        threading.Thread(
-            target=worker,
-            name="gisheh-simkl-write",
-            daemon=True,
-        ).start()
+        self._start_worker('gisheh-simkl-write', worker, *())
 
     @staticmethod
     def _checked_simkl_write(operation: Any) -> dict[str, Any]:
@@ -13110,6 +10570,7 @@ class GishehWindow:
             raise simkl_client.SimklError("Simkl could not match this title.")
         return result
 
+    @persisted_change
     def _finish_simkl_mutation(
         self,
         key: str,
@@ -13129,11 +10590,13 @@ class GishehWindow:
             self._toast(error_message)
             return GLib.SOURCE_REMOVE
         if on_success is not None:
+            self._remote_commit = True
             on_success()
         if success_message:
             self._toast(success_message)
         return GLib.SOURCE_REMOVE
 
+    @persisted_change
     def _write_simkl_list_change(
         self,
         record: TitleRecord,
@@ -13196,12 +10659,14 @@ class GishehWindow:
             lambda: self._set_record_bookmarked(record, True),
         )
 
+    @persisted_change
     def _on_watched_clicked(self, _button: Gtk.Button) -> None:
         if self.selected_id is None:
             return
         record = self.records_by_id[self.selected_id]
         self._activate_record_watched(record)
 
+    @persisted_change
     def _activate_record_watched(self, record: TitleRecord) -> None:
         watched = not self._is_record_completed(record)
         if not watched:
@@ -13234,8 +10699,8 @@ class GishehWindow:
         def on_response(_dialog: Adw.AlertDialog, response: str) -> None:
             if response == "change-date":
                 self._show_watched_time_dialog(
-                    title_text=f"Change watched date — {record.title}",
-                    subtitle_text=(
+                    title_text=_("Change watched date — {title}").format(title=record.title),
+                    subtitle_text=_(
                         "This replaces the existing watch date; it is not a rewatch."
                     ),
                     on_confirm=lambda iso: self._change_title_watched_date(record, iso),
@@ -13246,6 +10711,7 @@ class GishehWindow:
         dialog.connect("response", on_response)
         dialog.present(self.window)
 
+    @persisted_change
     def _mark_title_unwatched(self, record: TitleRecord) -> None:
         """Remove watched history and return the title to the active watchlist."""
         canonical = self._canonical_record_id(record)
@@ -13258,6 +10724,7 @@ class GishehWindow:
                 lambda: self._mark_title_watched(record, previous_watched_at),
             )
 
+        @self._guard_state_callback
         def apply() -> None:
             self.completed.discard(canonical)
             self.bookmarks.add(canonical)
@@ -13307,6 +10774,7 @@ class GishehWindow:
             "",
         )
 
+    @persisted_change
     def _mark_title_watched(self, record: TitleRecord, iso_timestamp: str) -> None:
         def apply_watched() -> None:
             self._apply_title_history_result(
@@ -13374,6 +10842,7 @@ class GishehWindow:
             "",
         )
 
+    @persisted_change
     def _change_title_watched_date(
         self, record: TitleRecord, iso_timestamp: str
     ) -> None:
@@ -13419,6 +10888,7 @@ class GishehWindow:
             "",
         )
 
+    @persisted_change
     def _on_bookmark_toggled(self, button: Gtk.ToggleButton) -> None:
         if self._updating_details or self.selected_id is None:
             return
@@ -13426,12 +10896,14 @@ class GishehWindow:
         adding = button.get_active()
         self._set_record_bookmarked(record, adding)
 
+    @persisted_change
     def _set_record_bookmarked(
         self,
         record: TitleRecord,
         adding: bool,
     ) -> None:
 
+        @self._guard_state_callback
         def apply_bookmark() -> None:
             canonical = self._canonical_record_id(record)
             if adding:
@@ -13479,6 +10951,7 @@ class GishehWindow:
             on_success=apply_bookmark,
         )
 
+    @persisted_change
     def _on_rating_button_toggled(
         self,
         button: Gtk.ToggleButton,
@@ -13494,8 +10967,10 @@ class GishehWindow:
         record = self.records_by_id[self.selected_id]
         self._set_record_rating(record, score)
 
+    @persisted_change
     def _set_record_rating(self, record: TitleRecord, score: int) -> None:
 
+        @self._guard_state_callback
         def apply_rating() -> None:
             if getattr(self, "library_mode", LIBRARY_MODE_LOCAL) == LIBRARY_MODE_LOCAL:
                 self._ensure_local_library_record(record)
@@ -13524,7 +10999,7 @@ class GishehWindow:
 
         if getattr(self, "library_mode", LIBRARY_MODE_LOCAL) == LIBRARY_MODE_LOCAL:
             apply_rating()
-            self._toast(f"Your local rating is now {score}/10")
+            self._toast(_("Your local rating is now {score}/10").format(score=score))
             return
 
         self._run_simkl_mutation(
@@ -13539,13 +11014,17 @@ class GishehWindow:
                 )
             ),
             apply_rating,
-            f"Your Simkl rating is now {score}/10",
+            _("Your Simkl rating is now {score}/10").format(score=score),
         )
 
     def _toast(self, message: str) -> None:
         toast = Adw.Toast.new(message)
-        toast.set_timeout(2)
-        self.toast_overlay.add_toast(toast)
+        toast.set_timeout(5)
+        preferences = getattr(self, "settings_dialog", None)
+        if preferences is not None and preferences.get_visible():
+            preferences.add_toast(toast)
+        else:
+            self.toast_overlay.add_toast(toast)
 
     def _toast_with_action(
         self,
@@ -13572,7 +11051,7 @@ class GishehWindow:
     ) -> None:
         application_logger().log(level, message, *args)
         if getattr(self, "_log_text_view", None) is not None:
-            GLib.idle_add(self._refresh_log_view)
+            self._post_ui(self._refresh_log_view)
 
     def _refresh_log_view(self) -> bool:
         if self._log_text_view is None:
@@ -13589,42 +11068,46 @@ class GishehWindow:
             self._refresh_log_view()
             return
 
-        dialog = Adw.AlertDialog(
-            heading=_("Application Log"),
-            body=str(application_log_file()),
+        dialog = Adw.Dialog(
+            title=_("Application Log"), content_width=760, content_height=480
         )
-        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        content.set_size_request(700, 360)
-        scroller = Gtk.ScrolledWindow()
-        scroller.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        scroller.set_vexpand(True)
-        scroller.add_css_class("card")
-        text_view = Gtk.TextView()
-        text_view.set_editable(False)
-        text_view.set_cursor_visible(False)
-        text_view.set_monospace(True)
-        text_view.set_wrap_mode(Gtk.WrapMode.NONE)
-        text_view.set_left_margin(10)
-        text_view.set_right_margin(10)
-        text_view.set_top_margin(10)
-        text_view.set_bottom_margin(10)
-        scroller.set_child(text_view)
-        content.append(scroller)
-
-        actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        actions.set_halign(Gtk.Align.END)
-        refresh = Gtk.Button(label=_("Refresh"))
+        toolbar = Adw.ToolbarView()
+        header = Adw.HeaderBar()
+        refresh = Gtk.Button(
+            icon_name="view-refresh-symbolic", tooltip_text=_("Refresh")
+        )
+        refresh.update_property([Gtk.AccessibleProperty.LABEL], [_("Refresh")])
         refresh.connect("clicked", lambda *_args: self._refresh_log_view())
-        actions.append(refresh)
+        header.pack_start(refresh)
         copy = Gtk.Button(label=_("Copy Log"))
         copy.connect("clicked", self._on_copy_log_clicked)
-        actions.append(copy)
-        content.append(actions)
+        header.pack_end(copy)
+        toolbar.add_top_bar(header)
 
-        dialog.set_extra_child(content)
-        dialog.add_response("close", _("Close"))
-        dialog.set_close_response("close")
-        dialog.connect("response", self._on_log_dialog_response)
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        path_label = Gtk.Label(
+            label=str(application_log_file()), ellipsize=Pango.EllipsizeMode.MIDDLE
+        )
+        path_label.set_tooltip_text(str(application_log_file()))
+        path_label.set_selectable(True)
+        path_label.add_css_class("dim-label")
+        content.append(path_label)
+        scroller = Gtk.ScrolledWindow(vexpand=True)
+        scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        text_view = Gtk.TextView(editable=False, cursor_visible=True, monospace=True)
+        text_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        text_view.update_property(
+            [Gtk.AccessibleProperty.LABEL], [_("Application Log")]
+        )
+        for side in ("left", "right", "top", "bottom"):
+            getattr(text_view, f"set_{side}_margin")(12)
+        scroller.set_child(text_view)
+        content.append(scroller)
+        toolbar.set_content(content)
+        self._log_toast_overlay = Adw.ToastOverlay(child=toolbar)
+        dialog.set_child(self._log_toast_overlay)
+        dialog.set_focus(text_view)
+        dialog.connect("closed", self._on_log_dialog_closed)
         self._log_dialog = dialog
         self._log_text_view = text_view
         self._refresh_log_view()
@@ -13632,12 +11115,8 @@ class GishehWindow:
 
     def _on_copy_log_clicked(self, _button: Gtk.Button) -> None:
         self.window.get_clipboard().set_text(read_application_log())
-        self._toast(_("Application log copied"))
+        self._log_toast_overlay.add_toast(Adw.Toast.new(_("Application log copied")))
 
-    def _on_log_dialog_response(
-        self,
-        _dialog: Adw.AlertDialog,
-        _response: str,
-    ) -> None:
+    def _on_log_dialog_closed(self, _dialog: Adw.Dialog) -> None:
         self._log_dialog = None
         self._log_text_view = None

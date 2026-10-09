@@ -21,7 +21,7 @@ class ReleaseMetadataTests(unittest.TestCase):
     def test_version_is_valid_semver_and_shared_by_runtime_clients(self) -> None:
         version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
 
-        self.assertRegex(version, r"^\d+\.\d+\.\d+$")
+        self.assertRegex(version, r"^\d+\.\d+\.\d+(?:-rc[1-9]\d*)?$")
         self.assertEqual(__version__, version)
         self.assertEqual(APP_VERSION, version)
         self.assertEqual(simkl_client.APP_VERSION, version)
@@ -59,7 +59,7 @@ class ReleaseMetadataTests(unittest.TestCase):
 
     def test_release_files_contain_one_normalized_line(self) -> None:
         for filename, pattern in (
-            ("VERSION", r"\d+\.\d+\.\d+\n"),
+            ("VERSION", r"\d+\.\d+\.\d+(?:-rc[1-9]\d*)?\n"),
             ("RELEASE_DATE", r"\d{4}-\d{2}-\d{2}\n"),
         ):
             contents = (ROOT / filename).read_text(encoding="utf-8")

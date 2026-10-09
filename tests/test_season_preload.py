@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import sys
-import threading
 import unittest
 from dataclasses import replace
 from pathlib import Path
@@ -229,7 +228,7 @@ class SeasonRequestTests(unittest.TestCase):
         record = self._record()
         controller = _controller_for(record)
         controller._tmdb_season_details_loading.add("test-title:s1")
-        with patch.object(threading, "Thread") as thread:
+        with patch.object(gisheh.GishehWindow, "_start_worker") as thread:
             controller._load_tmdb_season_details_async(record, 0)
         thread.assert_not_called()
 
@@ -237,7 +236,7 @@ class SeasonRequestTests(unittest.TestCase):
         record = self._record()
         controller = _controller_for(record)
         controller._tmdb_season_details_loaded.add("test-title:s1")
-        with patch.object(threading, "Thread") as thread:
+        with patch.object(gisheh.GishehWindow, "_start_worker") as thread:
             controller._load_tmdb_season_details_async(record, 0)
         thread.assert_not_called()
 
@@ -245,13 +244,12 @@ class SeasonRequestTests(unittest.TestCase):
         record = self._record(season_number=1)
         controller = _controller_for(record)
         started: list[str] = []
-        real_thread = threading.Thread
 
         def fake_thread(*args, **kwargs):
-            started.append(kwargs.get("name", ""))
+            started.append(args[0])
             raise AssertionError("stop")
 
-        with patch.object(threading, "Thread", side_effect=fake_thread):
+        with patch.object(gisheh.GishehWindow, "_start_worker", side_effect=fake_thread):
             with self.assertRaises(AssertionError):
                 controller._load_tmdb_season_details_async(record, 0)
             key_one = next(iter(controller._tmdb_season_details_loading))
@@ -263,17 +261,17 @@ class SeasonRequestTests(unittest.TestCase):
         self.assertNotEqual(key_one, key_two)
         self.assertIn(":s1", key_one)
         self.assertIn(":s2", key_two)
-        self.assertNotIn("stop", str(real_thread))
+        self.assertEqual(len(started), 2)
 
     def test_missing_token_or_tmdb_id_starts_no_request(self) -> None:
         record = self._record()
         no_token = _controller_for(record, token=None)
-        with patch.object(threading, "Thread") as thread:
+        with patch.object(gisheh.GishehWindow, "_start_worker") as thread:
             no_token._load_tmdb_season_details_async(record, 0)
         thread.assert_not_called()
         no_id_record = replace(record, tmdb_id=None)
         no_id = _controller_for(no_id_record, token="token")
-        with patch.object(threading, "Thread") as thread:
+        with patch.object(gisheh.GishehWindow, "_start_worker") as thread:
             no_id._load_tmdb_season_details_async(no_id_record, 0)
         thread.assert_not_called()
 
@@ -292,12 +290,12 @@ class SeasonRequestTests(unittest.TestCase):
         record = self._record()
         controller = _controller_for(record)
         controller._tmdb_season_details_loaded.add("test-title:s1")
-        with patch.object(threading, "Thread") as thread:
+        with patch.object(gisheh.GishehWindow, "_start_worker") as thread:
             controller._load_tmdb_episode_details_async(record, 0, 0)
         thread.assert_not_called()
         controller._tmdb_season_details_loaded.clear()
         controller._tmdb_season_details_loading.add("test-title:s1")
-        with patch.object(threading, "Thread") as thread:
+        with patch.object(gisheh.GishehWindow, "_start_worker") as thread:
             controller._load_tmdb_episode_details_async(record, 0, 0)
         thread.assert_not_called()
 
@@ -462,9 +460,9 @@ class EpisodePositionRemovalTests(unittest.TestCase):
         source = self._source()
         self.assertNotIn("episode_position_label", source)
         self.assertNotIn("episode_position_dots", source)
-        # Header must still carry the episode number.
+        # Header must still carry the episode number (translatable form).
         self.assertIn(
-            'self.episode_header_title.set_title(f"Episode {episode.number}")',
+            '_("Episode {number}").format(number=episode.number)',
             source,
         )
 

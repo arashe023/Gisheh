@@ -15,11 +15,14 @@ from gi.repository import Gtk
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from gisheh import main
-from gisheh.window import is_rtl_language_selection
+from gisheh.window import (
+    is_rtl_language_selection,
+    sidebar_position_for_direction,
+)
 
 
 class ApplicationDirectionTests(unittest.TestCase):
-    def test_temporary_persian_language_uses_rtl(self) -> None:
+    def test_removed_override_does_not_override_system_english(self) -> None:
         with patch.dict(
             os.environ,
             {"GISHEH_LANGUAGE": "fa", "LANGUAGE": "en"},
@@ -27,7 +30,7 @@ class ApplicationDirectionTests(unittest.TestCase):
         ):
             self.assertEqual(
                 main._application_text_direction(),
-                Gtk.TextDirection.RTL,
+                Gtk.TextDirection.LTR,
             )
 
     def test_system_persian_locale_uses_rtl(self) -> None:
@@ -41,7 +44,7 @@ class ApplicationDirectionTests(unittest.TestCase):
                 Gtk.TextDirection.RTL,
             )
 
-    def test_english_language_uses_ltr(self) -> None:
+    def test_removed_override_does_not_override_system_persian(self) -> None:
         with patch.dict(
             os.environ,
             {"GISHEH_LANGUAGE": "en", "LANGUAGE": "fa"},
@@ -49,22 +52,33 @@ class ApplicationDirectionTests(unittest.TestCase):
         ):
             self.assertEqual(
                 main._application_text_direction(),
-                Gtk.TextDirection.LTR,
+                Gtk.TextDirection.RTL,
             )
 
     def test_direction_is_applied_to_gtk_before_ui_creation(self) -> None:
         with (
-            patch.dict(os.environ, {"GISHEH_LANGUAGE": "fa"}, clear=True),
+            patch.dict(os.environ, {"LANGUAGE": "fa"}, clear=True),
             patch.object(Gtk.Widget, "set_default_direction") as set_direction,
         ):
             main._configure_text_direction()
 
         set_direction.assert_called_once_with(Gtk.TextDirection.RTL)
 
-    def test_content_language_persian_uses_rtl(self) -> None:
+    def test_persian_content_does_not_mirror_english_ui(self) -> None:
         with patch.dict(
             os.environ,
-            {"GISHEH_TMDB_LANGUAGE": "fa-IR"},
+            {"GISHEH_TMDB_LANGUAGE": "fa-IR", "LANG": "en_US.UTF-8"},
+            clear=True,
+        ):
+            self.assertEqual(
+                main._application_text_direction(),
+                Gtk.TextDirection.LTR,
+            )
+
+    def test_english_content_does_not_override_persian_ui(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"GISHEH_TMDB_LANGUAGE": "en-US", "LANG": "fa_IR.UTF-8"},
             clear=True,
         ):
             self.assertEqual(
@@ -72,31 +86,33 @@ class ApplicationDirectionTests(unittest.TestCase):
                 Gtk.TextDirection.RTL,
             )
 
-    def test_content_language_english_uses_ltr(self) -> None:
-        with patch.dict(
-            os.environ,
-            {"GISHEH_TMDB_LANGUAGE": "en-US", "LANG": "fa_IR.UTF-8"},
-            clear=True,
-        ):
-            # Explicit content choice wins over the OS locale for direction.
-            self.assertEqual(
-                main._application_text_direction(),
-                Gtk.TextDirection.LTR,
-            )
-
 
 class ContentLanguageDirectionTests(unittest.TestCase):
-    def test_persian_app_language_is_rtl(self) -> None:
-        self.assertTrue(is_rtl_language_selection("fa", "system"))
-        self.assertTrue(is_rtl_language_selection("fa", "en-US"))
+    def test_persian_content_does_not_mirror_english_chrome(self) -> None:
+        with patch.object(
+            Gtk.Widget,
+            "get_default_direction",
+            return_value=Gtk.TextDirection.LTR,
+        ):
+            self.assertFalse(is_rtl_language_selection())
 
-    def test_persian_content_language_is_rtl_live(self) -> None:
-        # Experimental content language applies instantly, without restart.
-        self.assertTrue(is_rtl_language_selection("system", "fa-IR"))
+    def test_english_content_does_not_unmirror_persian_chrome(self) -> None:
+        with patch.object(
+            Gtk.Widget,
+            "get_default_direction",
+            return_value=Gtk.TextDirection.RTL,
+        ):
+            self.assertTrue(is_rtl_language_selection())
 
-    def test_english_selection_is_ltr(self) -> None:
-        self.assertFalse(is_rtl_language_selection("en", "system"))
-        self.assertFalse(is_rtl_language_selection("system", "en-US"))
+    def test_sidebar_uses_logical_start_in_both_directions(self) -> None:
+        self.assertEqual(
+            sidebar_position_for_direction(False),
+            Gtk.PackType.START,
+        )
+        self.assertEqual(
+            sidebar_position_for_direction(True),
+            Gtk.PackType.START,
+        )
 
 
 class CollectionTranslationsTests(unittest.TestCase):

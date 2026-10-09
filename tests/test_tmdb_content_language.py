@@ -49,9 +49,46 @@ class TmdbContentLanguageTests(unittest.TestCase):
         with patch.dict(
             os.environ, {"LANG": "de_DE.UTF-8", "LANGUAGE": ""}, clear=False
         ):
-            # Unsupported OS locales resolve directly to en-US.
-            self.assertEqual(tmdb_client.system_language(), "en-US")
-            self.assertEqual(tmdb_client.active_language(), "en-US")
+            # Other system languages are preserved.
+            self.assertEqual(tmdb_client.system_language(), "de-DE")
+            self.assertEqual(tmdb_client.active_language(), "de-DE")
+
+    def test_arbitrary_tmdb_languages_and_regions_are_preserved(self):
+        for value, expected in (("de", "de"), ("pt_BR", "pt-BR"), ("ja", "ja"), ("en-GB", "en-GB"), ("ar", "ar")):
+            with self.subTest(value=value):
+                tmdb_client.set_content_language(value)
+                self.assertEqual(tmdb_client.active_language(), expected)
+                self.assertEqual(tmdb_client._effective_language(value), expected)
+        self.assertEqual(tmdb_client.normalize_content_language("../../bad"), "en-US")
+
+    def test_configuration_languages_are_cached_and_validated(self):
+        payload = [
+            {"iso_639_1": "ja", "english_name": "Japanese", "name": "日本語"},
+            {"iso_639_1": "de", "english_name": "German", "name": "Deutsch"},
+            {"iso_639_1": "fa", "english_name": "Persian", "name": "فارسی"},
+            {"iso_639_1": "../", "name": "Invalid"},
+        ]
+        with tempfile.TemporaryDirectory() as directory, patch.object(tmdb_client, "cache_dir", return_value=Path(directory)), patch.object(tmdb_client, "request_json", return_value=payload) as request:
+            result = tmdb_client.fetch_languages("token")
+            request.assert_called_once_with("/configuration/languages", token="token", expect_list=True)
+            self.assertEqual(set(dict(result)), {"ja", "de", "fa-IR"})
+            self.assertIn("日本語", dict(result)["ja"])
+            self.assertEqual(tmdb_client.cached_languages(), result)
+            with patch.object(tmdb_client, "request_json", return_value={}), self.assertRaises(tmdb_client.TmdbError):
+                tmdb_client.fetch_languages("token")
+            self.assertEqual(tmdb_client.cached_languages(), result)
+
+    def test_non_persian_language_uses_localized_images_and_english_fallback(self):
+        self.assertEqual(tmdb_client.image_language_param("pt-BR"), "pt,en,null")
+        self.assertEqual(tmdb_client.image_language_param("ja"), "ja,en,null")
+        def response(_path, *, token, params):
+            if params["language"] == "de":
+                return {"id": 1, "title": "Deutsch", "overview": ""}
+            return {"id": 1, "title": "English", "overview": "Fallback"}
+        with patch.object(tmdb_client, "request_json", side_effect=response):
+            result = tmdb_client.fetch_details("token", "movie", 1, language="de")
+        self.assertEqual(result["title"], "Deutsch")
+        self.assertEqual(result["overview"], "Fallback")
 
     # 2. Manual selection has priority over the OS language.
     def test_manual_selection_has_priority_over_system(self) -> None:
@@ -263,9 +300,8 @@ class TmdbContentLanguageTests(unittest.TestCase):
             tmdb_client,
             "request_json",
             side_effect=tmdb_client.TmdbError("down"),
-        ):
-            with self.assertRaises(tmdb_client.TmdbError):
-                tmdb_client.fetch_details("t", "movie", 1, language="en-US")
+        ), self.assertRaises(tmdb_client.TmdbError):
+            tmdb_client.fetch_details("t", "movie", 1, language="en-US")
 
     def test_whitespace_and_empty_arrays_count_as_missing(self) -> None:
         self.assertTrue(tmdb_client.is_missing_translation(None))

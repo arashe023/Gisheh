@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from gisheh import window as gisheh
+from gisheh import app_logging as gisheh
 
 
 class ApplicationLoggingTests(unittest.TestCase):

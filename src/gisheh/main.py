@@ -33,13 +33,6 @@ def _locale_dir() -> Path:
 
 def _configure_i18n() -> None:
     """Bind Python and GtkBuilder translations before importing application UI."""
-    temporary_language = os.environ.get("GISHEH_LANGUAGE", "").strip()
-    if temporary_language:
-        os.environ.setdefault(
-            "GISHEH_ORIGINAL_LANGUAGE",
-            os.environ.get("LANGUAGE", "__unset__"),
-        )
-        os.environ["LANGUAGE"] = temporary_language
     try:
         locale.setlocale(locale.LC_ALL, "")
     except locale.Error:
@@ -58,8 +51,6 @@ def _configure_i18n() -> None:
 def _application_text_direction() -> Gtk.TextDirection:
     """Return the direction matching the effective application language."""
     candidates = (
-        os.environ.get("GISHEH_LANGUAGE", ""),
-        os.environ.get("GISHEH_TMDB_LANGUAGE", ""),
         os.environ.get("LANGUAGE", "").split(":", 1)[0],
         os.environ.get("LC_ALL", ""),
         os.environ.get("LC_MESSAGES", ""),
@@ -102,6 +93,7 @@ def _register_resources() -> Gio.Resource | None:
 
 def main() -> int:
     _configure_i18n()
+    Gtk.init()
     _configure_text_direction()
     resource = _register_resources()
     from .application import GishehApplication

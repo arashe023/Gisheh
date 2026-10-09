@@ -1,94 +1,65 @@
-# Gisheh — Python + GTK4 + libadwaita
+<div align="center">
+  <img src="data/icons/hicolor/scalable/apps/io.github.arashe023.Gisheh.svg" width="128" height="128" alt="Gisheh icon">
+  <h1>Gisheh</h1>
+  <p>Keep track of what you watch</p>
+</div>
 
-یک برنامهٔ بومی لینوکس برای مدیریت فیلم، سریال و انیمه که با Python، GTK4 و libadwaita پیاده‌سازی شده است.
+[فارسی](README.fa.md) · [Report an issue](https://github.com/arashe023/Gisheh/issues) · [Contributing](CONTRIBUTING.md)
 
-شمارهٔ مرجع نسخه در فایل `VERSION` نگهداری می‌شود و Meson تمام خروجی‌های نسخه‌دار را هنگام build از آن تولید می‌کند.
+Gisheh is a GTK 4 and libadwaita application for browsing and tracking movies,
+TV shows and anime on Linux. Keep a private library on your device or connect
+Simkl to synchronize your viewing history.
 
-## امکانات
+![Gisheh showing a local library with example titles](data/screenshots/local-library.png)
 
-- چیدمان سه‌ستونهٔ دسکتاپ با سایدبار مستقل، فهرست و پنل جزئیات
-- نام و اکشن‌های برنامه در HeaderBar اختصاصی سایدبار و فیلترها در بدنهٔ اصلی
-- دکمهٔ آواتار در HeaderBar سایدبار برای ورود مستقیم به صفحهٔ Profile
-- حالت‌های Movies، Shows و Anime
-- Welcome Tour سه‌مرحله‌ای به سبک GNOME برای معرفی برنامه و انتخاب صریح Local-first یا Simkl
-- حالت Local-first واقعی برای نگهداری Watchlist، امتیازها، تاریخ تماشا و وضعیت اپیزودها فقط روی دستگاه
-- مقصد مستقل Explore برای دیدن محتوای تازه با فیلتر روند، بازه و ژانر
-- موزاییک واکنش‌گر Explore با کارت‌های Hero، افقی و پوستر و اتصال مستقیم به پنل جزئیات
-- بخش Lists با Watchlist مستقل و وضعیت‌های Watching، Watched، On Hold، Calendar و Dropped
-- جست‌وجوی زنده و فیلتر بر اساس ژانر
-- مرتب‌سازی بر اساس آخرین مشاهده، عنوان، امتیاز و سال انتشار
-- تغییر بین نمای فهرستی و شبکه‌ای
-- جست‌وجوی مستقیم کل کاتالوگ TMDB در Explore از دکمهٔ سایدبار و میان‌بر `Ctrl+K`
-- انتقال خودکار فیلترهای Explore به ردیف دوم در پنجره‌های باریک، بدون اسکرول افقی
-- اسکرول نامحدود Explore با صفحه‌بندی تدریجی TMDB
-- نمایش Loading برای صفحه‌های بعد، تصاویر بازیگران و گالری جزئیات
-- انتخاب عنوان و نمایش جزئیات، امتیاز، وضعیت و فعالیت کاربر
-- نمای جزئیات کامل با Hero، تریلر، امتیازهای چندمنبعی، عوامل، ویدئوها، تصاویر و پیشنهادها
-- Media Viewer تمام‌سطح به سبک Tuba برای پوستر و backdrop، همراه با پیمایش مجموعه، Zoom، Fullscreen، Copy و میان‌برهای صفحه‌کلید
-- نمایش فصل‌ها و وضعیت اپیزودها برای سریال و انیمه
-- نگهداری Specials به‌صورت فصل مستقل، بدون اثر روی Next/Last Episode فصل‌های اصلی
-- همگام‌سازی تاریخچهٔ دقیق هر اپیزود از Simkl، شامل پشتیبانی از فاصله میان اپیزودهای دیده‌شده
-- پیش‌بارگذاری فراداده و تصویر هر اپیزود از TMDB هنگام بازشدن صفحهٔ فصل
-- ناوبری بومی از اطلاعات سریال به فصل و اپیزود همراه با Back و ذخیرهٔ وضعیت تماشا
-- پس‌زمینهٔ هماهنگ با پالت پوستر که برای هر عنوان به‌صورت خودکار تغییر می‌کند
-- نمای گرید فشرده با پوستر و نام، بدون کشیدگی کارت‌ها در پنجره‌های بزرگ
-- تعامل‌های Bookmark و Watched با انتخاب تاریخ و ساعت تماشا، امتیازدهی ۱ تا ۱۰ از دکمهٔ ستاره و پیشنهادهای واقعی «More like this» از TMDB
-- ورود به Simkl با PIN و همگام‌سازی کتابخانه، پروفایل و آمار واقعی کاربر
-- لاگ داخلی قابل مشاهده برای مراحل و مدت همگام‌سازی Simkl، بدون ثبت اطلاعات ورود
-- پوستر و backdrop زنده از TMDB با سطح Loading یکسان تا زمان دریافت تصویر واقعی و بدون کاور نمایشی ساختگی
-- نمایش زبان اصلی و رده‌بندی سنی منطقه‌ای هر عنوان از داده‌های رسمی TMDB
-- رابط دسکتاپ، پشتیبانی از high contrast و هماهنگی مستقیم با تم و رنگ accent سیستم
+## Features
 
-## معماری بومی
+- Discover titles with TMDB search, artwork, descriptions and cast information.
+- Organize your library into Watching, Watched, On Hold, Dropped and Watchlist.
+- Track episodes, viewing dates and personal ratings.
+- Review monthly and yearly viewing activity, favorite genres and ratings.
+- Export and restore your local library with automatic recovery backups.
+- Use the system's language, light or dark appearance and text direction.
+- Choose the TMDB content language independently from its searchable language list.
 
-- `src/gisheh/application.py`: چرخهٔ استاندارد `Adw.Application` و actionهای عمومی
-- `src/gisheh/onboarding.py`: Welcome Tour و انتخاب روش مدیریت کتابخانه
-- `src/gisheh/state_store.py`: خواندن و نوشتن اتمیک state خصوصی کاربر
-- `src/gisheh/version.py`: نسخهٔ مشترک runtime با منبع اصلی `VERSION`
-- `src/gisheh/window.py`: کنترلر پنجره، نماها و رویدادهای رابط
-- `src/gisheh/ui/window.ui`: رابط GtkBuilder با `AdwNavigationSplitView`
-- `src/gisheh/services/`: کلاینت‌های مستقل TMDB، Simkl و انتقال تصاویر
-- `src/gisheh/io.github.arashe023.Gisheh.gresource.xml`: بسته‌بندی UI، CSS و دارایی‌های runtime در GResource
-- `tests/fixtures/`: داده‌های نمونهٔ مخصوص تست که وارد بستهٔ نهایی نمی‌شوند
-- `data/`: Desktop Entry، AppStream، GSettings و آیکن‌های hicolor
-- `build-aux/flatpak/`: manifest قابل‌شناسایی توسط GNOME Builder و Flatpak Builder
-- `po/`: زیرساخت gettext و فهرست منابع قابل‌ترجمه
+Local mode requires no account. Catalog search and new artwork need an internet
+connection; saved local records remain available offline. Simkl synchronization
+is optional. See [data and privacy](docs/PRIVACY.md) for storage and service details.
 
-تم، رنگ accent و حالت high contrast مستقیماً توسط GTK و libadwaita اعمال می‌شوند و به پل یا لایهٔ نمایش جداگانه‌ای نیاز ندارند.
-در اولین اجرا، کاربر مالکیت دادهٔ کتابخانه را انتخاب می‌کند. در حالت Local-first، Watchlist، Watched، امتیاز شخصی، تاریخ‌های تماشا و وضعیت فصل و اپیزود در `state.json` خصوصی با مجوز `0600` ذخیره می‌شوند و برنامه برای مدیریت کتابخانه به Simkl متصل نمی‌شود. در حالت Simkl، همین عملیات از طریق Sync API در حساب کاربر ثبت می‌شوند و snapshot محلی برای اجرای سریع و بازیابی شبکه نگهداری می‌شود.
-در حالت Local-first، Watched شدن حداقل یک اپیزود باعث می‌شود عنوان سریال یا انیمه در بخش Watching دیده شود؛ این دسته‌بندی به‌معنی Completed شدن همهٔ اپیزودها نیست و با Unwatched شدن همهٔ قسمت‌ها به وضعیت قبلی عنوان برمی‌گردد.
-Explore فقط از داده‌ها و تصاویر زندهٔ TMDB استفاده می‌کند و در نبود شبکه یا credential معتبر، وضعیت خالی/خطا را بدون محتوای نمایشی نشان می‌دهد. نسخهٔ عمومی credential خواندنی TMDB را همراه build دارد و کاربر نهایی نیازی به واردکردن API Key ندارد.
-اتصال و همگام‌سازی Simkl از Preferences → Services انجام می‌شود. صفحهٔ Profile فقط آمار کتابخانه را نمایش می‌دهد و بخش تکراری نام، عکس و وضعیت حساب ندارد. Simkl عضویت عنوان‌ها در فهرست‌ها، وضعیت تماشا و امتیاز شخصی را مشخص می‌کند؛ اطلاعات نمایشی و کاورها با شناسهٔ TMDB همان عنوان دریافت می‌شوند.
+## Install
 
-## اولین اجرا و مالکیت داده
+The next release is **1.5.0-rc1**, a release candidate for testing. It is not
+currently published on Flathub. Downloadable artifacts, when published, are on
+[GitHub Releases](https://github.com/arashe023/Gisheh/releases).
 
-وقتی هیچ انتخاب قبلی در state وجود نداشته باشد، Gisheh به‌جای پنجرهٔ اصلی یک Tour بومی سه‌مرحله‌ای نشان می‌دهد. دو گزینهٔ مرحلهٔ آخر عبارت‌اند از:
+To install a locally built or downloaded Flatpak bundle:
 
-- **Local-first:** نیازی به حساب ندارد، دادهٔ شخصی را آپلود نمی‌کند و نسخهٔ کامل رکوردهای افزوده‌شده از Explore را برای راه‌اندازی بعدی روی دستگاه نگه می‌دارد.
-- **Sync with Simkl:** ورود PIN را آغاز می‌کند و Simkl را به‌عنوان منبع همگام کتابخانه، امتیازها و تاریخچه انتخاب می‌کند.
+```sh
+flatpak install --user ./Gisheh-1.5.0-rc1-x86_64.flatpak
+flatpak run io.github.arashe023.Gisheh//beta
+```
 
-انتخاب در `~/.local/state/io.github.arashe023.Gisheh/state.json` ذخیره می‌شود. در Flatpak این مسیر داخل فضای خصوصی برنامه قرار می‌گیرد. وضعیت فعال با نشانگر `Local` یا `Synced/Not synced` در HeaderBar قابل مشاهده است و از Preferences → Data ownership می‌توان روش مدیریت کتابخانه را تغییر داد. Welcome Tour فقط در اولین اجرا یا پس از اجرای Reset Gisheh نمایش داده می‌شود و ورودی تکراری آن در منوی اصلی وجود ندارد.
+The standard build includes TMDB application access; users do not need to create
+an API key. The first-launch screen offers a local library or a Simkl connection.
 
-اندازهٔ پیش‌فرض پنجره `1100×700` است تا در فضای کاری رایج `1366×768` جا شود؛ حداقل معتبر حدود `360×480` است. اندازه و حالت maximized پنجره و حالت نمایش فهرست/گرید با GSettings ذخیره و در اجرای بعدی بازیابی می‌شوند.
+## Build
 
-## چیدمان تطبیقی
+### GNOME Builder / Flatpak
 
-- پنجره‌های پهن از سایدبار کاملِ داک‌شده (`248–300px`) کنار محتوا استفاده می‌کنند.
-- پنجره‌های باریک سایدبار را مخفی می‌کنند و همان سایدبار کامل با دکمه منو به‌صورت دراور نیمه‌عرض روی محتوا باز می‌شود؛ انتخاب مقصد دراور را می‌بندد.
-- پنل جزئیات تطبیقی است: کنار محتوا در عرض زیاد، شناور روی محتوا در عرض متوسط، و در عرض خیلی باریک به‌صورت صفحه تمام‌عرض با جریان Back (اپیزود → فصل → عنوان → محتوا).
-- فیلترهای Explore بر اساس عرض واقعی می‌شکنند و گرید Explore تا یک ستون پایین می‌آید. تغییر تعداد ستون‌ها حاشیهٔ پایداری دارد تا بازشدن هم‌زمان پنل‌ها باعث رفت‌وبرگشت اندازه و بازچینی حلقه‌ای نشود.
-- اندازهٔ پیش‌فرض `1100×700` است و چیدمان تا عرض‌های حدود موبایل کار می‌کند.
+Open this repository in [GNOME Builder](https://apps.gnome.org/Builder/) and select
+`build-aux/flatpak/io.github.arashe023.Gisheh.json`, then build and run.
+The manifest targets GNOME 50. For command-line bundle creation, see
+[packaging and release instructions](docs/RELEASING.md).
 
-این یک برنامهٔ تطبیقی دسکتاپ است؛ پشتیبانی موبایل ادعا نمی‌شود.
+### Native build
 
-## اجرا
+Dependencies: Python ≥ 3.11, GTK ≥ 4.12, libadwaita ≥ 1.9, libsecret ≥ 0.20,
+PyGObject, pycairo, httpx, Meson ≥ 1.3, Ninja, gettext and GLib development tools.
+Install the corresponding GTK, Adwaita, PangoCairo and Secret GI typelibs from
+your distribution. Tests also need Xvfb, xauth, D-Bus, Ruff, desktop-file-utils
+and AppStream.
 
-پروژه را مستقیماً در GNOME Builder باز کنید؛ Builder فایل Meson و manifest فلت‌پک را تشخیص می‌دهد و با دکمهٔ Run آن را build و اجرا می‌کند.
-فایل اجرایی Python در Meson به‌عنوان target نصب‌شوندهٔ `gisheh` ثبت شده است؛ بنابراین در تنظیمات پروژهٔ Builder، گزینهٔ Run Command باید به‌صورت خودکار `gisheh` باشد.
-
-برای build و تست روی سیستم میزبان:
-
-```bash
+```sh
 meson setup build --prefix="$PWD/_install"
 meson compile -C build
 meson test -C build --print-errorlogs
@@ -96,61 +67,23 @@ meson install -C build
 ./_install/bin/gisheh
 ```
 
-پس از اولین setup، برای buildهای بعدی فقط `meson compile -C build` لازم است. برای ساخت Flatpak:
+For a build without the test dependencies, pass `-Dtests=false` to `meson setup`.
 
-```bash
-flatpak-builder --user --install --force-clean flatpak-build \
-  build-aux/flatpak/io.github.arashe023.Gisheh.json
-```
+## Contribute
 
-نسخه‌های عمومی باید Client ID ثبت‌شدهٔ Gisheh در Simkl و credential تأییدشدهٔ TMDB را هنگام build همراه برنامه کنند. در این حالت کاربر برای Simkl فقط دکمهٔ Connect را می‌زند و PIN نمایش‌داده‌شده را در مرورگر تأیید می‌کند؛ ساختن برنامهٔ توسعه‌دهنده یا واردکردن Client Secret لازم نیست. Access Token سیمکل ابتدا در Secret Service سیستم ذخیره می‌شود و اگر keyring در دسترس نباشد، برنامه از فایل خصوصی با مجوز `0600` استفاده می‌کند.
+Bug reports, translations and code contributions are welcome. Read
+[CONTRIBUTING.md](CONTRIBUTING.md) for checks and reporting guidance.
+Interface translations use gettext (`po/`); the interface language follows the
+system. English and Persian are currently available, including right-to-left
+layout. TMDB content language is a separate preference.
 
-مقادیر عمومی release با گزینه‌های Meson تنظیم می‌شوند:
+[Architecture](docs/ARCHITECTURE.md) · [Validation](docs/VALIDATION.md) · [Changes](CHANGELOG.md)
 
-```bash
-meson setup build \
-  -Dsimkl_client_id="$GISHEH_PUBLIC_SIMKL_CLIENT_ID" \
-  -Dtmdb_read_token="$GISHEH_PUBLIC_TMDB_READ_TOKEN"
-```
+## Credits and license
 
-این دو مقدار داخل برنامهٔ نصب‌شده قابل استخراج‌اند و نباید Client Secret یا credential محرمانه در آن‌ها قرار گیرد. برای توسعهٔ محلی، `SIMKL_CLIENT_ID`، `SIMKL_ACCESS_TOKEN` و `TMDB_READ_TOKEN` همچنان به‌عنوان override پشتیبانی می‌شوند. در build فاقد credential عمومی، صفحهٔ تنظیمات وضعیت integration را صریحاً «Unavailable» نشان می‌دهد؛ ورود token شخصی TMDB فقط به‌عنوان Developer Setup باقی مانده است.
+Gisheh is free software under the [MIT license](LICENSE). It is an independent
+application built with GNOME technologies.
 
-## منابع داده و انتساب
-
-داده‌ها و تصاویر فیلم و سریال توسط [The Movie Database (TMDB)](https://www.themoviedb.org) و تاریخچهٔ تماشا و همگام‌سازی حساب توسط [Simkl](https://simkl.com) فراهم می‌شوند. لوگوی رسمی TMDB، لینک منبع و متن انتساب الزامی داخل صفحهٔ `Credits & Data Sources` برنامه قرار گرفته‌اند:
-
-> This product uses the TMDB API but is not endorsed or certified by TMDB.
-
-## ساختار اصلی
-
-```text
-.
-├── meson.build
-├── meson_options.txt
-├── VERSION
-├── RELEASE_DATE
-├── build-aux/flatpak/io.github.arashe023.Gisheh.json
-├── data/
-│   ├── meson.build
-│   ├── io.github.arashe023.Gisheh.desktop.in
-│   ├── io.github.arashe023.Gisheh.metainfo.xml.in
-│   ├── io.github.arashe023.Gisheh.gschema.xml
-│   └── icons/hicolor/
-├── po/
-├── src/
-│   ├── meson.build
-│   ├── gisheh.in
-│   └── gisheh/
-│       ├── application.py
-│       ├── main.py
-│       ├── onboarding.py
-│       ├── state_store.py
-│       ├── version.py
-│       ├── window.py
-│       ├── services/
-│       ├── ui/window.ui
-│       ├── style.css
-│       └── assets/
-└── tests/
-    └── fixtures/library.json
-```
+Catalog information and artwork are provided by [TMDB](https://www.themoviedb.org).
+This product uses the TMDB API but is not endorsed or certified by TMDB.
+[Simkl](https://simkl.com) provides optional account synchronization.
