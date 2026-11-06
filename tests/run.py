@@ -22,6 +22,7 @@ PURE_MODULES = {
     "test_library_backup",
     "test_models",
     "test_jobs",
+    "test_release_tooling",
 }
 
 

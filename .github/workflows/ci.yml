@@ -17,7 +17,9 @@ jobs:
           desktop-file-utils appstream xorg-server-xvfb xorg-xauth dbus ruff
       - uses: actions/checkout@v4
       - name: Lint
-        run: ruff check src tests
+        run: ruff check src tests build-aux
+      - name: Check release metadata
+        run: python build-aux/check-release.py
       - name: Configure and compile
         run: |
           meson setup build --prefix=/tmp/gisheh-install
@@ -32,6 +34,14 @@ jobs:
         run: |
           meson install -C build
           GSK_RENDERER=cairo GDK_BACKEND=x11 xvfb-run -a dbus-run-session -- python tests/installed_smoke.py /tmp/gisheh-install
+      - name: Check English and Persian layouts
+        run: |
+          for language in en fa; do
+            LANGUAGE="$language" LANG=C.UTF-8 GISHEH_SMOKE_MATRIX=1 \
+              GSK_RENDERER=cairo GDK_BACKEND=x11 \
+              xvfb-run -a -s '-screen 0 1920x1080x24' dbus-run-session -- \
+              python tests/installed_smoke.py /tmp/gisheh-install
+          done
       - name: Collect environment-free test results
         if: always()
         run: python build-aux/collect-test-results.py build/meson-logs validation-results

@@ -10,6 +10,7 @@ import tarfile
 import tempfile
 import urllib.request
 from pathlib import Path
+import runpy
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -79,6 +80,9 @@ def main():
     args = parser.parse_args()
     if output("git", "status", "--porcelain"):
         raise SystemExit("Commit or stash changes before packaging an exact revision.")
+    # Fail before downloading/building if version, date or release type disagree.
+    checks = runpy.run_path(str(ROOT / "build-aux/check-release.py"))
+    checks["check_metadata"](ROOT)
     revision = output("git", "rev-parse", "HEAD")
     version = (ROOT / "VERSION").read_text().strip()
     arch = output("flatpak", "--default-arch")
@@ -97,6 +101,7 @@ def main():
         with tarfile.open(source_archive) as archive:
             archive.extractall(source, filter="data")
         manifest = source / "build-aux/flatpak" / f"{APP_ID}.json"
+        spec = json.loads(manifest.read_text())
         if args.native:
             build_with_runtime(source, manifest, state, arch)
         else:
@@ -118,7 +123,7 @@ def main():
         "application": APP_ID, "version": version, "architecture": arch,
         "branch": "beta", "source_commit": revision,
         "build_method": "native-pure-python" if args.native else "flatpak-builder",
-        "runtime": "org.gnome.Platform/50", "sha256": checksums,
+        "runtime": f"{spec['runtime']}/{spec['runtime-version']}", "sha256": checksums,
     }, indent=2) + "\n")
     print(f"Built {bundle}\nSource commit: {revision}")
 

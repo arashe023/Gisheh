@@ -1,6 +1,7 @@
 """Smoke-test the installed package without source paths or network access."""
 
 from __future__ import annotations
+import gettext
 import os
 from pathlib import Path
 import sys
@@ -14,6 +15,15 @@ def main():
     packages = list(prefix.glob("lib*/python*/site-packages"))
     if not packages:
         raise RuntimeError("Installed Python package was not found")
+    for relative in (
+        "bin/gisheh",
+        "share/licenses/gisheh/LICENSE",
+        "share/applications/io.github.arashe023.Gisheh.desktop",
+        "share/metainfo/io.github.arashe023.Gisheh.metainfo.xml",
+        "share/icons/hicolor/scalable/apps/io.github.arashe023.Gisheh.svg",
+        "share/icons/hicolor/symbolic/apps/io.github.arashe023.Gisheh-symbolic.svg",
+    ):
+        assert (prefix / relative).is_file(), f"Missing installed file: {relative}"
     sys.path.insert(0, str(packages[0]))
     with tempfile.TemporaryDirectory(prefix="gisheh-installed-") as temporary:
         os.chdir(temporary)
@@ -43,6 +53,15 @@ def main():
         simkl_client.read_token = lambda: None
         entry._configure_i18n()
         entry._configure_text_direction()
+        language = os.environ.get("LANGUAGE", "").split(":", 1)[0]
+        if language in ("en", "fa"):
+            expected_direction = (
+                Gtk.TextDirection.RTL if language == "fa" else Gtk.TextDirection.LTR
+            )
+            assert Gtk.Widget.get_default_direction() == expected_direction
+            expected_label = "ترجیحات" if language == "fa" else "Preferences"
+            assert gettext.gettext("Preferences") == expected_label
+            print(f"Installed language and direction: {language} OK")
         resource = entry._register_resources()
         assert resource is not None
         assert Path(entry._locale_dir()).is_relative_to(prefix)

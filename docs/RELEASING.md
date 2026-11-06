@@ -4,6 +4,53 @@ The current version is **1.5.0-rc1**. It is a test release candidate, not a
 Flathub-approved release. Publishing is separate from preparing a local commit
 and building an artifact. Do not reuse an existing release tag for changed code.
 
+## Automated release checks
+
+Check the release metadata before packaging:
+
+```sh
+python3 build-aux/check-release.py
+python3 build-aux/check-release.py --tag v1.5.0-rc1
+python3 build-aux/check-release.py --public-urls
+```
+
+The gate checks the canonical version/date, changelog heading, AppStream release
+type, application ID and launcher. The packaging script runs the metadata gate
+before starting a build. A stable version requires AppStream `type="stable"`.
+The optional online gate checks every AppStream link and screenshot without
+authentication. It must pass before public distribution; private GitHub
+repositories and their raw screenshot URLs return 404 to prospective users.
+
+After building, verify integrity and run the installed sandbox test:
+
+```sh
+python3 build-aux/check-release.py --artifacts dist
+python3 build-aux/smoke-flatpak.py dist/Gisheh-1.5.0-rc1-x86_64.flatpak
+```
+
+Artifact verification compares SHA256SUMS with build-info.json, hashes both
+files, checks the revision/runtime/architecture, and compares every source
+archive file, executable mode and symlink with a fresh archive of HEAD. This
+proves source archive provenance, not that the bundle was compiled from it;
+the build job and installed smoke test provide separate evidence. Uncommitted
+working-tree changes are not included in that HEAD archive.
+
+The smoke helper requires Xvfb, xauth, D-Bus and the manifest's runtime installed
+**system-wide**. It uses a disposable user installation, disables application
+network access, mounts only the test directory read-only, and checks first
+launch, local persistence, resources, installed metadata/icons/license, English
+and Persian translation and text direction. It never installs into the user's
+normal Flatpak directory. This automated test does not exercise file portals,
+real Wayland, upgrades or a real Simkl login.
+
+`.github/workflows/ci.yml` runs native validation and both language/layout
+matrices. `.github/workflows/flatpak.yml` builds with the GNOME SDK on native
+x86_64 and aarch64 runners, verifies archives and smoke-tests each bundle. Run
+it with **Actions → Standalone Flatpak candidate → Run workflow**, or push a
+matching `v<VERSION>` tag after reviewing the source. It retains tested bundles
+as Actions artifacts and does not create a public GitHub Release. Its first
+remote run must pass before treating SDK/ARM packaging as verified.
+
 ## Build a standalone Flatpak
 
 Install Flatpak, Flatpak Builder and the GNOME 50 SDK. The builder can be the
@@ -87,7 +134,7 @@ the release has been authorized and its checks are complete.
 ## Flathub submission
 
 This repository's local-directory manifest is for development and standalone
-bundles. It is not a Flathub submission manifest. As checked on 2026-10-09,
+bundles. It is not a Flathub submission manifest. As checked on 2026-11-06,
 [Flathub requirements](https://docs.flathub.org/docs/for-app-authors/requirements)
 prohibit AI-generated/AI-assisted submission manifests and AI-authored submission
 PRs, commit messages, descriptions and review replies. A human maintainer must

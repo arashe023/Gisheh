@@ -1,0 +1,61 @@
+name: Standalone Flatpak candidate
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            architecture: x86_64
+          - runner: ubuntu-24.04-arm
+            architecture: aarch64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder xvfb xauth dbus-x11
+      - name: Validate release version and tag
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          python3 build-aux/check-release.py
+          if [ "$REF_TYPE" = tag ]; then
+            python3 build-aux/check-release.py --tag "$REF_NAME"
+          fi
+      - name: Install GNOME SDK and runtime
+        run: |
+          sudo flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          runtime_version=$(python3 -c 'import json; print(json.load(open("build-aux/flatpak/io.github.arashe023.Gisheh.json"))["runtime-version"])')
+          sudo flatpak install --system --noninteractive flathub "org.gnome.Sdk//$runtime_version" "org.gnome.Platform//$runtime_version"
+      - name: Build from the checked-out Git revision
+        run: python3 build-aux/package-flatpak.py
+      - name: Verify source provenance and artifact integrity
+        run: python3 build-aux/check-release.py --artifacts dist
+      - name: Test the installed sandbox without network access
+        run: |
+          version=$(cat VERSION)
+          python3 build-aux/smoke-flatpak.py "dist/Gisheh-$version-${{ matrix.architecture }}.flatpak"
+      - name: Retain tested release candidates
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gisheh-${{ matrix.architecture }}
+          path: |
+            dist/*.flatpak
+            dist/*-source.tar.gz
+            dist/SHA256SUMS
+            dist/build-info.json
+          if-no-files-found: error

@@ -7,7 +7,8 @@ pyproject.toml configures analysis only.
 ## Validate a change
 
 ```sh
-ruff check src tests
+ruff check src tests build-aux
+python3 build-aux/check-release.py
 meson setup build --prefix="$PWD/_install"
 meson compile -C build
 meson test -C build --print-errorlogs

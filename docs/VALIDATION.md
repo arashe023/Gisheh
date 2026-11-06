@@ -1,5 +1,50 @@
 # Implementation validation and release gates
 
+## Release readiness audit — 2026-11-06
+
+The current working tree passes 98 independent Python tests and 338 GTK tests
+(436 distinct tests), desktop/AppStream validation, Ruff and gettext validation.
+The GTK suite also passed two additional sequential repeats. Native build and
+installation use `/tmp/gisheh-publish-audit-build` and
+`/tmp/gisheh-publish-audit-install`. English and Persian installed layout matrices
+passed at requested widths 360, 720, 1100 and 1366, in light and dark appearances.
+Persian RTL and the installed translation are explicitly asserted. A separate
+Persian high-contrast matrix and an English startup with `GDK_DPI_SCALE=1.5`
+also passed. These tests cover the local library window, not every application
+dialog. Narrow English/Persian captures were visually inspected.
+
+The existing x86_64 beta bundle and source archive in `dist/` match their
+checksums. The source archive matches Git commit
+`d7a530a5630ba1fbb11e58161878125aef3174fb`, including file contents, executable
+modes and symlinks. The actual bundle was installed into a disposable Flatpak
+user directory and passed offline installed startup in English and Persian
+using the system GNOME 50 runtime. This also checks the installed icons, desktop
+entry, AppStream file, license and translations. The bundle remains the existing
+`native-pure-python` artifact; it was not rebuilt with the new release tooling.
+The uncommitted tooling/documentation changes are not in that source archive.
+
+New release gates are `build-aux/check-release.py` and
+`build-aux/smoke-flatpak.py`. The packaging script now checks release metadata
+before building and records the runtime from the manifest. The native workflow
+checks tooling and both language/layout matrices. A separate workflow prepares
+SDK-built x86_64/aarch64 candidates and tests the installed sandboxes; it has
+not been run remotely and does not publish a GitHub Release.
+
+Public distribution remains blocked: unauthenticated GitHub repository and
+screenshot requests returned HTTP 404, and authenticated `gh repo view`
+confirmed `isPrivate: true` on `arashe023/Gisheh`. The online gate reproduces
+the inaccessible public links (a subsequent screenshot request timed out).
+Live TMDB configuration access could not be verified because the connection
+failed from this environment. Neither failure was treated as a passing check.
+
+Outstanding gates are the private-repository/public-assets decision, live TMDB
+access and credential ownership, real Wayland, file portals, upgrade preservation,
+Secret Service, a dedicated Simkl test account, full accessibility review,
+remote SDK/ARM validation, and a frozen commit/new release tag. The detailed
+Persian checklist and reproduction commands are in
+[RELEASE-READINESS.fa.md](RELEASE-READINESS.fa.md). The dated sections below are
+historical records and do not override this audit.
+
 ## 1.5.0-rc1 preparation — 2026-10-09
 
 The current candidate adds the native Profile redesign, system-driven RTL
