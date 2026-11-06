@@ -77,6 +77,12 @@ Build caches and the local OSTree repository live in ignored `flatpak-state/`,
 design experiments and marketing videos are not part of the source snapshot.
 The application license is installed under `/app/share/licenses/gisheh/`.
 
+The standalone manifest sets `separate-locales` to false so the application
+translations remain inside the single-file bundle. Flatpak Builder otherwise
+exports translations to a separate `.Locale` extension, which is not included
+by `flatpak build-bundle` for the application. The isolated Persian smoke test
+must pass without installing an application locale extension.
+
 The default Meson configuration includes the public application TMDB read
 credential and Simkl client ID. These are extractable application identifiers;
 never substitute an account access token or confidential client secret. The

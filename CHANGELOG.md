@@ -7,6 +7,7 @@
 - Fetch the searchable TMDB content language list independently from the interface.
 - Add native keyboard shortcuts, accessible action labels and adaptive dialogs.
 - Prepare a standalone Flatpak release candidate and streamlined bilingual documentation.
+- Include translations in standalone Flatpak bundles built with the GNOME SDK.
 - Isolate GTK tests and initialize GTK/libadwaita before constructing widgets.
 - Track all GResource inputs and localize installed desktop/store metadata.
 - Validate and version state, keep private atomic backups, and provide explicit recovery.
